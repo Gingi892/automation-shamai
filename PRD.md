@@ -55,7 +55,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Description:** As a developer, I want a local SQLite database with full-text search, so that queries return results in milliseconds without hitting gov.il.
 
 **Acceptance Criteria:**
-- [ ] SQLite database with FTS5 extension for Hebrew text search
+- [x] SQLite database with FTS5 extension for Hebrew text search
 - [ ] Table schema: id, database, title, url, block, plot, committee, appraiser, caseType, decisionDate, publishDate, contentHash, indexedAt
 - [ ] FTS5 virtual table indexing: title, committee, appraiser, caseType
 - [ ] Support filtering by any combination of fields

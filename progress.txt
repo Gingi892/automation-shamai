@@ -176,3 +176,31 @@
   - [x] Log warning when primary selectors fail but fallback succeeds
   - [x] Support pagination through `?skip=N` parameter
   - [x] Typecheck passes
+
+---
+
+## Iteration 9 — US-002 Task 1: SQLite database with FTS5 extension for Hebrew text search
+- **What was done**: Replaced sql.js with better-sqlite3 library to enable native FTS5 support for Hebrew full-text search
+- **Files affected**:
+  - `mcp-server/package.json` (replaced sql.js with better-sqlite3)
+  - `mcp-server/src/database.ts` (complete rewrite for better-sqlite3 API)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Replaced `sql.js` (WebAssembly SQLite without FTS5) with `better-sqlite3` (native bindings with FTS5)
+  - Created FTS5 virtual table: `decisions_fts` indexing title, committee, appraiser, case_type
+  - Uses `unicode61` tokenizer which handles Hebrew text properly
+  - External content mode (`content='decisions'`) to avoid data duplication
+  - Three triggers (INSERT, DELETE, UPDATE) keep FTS5 index synchronized
+  - `search()` method uses FTS5 `MATCH` with `bm25()` relevance ranking
+  - `escapeFtsQuery()` helper handles special characters and wraps Hebrew terms in quotes
+  - `rebuildFtsIndex()` method for index recovery/migration
+  - Changed default db path to `~/.gov-il-mcp/decisions.db` per PRD spec
+  - Added WAL mode for better concurrent access
+- **Learnings for next cycles**:
+  - Patterns: sql.js doesn't support FTS5 - use better-sqlite3 for native FTS5 support
+  - Patterns: `unicode61` tokenizer works well for Hebrew text tokenization
+  - Patterns: External content FTS5 tables need triggers to stay synchronized
+  - Patterns: `bm25()` returns negative scores - order ASC for relevance
+  - Traps: FTS5 query syntax has special characters (", -, *, etc.) that need escaping
+  - Traps: Hebrew terms should be quoted in FTS5 queries for proper matching
+  - Helpful context: better-sqlite3 has synchronous API (simpler than sql.js async)
