@@ -733,3 +733,26 @@
   - Patterns: Truncate long excerpts with length check + ellipsis for readability
   - Helpful context: US-006 Task 2 complete, remaining tasks (3-6): claim citations, PDF excerpts, confidence indicators, no-results warning
 
+---
+
+## Iteration 33 — US-006 Task 3: For each claim, cite the specific decision(s) supporting it
+- **What was done**: Implemented `generateClaimsFromSources` helper function that extracts claims from question and decisions, mapping each claim to specific source indices
+- **Files affected**: `mcp-server/src/index.ts` (added ~140 line helper function, updated handleConstructAnswer to use it)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Groups decisions by shared attributes: block, committee, caseType, appraiser using Map<string, number[]>
+  - Generates location-based claims when query contains גוש/חלקה patterns
+  - Generates committee-based claims when query mentions ועדה or city names
+  - Generates case-type claims when query matches known case types (היטל השבחה, פיצויים, etc.)
+  - Generates appraiser claims when query mentions שמאי/מעריך
+  - Generates claims from PDF excerpts with direct quotes (high confidence)
+  - Falls back to per-decision summary claims when no specific patterns detected
+  - Each claim includes: text (Hebrew), citations array (indices to sources), confidence level
+- **Learnings for next cycles**:
+  - Patterns: Use Map<string, number[]> to group items by attribute while tracking indices
+  - Patterns: Multiple overlapping claims with different citation sets provide comprehensive coverage
+  - Patterns: PDF excerpt claims get 'confident' rating since they're direct quotes
+  - Patterns: Relevance score threshold (0.6) determines claim confidence level
+  - Patterns: Fallback to simple decision summaries ensures claims array is never empty
+  - Helpful context: US-006 Task 3 complete, remaining tasks (4-6): PDF excerpts, confidence indicators, no-results warning
+
