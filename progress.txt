@@ -901,3 +901,27 @@
 
 ---
 
+## Iteration 40 — US-007 Task 3: Skip already-indexed decisions
+- **What was done**: Verified existing implementation already skips indexed decisions using `existsByHash()` check
+- **Files affected**: None (already implemented in `mcp-server/src/indexer.ts` and `mcp-server/src/database.ts`)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - `updateRecent()` at indexer.ts:168-173 calls `existsByHash()` before inserting:
+    ```typescript
+    if (!this.db!.existsByHash(decision.contentHash)) {
+      this.db!.insertDecision(decision);
+      newCount++;
+    }
+    ```
+  - `existsByHash(contentHash)` at database.ts:277-285 queries `SELECT 1 FROM decisions WHERE content_hash = ?`
+  - `insertDecision()` at database.ts:181-188 also checks `SELECT 1 FROM decisions WHERE id = ? AND content_hash = ?` before insert
+  - `insertDecisions()` (batch) at database.ts:234-235 uses same check pattern in transaction
+  - Both methods return count of actually inserted records (skipped decisions not counted)
+- **Learnings for next cycles**:
+  - Patterns: Skip logic was implemented as part of content hash comparison (Task 2) - they are tightly coupled
+  - Patterns: Double-checking in both `existsByHash()` and `insertDecision()` provides defense in depth
+  - Patterns: Check database.ts insert methods to confirm skip behavior - not just indexer
+  - Helpful context: US-007 Task 3 complete, remaining tasks (4-7): log format, lastUpdateAt, cron script, typecheck
+
+---
+
