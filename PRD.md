@@ -134,7 +134,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Each tool has comprehensive Hebrew+English description
 - [x] Error responses include actionable suggestions
 - [x] Graceful handling of database unavailable
-- [ ] Console logging to stderr (not stdout)
+- [x] Console logging to stderr (not stdout)
 - [ ] Typecheck passes
 
 ### US-009: Add configuration for Claude Desktop

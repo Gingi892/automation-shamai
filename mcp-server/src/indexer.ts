@@ -80,14 +80,14 @@ export class DecisionIndexer {
     if (progress && progress.status === 'running') {
       page = progress.currentPage;
       totalIndexed = progress.documentsIndexed;
-      console.log(`Resuming ${database} from page ${page}`);
+      console.error(`[Indexer] Resuming ${database} from page ${page}`);
     }
 
     this.updateProgress(database, page, totalPages, totalIndexed, startTime, 'running');
 
     while (hasMore && page < this.maxPages) {
       try {
-        console.log(`Fetching ${DATABASE_CONFIG[database].name} page ${page}...`);
+        console.error(`[Indexer] Fetching ${DATABASE_CONFIG[database].name} page ${page}...`);
 
         const html = await this.scraper.fetchPage(database, page);
         const parsed = this.scraper.parseDecisions(html, database);
@@ -96,14 +96,14 @@ export class DecisionIndexer {
         if (decisions.length === 0) {
           consecutiveEmptyPages++;
           if (consecutiveEmptyPages >= 3) {
-            console.log(`No more results after ${consecutiveEmptyPages} empty pages`);
+            console.error(`[Indexer] No more results after ${consecutiveEmptyPages} empty pages`);
             hasMore = false;
           }
         } else {
           consecutiveEmptyPages = 0;
           const inserted = this.db!.insertDecisions(decisions);
           totalIndexed += inserted;
-          console.log(`  Found ${decisions.length} decisions, inserted ${inserted} new`);
+          console.error(`[Indexer]   Found ${decisions.length} decisions, inserted ${inserted} new`);
         }
 
         // Estimate total pages if not known
@@ -143,7 +143,7 @@ export class DecisionIndexer {
     }
 
     this.updateProgress(database, page, totalPages, totalIndexed, startTime, 'completed');
-    console.log(`Completed ${DATABASE_CONFIG[database].name}: ${totalIndexed} documents indexed`);
+    console.error(`[Indexer] Completed ${DATABASE_CONFIG[database].name}: ${totalIndexed} documents indexed`);
 
     return totalIndexed;
   }
@@ -174,7 +174,7 @@ export class DecisionIndexer {
           }
 
           totalNew += newCount;
-          console.log(`${DATABASE_CONFIG[database].name} page ${page}: ${newCount} new of ${decisions.length}`);
+          console.error(`[Indexer] ${DATABASE_CONFIG[database].name} page ${page}: ${newCount} new of ${decisions.length}`);
 
           // If no new documents on this page, likely no more new ones
           if (newCount === 0 && page > 0) {
@@ -190,7 +190,7 @@ export class DecisionIndexer {
       }
 
       results.set(database, totalNew);
-      console.log(`Found ${totalNew} new decisions in ${DATABASE_CONFIG[database].name}`);
+      console.error(`[Indexer] Found ${totalNew} new decisions in ${DATABASE_CONFIG[database].name}`);
     }
 
     this.db!.setMetadata('last_update', new Date().toISOString());
@@ -210,7 +210,7 @@ export class DecisionIndexer {
         const decisions = await this.scraper.fetchAndParse(database, page);
         const inserted = this.db!.insertDecisions(decisions);
         totalIndexed += inserted;
-        console.log(`Page ${page}: ${inserted} new of ${decisions.length}`);
+        console.error(`[Indexer] Page ${page}: ${inserted} new of ${decisions.length}`);
         await this.scraper.delay();
       } catch (error) {
         console.error(`Error on page ${page}:`, error);
@@ -281,7 +281,7 @@ export async function runIndexer(apiKey: string, options?: Partial<IndexerOption
       const pct = progress.totalPages
         ? Math.round((progress.currentPage / progress.totalPages) * 100)
         : '?';
-      console.log(`[${progress.database}] Page ${progress.currentPage}/${progress.totalPages || '?'} (${pct}%) - ${progress.documentsIndexed} indexed`);
+      console.error(`[Indexer] [${progress.database}] Page ${progress.currentPage}/${progress.totalPages || '?'} (${pct}%) - ${progress.documentsIndexed} indexed`);
     },
     onError: (error, database, page) => {
       console.error(`[${database}] Error on page ${page}: ${error.message}`);
@@ -290,6 +290,6 @@ export async function runIndexer(apiKey: string, options?: Partial<IndexerOption
 
   await indexer.initialize();
   await indexer.indexAll();
-  console.log('\nIndexing complete!');
-  console.log(indexer.getStats());
+  console.error('\n[Indexer] Indexing complete!');
+  console.error(indexer.getStats());
 }

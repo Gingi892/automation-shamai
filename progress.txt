@@ -1055,3 +1055,78 @@
 
 ---
 
+## Iteration 47 — US-008 Task 3: Error responses include actionable suggestions
+- **What was done**: Added bilingual actionable suggestions to all error responses in MCP tool handlers
+- **Files affected**: `mcp-server/src/index.ts` (10 error handling locations updated)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Enhanced 10 error scenarios with `suggestion` (English) and `suggestionHe` (Hebrew) fields:
+    1. `handleGetDecision` - Decision not found: suggests using search_decisions first
+    2. `handleGetDecisionPdf` - Decision not found: same suggestion
+    3. `handleGetDecisionPdf` - No PDF URL: suggests checking metadata or searching for similar decisions
+    4. `handleReadPdf` - Decision not found: same suggestion as above
+    5. `handleReadPdf` - No PDF URL: same as handleGetDecisionPdf
+    6. `handleReadPdf` - Failed to read PDF: lists possible causes (corrupted, network, server issues)
+    7. `handleCompareDecisions` - No valid decisions: lists provided IDs, explains minimum 2 required
+    8. `handleTriggerUpdate` - Failed to update: lists possible causes (gov.il down, network, rate limit)
+    9. `default case` - Unknown tool: lists all available tool names
+    10. `catch block` - Tool execution failed: includes tool name, suggests checking parameters/format
+- **Learnings for next cycles**:
+  - Patterns: Bilingual error messages use `suggestion` + `suggestionHe` field naming convention
+  - Patterns: Actionable suggestions should include: (1) what went wrong, (2) possible causes, (3) what to try next
+  - Patterns: Include context like `providedIds` or `tool` name to help debugging
+  - Patterns: List specific tool names in unknown tool error for easy reference
+  - Traps: Don't forget to add suggestions to catch blocks that wrap entire functions
+  - Helpful context: US-008 Task 3 complete, remaining tasks (4-6): database unavailable handling, stderr logging, typecheck
+
+---
+
+## Iteration 48 — US-008 Task 4: Graceful handling of database unavailable
+- **What was done**: Implemented graceful database unavailability handling so MCP server continues running even when database fails
+- **Files affected**: `mcp-server/src/index.ts` (91 lines added/modified)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Changed `db` variable type from `DecisionDatabase` to `DecisionDatabase | null`
+  - Added `checkDatabaseAvailable()` helper function (lines 49-77) that returns:
+    - Bilingual error messages (`error` + `errorHe`)
+    - Actionable suggestions (`suggestion` + `suggestionHe`)
+    - List of possible causes in both languages (`possibleCauses` + `possibleCausesHe`)
+    - `isError: true` flag for MCP protocol
+  - Added database availability checks at start of 8 handlers:
+    - `handleSearchDecisions`, `handleGetDecision`, `handleGetDecisionPdf`
+    - `handleReadPdf`, `handleGetStatistics`, `handleListCommittees`
+    - `handleListAppraisers`, `handleCompareDecisions`
+  - Changed all `db.method()` calls to `db!.method()` after availability check (non-null assertion)
+  - Updated `main()` function (lines 1774-1783) to wrap database initialization in try-catch:
+    - On success: logs `[MCP Server] Database initialized successfully`
+    - On failure: logs warning, sets `db = null`, server continues running
+  - Handlers that don't use db directly were not modified: `handleSemanticSearch`, `handleTriggerUpdate`, `handleClarifyQuery`, `handleConstructAnswer`
+- **Learnings for next cycles**:
+  - Patterns: TypeScript non-null assertion (`db!`) works after explicit null check in helper function
+  - Patterns: Helper function returning `MCPToolResult | null` allows clean early-return pattern
+  - Patterns: Bilingual error fields follow convention: `fieldName` (English) + `fieldNameHe` (Hebrew)
+  - Patterns: Graceful degradation allows server to keep running and provide useful error messages
+  - Patterns: Console.error with `[MCP Server]` prefix for consistent logging
+  - Helpful context: US-008 Task 4 complete, remaining tasks (5-6): stderr logging, typecheck
+
+---
+
+## Iteration 49 — US-008 Task 5: Console logging to stderr (not stdout)
+- **What was done**: Changed all `console.log` calls in indexer.ts to `console.error` to preserve MCP stdio protocol
+- **Files affected**: `mcp-server/src/indexer.ts` (10 console.log statements changed to console.error)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - MCP protocol uses stdout for JSON-RPC communication - logging must go to stderr
+  - All other files (index.ts, scraper.ts, database.ts, pdf-extractor.ts, embeddings.ts) already used console.error correctly
+  - indexer.ts was the only file using console.log for progress/info messages
+  - Changed 10 occurrences: resume notification, page fetching, empty pages detection, insertion results, completion messages, update progress
+  - Added `[Indexer]` prefix to all log messages for consistent identification (matching other modules' patterns like `[MCP Server]`, `[Scraper]`, `[Database]`, `[PdfExtractor]`)
+- **Learnings for next cycles**:
+  - Patterns: MCP servers must NEVER use console.log - only console.error for logging
+  - Patterns: Use module prefix in brackets (e.g., `[Indexer]`) for consistent log identification
+  - Patterns: Grep `console\.log` across all src files to verify no stdout pollution
+  - Traps: Node.js console.log writes to stdout, console.error writes to stderr - critical for MCP stdio protocol
+  - Helpful context: US-008 Task 5 complete, remaining task (6): typecheck passes validation
+
+---
+
