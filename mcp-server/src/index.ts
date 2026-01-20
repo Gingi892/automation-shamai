@@ -71,54 +71,54 @@ Returns results in <100ms from pre-indexed local database.`,
       properties: {
         query: {
           type: 'string',
-          description: 'Free text search query (Hebrew supported)'
+          description: 'שאילתת חיפוש חופשי (תומך בעברית) / Free text search query (Hebrew supported)'
         },
         database: {
           type: 'string',
           enum: ['decisive_appraiser', 'appeals_committee', 'appeals_board'],
-          description: 'Filter by specific database'
+          description: 'סינון לפי מאגר מסוים / Filter by specific database: decisive_appraiser=שמאי מכריע, appeals_committee=ועדת השגות, appeals_board=ועדת ערעורים'
         },
         committee: {
           type: 'string',
-          description: 'Filter by local committee name (ועדה מקומית)'
+          description: 'סינון לפי ועדה מקומית (לדוגמה: תל אביב, ירושלים, חיפה) / Filter by local committee name'
         },
         block: {
           type: 'string',
-          description: 'Filter by block number (גוש)'
+          description: 'סינון לפי מספר גוש (לדוגמה: 6158) / Filter by block number'
         },
         plot: {
           type: 'string',
-          description: 'Filter by plot number (חלקה)'
+          description: 'סינון לפי מספר חלקה (לדוגמה: 25) / Filter by plot number'
         },
         appraiser: {
           type: 'string',
-          description: 'Filter by appraiser name (שם השמאי)'
+          description: 'סינון לפי שם השמאי (לדוגמה: כהן, לוי) / Filter by appraiser name'
         },
         caseType: {
           type: 'string',
-          description: 'Filter by case type (e.g., היטל השבחה, פיצויים)'
+          description: 'סינון לפי סוג תיק (לדוגמה: היטל השבחה, פיצויים, ירידת ערך) / Filter by case type'
         },
         fromDate: {
           type: 'string',
-          description: 'Filter decisions from this date (YYYY-MM-DD or DD-MM-YYYY)'
+          description: 'סינון מתאריך (פורמט: YYYY-MM-DD או DD-MM-YYYY) / Filter decisions from this date'
         },
         toDate: {
           type: 'string',
-          description: 'Filter decisions until this date (YYYY-MM-DD or DD-MM-YYYY)'
+          description: 'סינון עד תאריך (פורמט: YYYY-MM-DD או DD-MM-YYYY) / Filter decisions until this date'
         },
         limit: {
           type: 'number',
-          description: 'Maximum number of results (default: 50, max: 500)',
+          description: 'מספר תוצאות מקסימלי (ברירת מחדל: 50, מקסימום: 500) / Maximum number of results',
           default: 50
         },
         offset: {
           type: 'number',
-          description: 'Skip this many results (for pagination)',
+          description: 'דילוג על תוצאות (לדפדוף) / Skip this many results (for pagination)',
           default: 0
         },
         semanticSearch: {
           type: 'boolean',
-          description: 'Use semantic/AI search instead of keyword search',
+          description: 'חיפוש סמנטי/AI במקום חיפוש מילות מפתח / Use semantic/AI search instead of keyword search',
           default: false
         }
       }
@@ -126,13 +126,13 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'get_decision',
-    description: 'Get details of a specific decision by its ID',
+    description: 'קבלת פרטי החלטה לפי מזהה / Get details of a specific decision by its ID',
     inputSchema: {
       type: 'object',
       properties: {
         id: {
           type: 'string',
-          description: 'The decision ID'
+          description: 'מזהה ההחלטה (ID) / The decision ID'
         }
       },
       required: ['id']
@@ -140,13 +140,13 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'get_decision_pdf',
-    description: 'Get the PDF URL for a specific decision. Use this to access the full decision document.',
+    description: 'קבלת קישור ל-PDF של ההחלטה / Get the PDF URL for a specific decision. Use this to access the full decision document.',
     inputSchema: {
       type: 'object',
       properties: {
         id: {
           type: 'string',
-          description: 'The decision ID'
+          description: 'מזהה ההחלטה (ID) / The decision ID'
         }
       },
       required: ['id']
@@ -154,7 +154,7 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'get_statistics',
-    description: 'Get statistics about the indexed decisions database',
+    description: 'קבלת סטטיסטיקות על מאגר ההחלטות / Get statistics about the indexed decisions database',
     inputSchema: {
       type: 'object',
       properties: {}
@@ -162,13 +162,13 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'list_committees',
-    description: 'List all local committees (ועדות מקומיות) that have decisions in the database',
+    description: 'רשימת כל הוועדות המקומיות במאגר / List all local committees (ועדות מקומיות) that have decisions in the database',
     inputSchema: {
       type: 'object',
       properties: {
         limit: {
           type: 'number',
-          description: 'Maximum number of committees to return',
+          description: 'מספר ועדות מקסימלי להחזרה (ברירת מחדל: 100) / Maximum number of committees to return',
           default: 100
         }
       }
@@ -176,13 +176,13 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'list_appraisers',
-    description: 'List all appraisers (שמאים) that have decisions in the database',
+    description: 'רשימת כל השמאים במאגר / List all appraisers (שמאים) that have decisions in the database',
     inputSchema: {
       type: 'object',
       properties: {
         limit: {
           type: 'number',
-          description: 'Maximum number of appraisers to return',
+          description: 'מספר שמאים מקסימלי להחזרה (ברירת מחדל: 100) / Maximum number of appraisers to return',
           default: 100
         }
       }
@@ -190,14 +190,14 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'compare_decisions',
-    description: 'Compare multiple decisions side by side',
+    description: 'השוואת מספר החלטות זו לזו / Compare multiple decisions side by side',
     inputSchema: {
       type: 'object',
       properties: {
         ids: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Array of decision IDs to compare'
+          description: 'רשימת מזהי החלטות להשוואה / Array of decision IDs to compare'
         }
       },
       required: ['ids']
@@ -205,23 +205,23 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'semantic_search',
-    description: 'Search for decisions using natural language and AI embeddings. Better for conceptual queries like "compensation for land seizure near Tel Aviv".',
+    description: 'חיפוש סמנטי בשפה טבעית באמצעות AI. מתאים לשאילתות מושגיות כמו "פיצויים על הפקעת קרקע ליד תל אביב" / Search for decisions using natural language and AI embeddings. Better for conceptual queries.',
     inputSchema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Natural language search query'
+          description: 'שאילתת חיפוש בשפה טבעית / Natural language search query'
         },
         limit: {
           type: 'number',
-          description: 'Maximum number of results',
+          description: 'מספר תוצאות מקסימלי (ברירת מחדל: 20) / Maximum number of results',
           default: 20
         },
         database: {
           type: 'string',
           enum: ['decisive_appraiser', 'appeals_committee', 'appeals_board'],
-          description: 'Filter by specific database'
+          description: 'סינון לפי מאגר מסוים / Filter by specific database: decisive_appraiser=שמאי מכריע, appeals_committee=ועדת השגות, appeals_board=ועדת ערעורים'
         }
       },
       required: ['query']
@@ -229,13 +229,13 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'trigger_update',
-    description: 'Trigger an update to fetch new decisions from gov.il. Requires SCRAPER_API_KEY environment variable.',
+    description: 'הפעלת עדכון לשליפת החלטות חדשות מ-gov.il. דורש הגדרת SCRAPER_API_KEY / Trigger an update to fetch new decisions from gov.il. Requires SCRAPER_API_KEY environment variable.',
     inputSchema: {
       type: 'object',
       properties: {
         pagesToCheck: {
           type: 'number',
-          description: 'Number of recent pages to check for new decisions',
+          description: 'מספר עמודים אחרונים לבדוק להחלטות חדשות (ברירת מחדל: 5) / Number of recent pages to check for new decisions',
           default: 5
         }
       }
