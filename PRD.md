@@ -68,7 +68,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Description:** As a developer, I want to extract text from decision PDFs, so that Claude can answer questions about the actual decision content.
 
 **Acceptance Criteria:**
-- [ ] Download PDF using ScraperAPI (handles any blocking)
+- [x] Download PDF using ScraperAPI (handles any blocking)
 - [ ] Extract text using pdf-parse library
 - [ ] Handle Hebrew RTL text properly
 - [ ] Cache extracted text in database (avoid re-downloading)
