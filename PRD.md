@@ -81,7 +81,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 
 **Acceptance Criteria:**
 - [x] Include 6+ diverse Hebrew query examples with expected parameter extraction
-- [ ] Add database selection table mapping Hebrew keywords to databases:
+- [x] Add database selection table mapping Hebrew keywords to databases:
   - "שמאי מכריע", "הכרעה" → decisive_appraiser
   - "השגה", "ועדת השגות" → appeals_committee
   - "ערעור", "ועדת ערעורים" → appeals_board

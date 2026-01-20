@@ -498,3 +498,22 @@
   - Patterns: Negative guidance ("Don't invent...") prevents hallucination of parameters
   - Patterns: Hebrew year conversion note (תשפ"ד = 2024) helps with date handling
   - Helpful context: This task also partially completes US-004 Tasks 2, 3, 5 (database table, default, negative guidance)
+
+---
+
+## Iteration 23 — US-004 Task 2: Add database selection table mapping Hebrew keywords to databases
+- **What was done**: Verified existing implementation already includes database selection table (implemented in iteration 22), marked task complete
+- **Files affected**: `mcp-server/src/index.ts` (lines 38-44, already implemented)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Database selection table at lines 38-44 in search_decisions tool description
+  - Mappings match PRD specification:
+    - "שמאי מכריע", "הכרעה", "הכרעת שמאי" → decisive_appraiser
+    - "השגה", "ועדת השגות" → appeals_committee
+    - "ערעור", "ועדת ערעורים", "ערר" → appeals_board
+  - Extra keywords ("הכרעת שמאי", "ערר") added beyond PRD minimum for better coverage
+- **Learnings for next cycles**:
+  - Patterns: Check previous iteration notes - work may already be done as side effect
+  - Patterns: Iteration 22 notes explicitly stated "This task also partially completes US-004 Tasks 2, 3, 5"
+  - Helpful context: Always verify PRD checkboxes match actual code state before starting work
+
