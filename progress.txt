@@ -204,3 +204,22 @@
   - Traps: FTS5 query syntax has special characters (", -, *, etc.) that need escaping
   - Traps: Hebrew terms should be quoted in FTS5 queries for proper matching
   - Helpful context: better-sqlite3 has synchronous API (simpler than sql.js async)
+
+---
+
+## Iteration 10 — US-002 Task 2: Table schema verification
+- **What was done**: Verified existing table schema in database.ts matches PRD specification
+- **Files affected**: None (already implemented correctly)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - SQLite table `decisions` has all 12 required columns per PRD
+  - Column mapping: id, database, title, url, block, plot, committee, appraiser, case_type, decision_date, publish_date, content_hash, indexed_at
+  - Snake_case used in SQL (standard convention), camelCase in TypeScript via `rowToDecision()` converter
+  - Additional `pdf_text TEXT` column present for future US-003 (PDF extraction)
+  - `Decision` interface in types.ts:8-22 defines all required fields
+  - `DecisionRow` interface in types.ts:24-38 defines SQL row structure
+  - `rowToDecision()` function in types.ts:135-151 handles conversion
+- **Learnings for next cycles**:
+  - Patterns: SQL columns use snake_case, TypeScript uses camelCase with converter function
+  - Patterns: Schema was implemented correctly in iteration 9 as part of better-sqlite3 migration
+  - Helpful context: PRD schema and database.ts schema match exactly
