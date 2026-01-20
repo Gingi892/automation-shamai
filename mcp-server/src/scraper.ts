@@ -57,6 +57,24 @@ export interface SelectorHealthResult {
 export type CachedDataProvider = (database: DatabaseType, page: number, pageSize: number) => ParsedDecision[];
 
 /**
+ * Alert information when primary strategy fails repeatedly
+ */
+export interface PrimaryStrategyAlert {
+  consecutiveFailures: number;
+  threshold: number;
+  lastDatabase: DatabaseType | null;
+  lastPage: number;
+  timestamp: string;
+  message: string;
+}
+
+/**
+ * Callback type for alerting when primary strategy fails 3+ times consecutively
+ * Called when the failure threshold is exceeded
+ */
+export type AlertHandler = (alert: PrimaryStrategyAlert) => void;
+
+/**
  * XPath-like pattern for DOM traversal
  * Simplified XPath syntax: /tag[@attr=value]/child/...
  */
@@ -248,6 +266,12 @@ export class GovIlScraper {
   private currentPage: number = 0;
   private currentDatabase: DatabaseType | null = null;
 
+  // Alert mechanism for primary strategy failures
+  private consecutivePrimaryFailures: number = 0;
+  private readonly PRIMARY_FAILURE_THRESHOLD = 3;
+  private alertHandler: AlertHandler | null = null;
+  private alertTriggered: boolean = false;
+
   constructor(options: ScraperOptions) {
     this.apiKey = options.apiKey;
     this.delayMs = options.delayMs || 1000;
@@ -290,6 +314,74 @@ export class GovIlScraper {
    */
   getStrategyStats(): Record<SelectorStrategyType, { success: number; fail: number }> {
     return Object.fromEntries(this.strategyStats) as Record<SelectorStrategyType, { success: number; fail: number }>;
+  }
+
+  /**
+   * Set the alert handler for primary strategy failures
+   * Called when css_primary fails 3+ times consecutively
+   */
+  setAlertHandler(handler: AlertHandler): void {
+    this.alertHandler = handler;
+  }
+
+  /**
+   * Get the current consecutive primary failure count
+   */
+  getConsecutivePrimaryFailures(): number {
+    return this.consecutivePrimaryFailures;
+  }
+
+  /**
+   * Reset the primary failure counter (useful for testing or after manual intervention)
+   */
+  resetPrimaryFailureCount(): void {
+    this.consecutivePrimaryFailures = 0;
+    this.alertTriggered = false;
+    console.error('[Scraper] Primary failure counter reset');
+  }
+
+  /**
+   * Track primary strategy failures and trigger alert if threshold exceeded
+   */
+  private handlePrimaryStrategyResult(success: boolean): void {
+    if (success) {
+      // Reset counter on success
+      if (this.consecutivePrimaryFailures > 0) {
+        console.error(`[Scraper] Primary strategy recovered after ${this.consecutivePrimaryFailures} consecutive failures`);
+      }
+      this.consecutivePrimaryFailures = 0;
+      this.alertTriggered = false;
+    } else {
+      // Increment failure counter
+      this.consecutivePrimaryFailures++;
+
+      // Check if we've hit the threshold
+      if (this.consecutivePrimaryFailures >= this.PRIMARY_FAILURE_THRESHOLD && !this.alertTriggered) {
+        this.alertTriggered = true;
+
+        const alert: PrimaryStrategyAlert = {
+          consecutiveFailures: this.consecutivePrimaryFailures,
+          threshold: this.PRIMARY_FAILURE_THRESHOLD,
+          lastDatabase: this.currentDatabase,
+          lastPage: this.currentPage,
+          timestamp: new Date().toISOString(),
+          message: `ALERT: Primary CSS selectors failed ${this.consecutivePrimaryFailures} consecutive times. ` +
+            `Selectors may need updating. Last attempt: database=${this.currentDatabase}, page=${this.currentPage}`
+        };
+
+        // Always log the alert to stderr
+        console.error(`[Scraper] ⚠️ ${alert.message}`);
+
+        // Call custom alert handler if configured
+        if (this.alertHandler) {
+          try {
+            this.alertHandler(alert);
+          } catch (err) {
+            console.error('[Scraper] Error in alert handler:', err);
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -359,9 +451,11 @@ export class GovIlScraper {
     if (decisions.length > 0) {
       this.lastStrategyUsed = 'css_primary';
       this.logStrategy('css_primary', true, decisions.length);
+      this.handlePrimaryStrategyResult(true); // Reset failure counter on success
       return decisions;
     }
     this.logStrategy('css_primary', false, 0);
+    this.handlePrimaryStrategyResult(false); // Track consecutive failure
 
     // Strategy 2: XPath patterns (path-based, resilient to class changes)
     decisions = this.parseWithXPathPatterns(html, database);
