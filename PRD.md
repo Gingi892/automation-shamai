@@ -118,7 +118,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Description:** As a developer, I want the database to update incrementally, so that new decisions are added without full re-crawl.
 
 **Acceptance Criteria:**
-- [ ] Tool: `trigger_update` checks first N pages for new decisions
+- [x] Tool: `trigger_update` checks first N pages for new decisions
 - [ ] Compare content hash to detect duplicates
 - [ ] Skip already-indexed decisions
 - [ ] Log: "Found X new decisions in [database]"

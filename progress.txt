@@ -858,3 +858,23 @@
 
 ---
 
+## Iteration 38 — US-007 Task 1: Tool `trigger_update` checks first N pages for new decisions
+- **What was done**: Verified existing implementation already provides `trigger_update` tool with configurable page count
+- **Files affected**: None (already implemented in `mcp-server/src/index.ts` and `mcp-server/src/indexer.ts`)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - `trigger_update` tool definition at index.ts:259-269 with `pagesToCheck` parameter (default: 5)
+  - `handleTriggerUpdate()` at index.ts:628-681 validates SCRAPER_API_KEY, creates indexer, calls updateRecent
+  - `updateRecent(pagesToCheck)` at indexer.ts:154-197 iterates through pages 0 to N-1
+  - Returns JSON with `newDecisionsFound`, `byDatabase` breakdown, and timestamp
+  - Calls `scraper.fetchAndParse(database, page)` for each page
+  - Checks `existsByHash()` before inserting to avoid duplicates
+  - Logs to console: `${DATABASE_CONFIG[database].name} page ${page}: ${newCount} new of ${decisions.length}`
+- **Learnings for next cycles**:
+  - Patterns: `trigger_update` was implemented during initial MCP server setup
+  - Patterns: Check existing code before implementing - incremental update logic already exists
+  - Patterns: The tool returns structured JSON suitable for Claude to format as response
+  - Helpful context: US-007 Task 1 complete, remaining tasks (2-6): content hash detection, skip indexed, log format, lastUpdateAt, cron script
+
+---
+
