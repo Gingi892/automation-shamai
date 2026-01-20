@@ -814,3 +814,47 @@
   - Patterns: When TypeScript complains about `Record<string, unknown>` to specific type, use `as unknown as Type` pattern
   - Helpful context: US-006 Task 5 complete, remaining tasks (6-7): no-results warning, typecheck passes
 
+---
+
+## Iteration 36 — US-006 Task 6: Warn when no relevant decisions found: "לא נמצאו החלטות רלוונטיות"
+- **What was done**: Enhanced the no-results case in `handleConstructAnswer` to include a comprehensive formatted warning in `formattedAnswer` instead of empty string
+- **Files affected**: `mcp-server/src/index.ts` (lines 1093-1128, expanded no-results handling)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Changed `noResultsWarning` from long suggestion-text to exact PRD wording: "לא נמצאו החלטות רלוונטיות"
+  - Created `formattedNoResultsAnswer` template with:
+    - Warning header with emoji: `## ⚠️ לא נמצאו החלטות רלוונטיות`
+    - English translation: "No relevant decisions found"
+    - Bilingual suggestions section with 3 improvement tips (refine search, check database, clarify query)
+    - Confidence level footer showing 🟡 uncertain status
+  - The `noResultsWarning` field now contains the exact PRD-specified text
+  - The `formattedAnswer` field now contains the full human-readable warning instead of empty string
+- **Learnings for next cycles**:
+  - Patterns: Empty `formattedAnswer` is poor UX - always provide meaningful content even on no-results
+  - Patterns: No-results warnings should include actionable suggestions, not just error messages
+  - Patterns: PRD acceptance criteria often have exact text requirements - match them precisely
+  - Patterns: Use emoji indicators (⚠️, 🟡) consistently with rest of formatting for visual consistency
+  - Helpful context: US-006 Task 6 complete, remaining task (7): typecheck passes validation
+
+---
+
+## Iteration 37 — US-006 Task 7: Verify TypeScript type check passes
+- **What was done**: Ran TypeScript type check to validate US-006 completion
+- **Files affected**: None (validation only)
+- **Validation**: `npx tsc --noEmit` succeeds with no errors
+- **US-006 COMPLETE**: All acceptance criteria met:
+  - [x] Format answers with inline citations: "[S0]", "[S1]", etc.
+  - [x] Include sources section with: decision ID, title, PDF URL, relevance score
+  - [x] For each claim, cite the specific decision(s) supporting it
+  - [x] When answering from PDF content, quote relevant excerpts
+  - [x] Add confidence indicator: "בטוח" (confident) vs "ייתכן" (uncertain)
+  - [x] Warn when no relevant decisions found: "לא נמצאו החלטות רלוונטיות"
+  - [x] Typecheck passes
+- **Learnings for next cycles**:
+  - Patterns: US-006 Tasks 1-6 were implemented across iterations 31-36
+  - Patterns: Task 7 (typecheck) serves as final validation gate for user story completion
+  - Patterns: construct_answer tool provides structured citation data for answer construction
+  - Helpful context: US-006 complete, ready to proceed to US-007 (incremental update mechanism)
+
+---
+

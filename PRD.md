@@ -112,7 +112,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] When answering from PDF content, quote relevant excerpts
 - [x] Add confidence indicator: "בטוח" (confident) vs "ייתכן" (uncertain)
 - [x] Warn when no relevant decisions found: "לא נמצאו החלטות רלוונטיות"
-- [ ] Typecheck passes
+- [x] Typecheck passes
 
 ### US-007: Implement incremental update mechanism
 **Description:** As a developer, I want the database to update incrementally, so that new decisions are added without full re-crawl.
