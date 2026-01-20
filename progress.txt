@@ -962,3 +962,26 @@
 
 ---
 
+## Iteration 43 — US-007 Task 6: Script for daily cron job `npm run daily-update`
+- **What was done**: Verified existing implementation already provides complete daily-update script and npm command
+- **Files affected**: None (already implemented)
+  - `mcp-server/scripts/daily-update.ts` - Full script with CLI args, progress logging, JSON output
+  - `mcp-server/package.json` - Line 12: `"daily-update": "tsx scripts/daily-update.ts"`
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Script validates SCRAPER_API_KEY environment variable
+  - Supports `--pages=N` option (default: 5) for number of recent pages to check
+  - Supports `--delay=N` option (default: 1000ms) for rate limiting
+  - Uses `createIndexer()` and `indexer.updateRecent(pages)` for incremental update
+  - Shows before/after stats and duration
+  - Outputs JSON log entry for monitoring integration
+  - Usage: `$env:SCRAPER_API_KEY="key"; npm run daily-update`
+- **Learnings for next cycles**:
+  - Patterns: Check existing scripts folder before implementing - this was already done
+  - Patterns: Script uses tsx for direct TypeScript execution (no compile step)
+  - Patterns: JSON log output at end enables easy integration with monitoring systems
+  - Patterns: Environment variable check at script start prevents cryptic downstream errors
+  - Helpful context: US-007 Task 6 complete, remaining task (7): typecheck passes validation
+
+---
+
