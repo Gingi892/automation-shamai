@@ -178,10 +178,18 @@ export interface ConstructAnswerInput {
   }>;
 }
 
+export interface QuotedExcerpt {
+  sourceIndex: number;            // Which source this excerpt came from [S0], [S1], etc.
+  decisionId: string;
+  excerpt: string;                // The actual quoted text from the PDF
+  context?: string;               // Optional context about what this excerpt addresses
+}
+
 export interface ConstructAnswerResult {
   formattedAnswer: string;        // Answer with inline citations [S0], [S1], etc.
   sources: CitedSource[];         // Sources section
   claims: CitedClaim[];           // Individual claims with their citations
+  quotedExcerpts: QuotedExcerpt[]; // Direct quotes from PDF content for answer construction
   overallConfidence: ConfidenceLevel;
   noResultsWarning?: string;      // "לא נמצאו החלטות רלוונטיות" when applicable
 }

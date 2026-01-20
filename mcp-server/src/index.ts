@@ -28,6 +28,7 @@ import {
   ConfidenceLevel,
   CitedSource,
   CitedClaim,
+  QuotedExcerpt,
   ConstructAnswerInput,
   ConstructAnswerResult
 } from './types.js';
@@ -1016,6 +1017,75 @@ function generateClaimsFromSources(
   return claims;
 }
 
+/**
+ * Format a PDF excerpt for quotation in the answer.
+ * Cleans up the text and adds proper Hebrew quotation marks.
+ * @param excerpt - Raw excerpt from PDF
+ * @param maxLength - Maximum length before truncation (default 500)
+ * @returns Formatted excerpt with quotation marks
+ */
+function formatPdfExcerpt(excerpt: string, maxLength: number = 500): string {
+  // Clean up the excerpt
+  let cleaned = excerpt
+    .replace(/\s+/g, ' ')           // Normalize whitespace
+    .replace(/\n{3,}/g, '\n\n')     // Limit consecutive newlines
+    .trim();
+
+  // Truncate if needed, breaking at word boundary
+  if (cleaned.length > maxLength) {
+    const truncated = cleaned.substring(0, maxLength);
+    const lastSpace = truncated.lastIndexOf(' ');
+    cleaned = (lastSpace > maxLength * 0.8 ? truncated.substring(0, lastSpace) : truncated) + '...';
+  }
+
+  // Add Hebrew quotation marks (״...״) for Hebrew text, or standard for English
+  const isHebrew = /[\u0590-\u05FF]/.test(cleaned);
+  if (isHebrew) {
+    return `״${cleaned}״`;
+  }
+  return `"${cleaned}"`;
+}
+
+/**
+ * Extract key phrases from PDF excerpt that may answer the user's question.
+ * Looks for monetary amounts, percentages, dates, and legal determinations.
+ */
+function extractKeyPhrasesFromExcerpt(excerpt: string): string[] {
+  const phrases: string[] = [];
+
+  // Extract monetary amounts (Israeli shekel patterns)
+  const moneyMatches = excerpt.match(/[\d,]+\s*(?:ש"ח|שקל|₪|שקלים)/g);
+  if (moneyMatches) phrases.push(...moneyMatches);
+
+  // Extract percentages
+  const percentMatches = excerpt.match(/\d+(?:\.\d+)?%/g);
+  if (percentMatches) phrases.push(...percentMatches);
+
+  // Extract dates (DD/MM/YYYY or DD.MM.YYYY patterns)
+  const dateMatches = excerpt.match(/\d{1,2}[\/\.]\d{1,2}[\/\.]\d{2,4}/g);
+  if (dateMatches) phrases.push(...dateMatches);
+
+  // Extract legal determination keywords
+  const determinationKeywords = [
+    'נקבע כי', 'הוחלט', 'נדחה', 'התקבל',
+    'הפיצוי', 'ההיטל', 'השומה', 'הערך'
+  ];
+  for (const keyword of determinationKeywords) {
+    if (excerpt.includes(keyword)) {
+      // Extract surrounding context (up to 100 chars after keyword)
+      const index = excerpt.indexOf(keyword);
+      const contextEnd = Math.min(index + 100, excerpt.length);
+      const context = excerpt.substring(index, contextEnd);
+      const endPunct = context.search(/[.!?]/);
+      if (endPunct > 0) {
+        phrases.push(context.substring(0, endPunct + 1));
+      }
+    }
+  }
+
+  return [...new Set(phrases)]; // Remove duplicates
+}
+
 // Handler for constructing answers with citations (US-006)
 async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPToolResult> {
   const { question, decisions, pdfExcerpts = [] } = params;
@@ -1026,6 +1096,7 @@ async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPT
       formattedAnswer: '',
       sources: [],
       claims: [],
+      quotedExcerpts: [],
       overallConfidence: 'uncertain',
       noResultsWarning: 'לא נמצאו החלטות רלוונטיות לשאילתה זו. נסה לחדד את החיפוש, לבחור מאגר אחר, או להבהיר את השאילתה.'
     };
@@ -1078,6 +1149,47 @@ async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPT
   // Claude will use this structure to build actual answers
   const citationGuide = sources.map(s => `[S${s.index}]`).join(', ');
 
+  // Build quoted excerpts from PDF content
+  const quotedExcerpts: QuotedExcerpt[] = pdfExcerpts.map(({ decisionId, excerpt }) => {
+    const sourceIndex = sources.findIndex(s => s.decisionId === decisionId);
+    const keyPhrases = extractKeyPhrasesFromExcerpt(excerpt);
+
+    return {
+      sourceIndex: sourceIndex >= 0 ? sourceIndex : 0,
+      decisionId,
+      excerpt: formatPdfExcerpt(excerpt),
+      context: keyPhrases.length > 0
+        ? `נתונים מרכזיים: ${keyPhrases.slice(0, 3).join(', ')}`
+        : undefined
+    };
+  });
+
+  // Build quoted excerpts section for answer construction
+  let quotedExcerptsSection = '';
+  if (quotedExcerpts.length > 0) {
+    const excerptItems = quotedExcerpts.map(qe => {
+      const source = sources.find(s => s.decisionId === qe.decisionId);
+      const sourceRef = qe.sourceIndex >= 0 ? `[S${qe.sourceIndex}]` : '';
+      return `
+### ציטוט מ-${sourceRef}
+> ${qe.excerpt}
+
+${qe.context ? `**${qe.context}**` : ''}
+מקור: ${source?.title || qe.decisionId}`;
+    }).join('\n\n');
+
+    quotedExcerptsSection = `
+## ציטוטים מתוך ה-PDF / Quoted Excerpts from PDF Content
+
+השתמש בציטוטים הבאים בתשובתך כדי לבסס טענות:
+Use these quotes in your answer to support claims:
+
+${excerptItems}
+
+---
+`;
+  }
+
   // Build detailed sources section with all required fields per PRD
   const sourcesSection = sources.map(s => {
     const relevancePercent = s.relevanceScore !== undefined
@@ -1089,7 +1201,7 @@ async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPT
 - כותרת / Title: ${s.title}
 - קישור ל-PDF / PDF URL: ${s.pdfUrl || 'לא זמין / Not available'}
 - ציון רלוונטיות / Relevance Score: ${relevancePercent}${s.excerpt ? `
-- ציטוט / Excerpt: "${s.excerpt.substring(0, 200)}${s.excerpt.length > 200 ? '...' : ''}"` : ''}`;
+- ציטוט / Excerpt: ${formatPdfExcerpt(s.excerpt, 200)}` : ''}`;
   }).join('\n');
 
   const formattedAnswer = `
@@ -1099,7 +1211,7 @@ async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPT
 ${citationGuide}
 
 ---
-
+${quotedExcerptsSection}
 ## מקורות / Sources Section
 
 ${sourcesSection}
@@ -1108,9 +1220,10 @@ ${sourcesSection}
 
 ### הנחיות לבניית תשובה / Answer Construction Guidelines:
 1. הצב ציטוט [S#] מיד אחרי כל טענה / Place [S#] citation immediately after each claim
-2. ציטוט ישיר מ-PDF: "...טקסט..." [S#] / Direct quote from PDF: "...text..." [S#]
+2. **ציטוט ישיר מ-PDF**: ״...טקסט...״ [S#] / Direct quote from PDF: "...text..." [S#]
 3. מספר מקורות לאותה טענה: [S0][S1] / Multiple sources for same claim: [S0][S1]
 4. ציין רמת ביטחון: ${overallConfidence === 'confident' ? 'בטוח' : 'ייתכן'} / Confidence: ${overallConfidence === 'confident' ? 'confident' : 'uncertain'}
+5. ${quotedExcerpts.length > 0 ? `**חשוב**: השתמש בציטוטים מה-PDF לעיל כדי לבסס תשובות / **Important**: Use the PDF quotes above to support answers` : 'אם יש תוכן PDF, צטט את הטקסט הרלוונטי / If PDF content available, quote the relevant text'}
 `.trim();
 
   // Generate claims from sources with citation mappings
@@ -1121,6 +1234,7 @@ ${sourcesSection}
     formattedAnswer,
     sources,
     claims,
+    quotedExcerpts,
     overallConfidence
   };
 

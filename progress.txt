@@ -756,3 +756,37 @@
   - Patterns: Fallback to simple decision summaries ensures claims array is never empty
   - Helpful context: US-006 Task 3 complete, remaining tasks (4-6): PDF excerpts, confidence indicators, no-results warning
 
+---
+
+## Iteration 34 — US-006 Task 4: When answering from PDF content, quote relevant excerpts
+- **What was done**: Implemented comprehensive PDF excerpt quoting with Hebrew quotation marks, key phrase extraction, and a dedicated "Quoted Excerpts" section in the formatted answer
+- **Files affected**:
+  - `mcp-server/src/types.ts` (added QuotedExcerpt interface, added quotedExcerpts field to ConstructAnswerResult)
+  - `mcp-server/src/index.ts` (added formatPdfExcerpt helper, extractKeyPhrasesFromExcerpt helper, enhanced handleConstructAnswer with quotedExcerpts section)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `QuotedExcerpt` interface with: sourceIndex, decisionId, excerpt (formatted), optional context
+  - `formatPdfExcerpt()` helper function:
+    - Normalizes whitespace and limits consecutive newlines
+    - Truncates at word boundary (default 500 chars)
+    - Uses Hebrew quotation marks (״...״) for Hebrew text, standard quotes for English
+  - `extractKeyPhrasesFromExcerpt()` helper function:
+    - Extracts monetary amounts (ש"ח, שקל, ₪ patterns)
+    - Extracts percentages (\d+%)
+    - Extracts dates (DD/MM/YYYY, DD.MM.YYYY patterns)
+    - Extracts legal determination keywords (נקבע כי, הוחלט, נדחה, etc.)
+  - Enhanced `handleConstructAnswer`:
+    - Builds `quotedExcerpts` array from pdfExcerpts input
+    - Creates dedicated "ציטוטים מתוך ה-PDF / Quoted Excerpts" section in formattedAnswer
+    - Each excerpt shows source reference [S#], formatted quote, and key context
+    - Added guideline #5 about using PDF quotes to support answers
+  - Updated ConstructAnswerResult to include `quotedExcerpts` field in both success and no-results cases
+- **Learnings for next cycles**:
+  - Patterns: Hebrew uses ״...״ (Unicode U+05F4) for quotation marks, different from standard quotes
+  - Patterns: `/[\u0590-\u05FF]/` regex detects Hebrew characters reliably
+  - Patterns: Breaking truncation at word boundary (lastIndexOf(' ')) prevents mid-word cuts
+  - Patterns: Key phrase extraction improves context awareness for answer construction
+  - Patterns: Legal determination keywords (נקבע כי, הוחלט, הפיצוי) signal important content
+  - Traps: QuotedExcerpt must be added to both imports in index.ts and types.ts exports
+  - Helpful context: US-006 Task 4 complete, remaining tasks (5-6): confidence indicators, no-results warning
+
