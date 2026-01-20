@@ -7,10 +7,11 @@ import {
   DatabaseType,
   Decision,
   IndexerProgress,
-  DATABASE_CONFIG
+  DATABASE_CONFIG,
+  ParsedDecision
 } from './types.js';
 import { DecisionDatabase, getDatabase } from './database.js';
-import { GovIlScraper, createScraper } from './scraper.js';
+import { GovIlScraper, createScraper, CachedDataProvider } from './scraper.js';
 
 export interface IndexerOptions {
   scraperApiKey: string;
@@ -44,6 +45,45 @@ export class DecisionIndexer {
    */
   async initialize(): Promise<void> {
     this.db = await getDatabase();
+
+    // Set up cached data provider for scraper fallback
+    // This allows the scraper to return cached data when all extraction strategies fail
+    this.scraper.setCachedDataProvider(this.createCachedDataProvider());
+  }
+
+  /**
+   * Create a cached data provider that retrieves decisions from the database
+   * Used as the final fallback when all scraping strategies fail
+   */
+  private createCachedDataProvider(): CachedDataProvider {
+    return (database: DatabaseType, page: number, pageSize: number) => {
+      if (!this.db) return [];
+
+      try {
+        const offset = page * pageSize;
+        const result = this.db.search({
+          database,
+          limit: pageSize,
+          offset
+        });
+
+        // Convert Decision objects to ParsedDecision format
+        return result.decisions.map(d => ({
+          title: d.title,
+          url: d.url,
+          block: d.block,
+          plot: d.plot,
+          committee: d.committee,
+          appraiser: d.appraiser,
+          caseType: d.caseType,
+          decisionDate: d.decisionDate,
+          publishDate: d.publishDate
+        }));
+      } catch (error) {
+        console.error(`[Indexer] Error retrieving cached data for ${database} page ${page}:`, error);
+        return [];
+      }
+    };
   }
 
   /**

@@ -21,9 +21,9 @@ export interface ScraperOptions {
 
 /**
  * Selector strategy types for fallback system
- * Order: css_primary → xpath_patterns → css_structural → regex_fallback
+ * Order: css_primary → xpath_patterns → css_structural → regex_fallback → cached_data
  */
-export type SelectorStrategyType = 'css_primary' | 'xpath_patterns' | 'css_structural' | 'regex_fallback';
+export type SelectorStrategyType = 'css_primary' | 'xpath_patterns' | 'css_structural' | 'regex_fallback' | 'cached_data';
 
 export interface SelectorStrategyResult {
   strategy: SelectorStrategyType;
@@ -43,11 +43,18 @@ export interface SelectorHealthResult {
     xpath_patterns: { working: boolean; itemCount: number };
     css_structural: { working: boolean; itemCount: number };
     regex_fallback: { working: boolean; itemCount: number };
+    cached_data: { working: boolean; itemCount: number };
   };
   recommendedStrategy: SelectorStrategyType | null;
   warnings: string[];
   error?: string;
 }
+
+/**
+ * Callback type for retrieving cached data from database
+ * Used as final fallback when all extraction strategies fail
+ */
+export type CachedDataProvider = (database: DatabaseType, page: number, pageSize: number) => ParsedDecision[];
 
 /**
  * XPath-like pattern for DOM traversal
@@ -237,6 +244,9 @@ export class GovIlScraper {
   private selectors: SelectorConfig;
   private lastStrategyUsed: SelectorStrategyType | null = null;
   private strategyStats: Map<SelectorStrategyType, { success: number; fail: number }> = new Map();
+  private cachedDataProvider: CachedDataProvider | null = null;
+  private currentPage: number = 0;
+  private currentDatabase: DatabaseType | null = null;
 
   constructor(options: ScraperOptions) {
     this.apiKey = options.apiKey;
@@ -250,6 +260,22 @@ export class GovIlScraper {
     this.strategyStats.set('xpath_patterns', { success: 0, fail: 0 });
     this.strategyStats.set('css_structural', { success: 0, fail: 0 });
     this.strategyStats.set('regex_fallback', { success: 0, fail: 0 });
+    this.strategyStats.set('cached_data', { success: 0, fail: 0 });
+  }
+
+  /**
+   * Set the cached data provider for fallback when all strategies fail
+   * The provider should return cached decisions from the database
+   */
+  setCachedDataProvider(provider: CachedDataProvider): void {
+    this.cachedDataProvider = provider;
+  }
+
+  /**
+   * Get the cached data provider
+   */
+  getCachedDataProvider(): CachedDataProvider | null {
+    return this.cachedDataProvider;
   }
 
   /**
@@ -367,8 +393,21 @@ export class GovIlScraper {
     }
     this.logStrategy('regex_fallback', false, 0);
 
-    // All strategies failed
-    console.error(`[Scraper] ERROR: All extraction strategies failed for ${database}`);
+    // Strategy 5: Return cached data with warning (final fallback)
+    if (this.cachedDataProvider && this.currentDatabase) {
+      decisions = this.cachedDataProvider(this.currentDatabase, this.currentPage, this.pageSize);
+      if (decisions.length > 0) {
+        this.lastStrategyUsed = 'cached_data';
+        this.logStrategy('cached_data', true, decisions.length);
+        console.error(`[Scraper] WARNING: All extraction strategies failed for ${database}. Returning ${decisions.length} cached decisions from database.`);
+        console.error(`[Scraper] ⚠️ CACHED DATA FALLBACK - Data may be stale. Please check selector configuration.`);
+        return decisions;
+      }
+      this.logStrategy('cached_data', false, 0);
+    }
+
+    // All strategies failed (including cache)
+    console.error(`[Scraper] ERROR: All extraction strategies failed for ${database} (no cached data available)`);
     this.lastStrategyUsed = null;
     return [];
   }
@@ -969,6 +1008,10 @@ export class GovIlScraper {
    * Fetch and parse a single page
    */
   async fetchAndParse(database: DatabaseType, page: number): Promise<Omit<Decision, 'indexedAt'>[]> {
+    // Store current context for cached data fallback
+    this.currentDatabase = database;
+    this.currentPage = page;
+
     const html = await this.fetchPage(database, page);
     const parsed = this.parseDecisions(html, database);
     return parsed.map(p => this.toDecision(p, database));
@@ -1024,7 +1067,8 @@ export class GovIlScraper {
         css_primary: { working: false, itemCount: 0 },
         xpath_patterns: { working: false, itemCount: 0 },
         css_structural: { working: false, itemCount: 0 },
-        regex_fallback: { working: false, itemCount: 0 }
+        regex_fallback: { working: false, itemCount: 0 },
+        cached_data: { working: false, itemCount: 0 }
       },
       recommendedStrategy: null,
       warnings: []
@@ -1069,6 +1113,15 @@ export class GovIlScraper {
         itemCount: regexDecisions.length
       };
 
+      // Test Cached data fallback strategy (if provider is configured)
+      if (this.cachedDataProvider) {
+        const cachedDecisions = this.cachedDataProvider(database, 0, this.pageSize);
+        result.strategies.cached_data = {
+          working: cachedDecisions.length > 0,
+          itemCount: cachedDecisions.length
+        };
+      }
+
       // Determine overall health and recommended strategy (in priority order)
       if (result.strategies.css_primary.working) {
         result.healthy = true;
@@ -1085,9 +1138,16 @@ export class GovIlScraper {
         result.healthy = true;
         result.recommendedStrategy = 'regex_fallback';
         result.warnings.push('All CSS and XPath selectors failed - using regex fallback (less reliable)');
+      } else if (result.strategies.cached_data.working) {
+        // Cached data available but not considered "healthy" since live data is unavailable
+        result.healthy = false;
+        result.recommendedStrategy = 'cached_data';
+        result.warnings.push('All extraction strategies failed - using cached database data (STALE DATA WARNING)');
+        result.warnings.push(`Cached data available: ${result.strategies.cached_data.itemCount} decisions from database`);
       } else {
         result.healthy = false;
         result.warnings.push('All extraction strategies failed - selectors need updating');
+        result.warnings.push('No cached data available in database');
       }
 
       // Add warnings for strategy degradation
