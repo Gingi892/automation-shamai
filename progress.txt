@@ -683,3 +683,29 @@
   - Patterns: PRD checkbox updates can lag behind actual implementation
   - Helpful context: US-005 complete, ready to proceed to US-006 (answer construction with citations)
 
+---
+
+## Iteration 31 — US-006 Task 1: Format answers with inline citations [S0], [S1], etc.
+- **What was done**: Implemented `construct_answer` MCP tool with inline citation formatting
+- **Files affected**:
+  - `mcp-server/src/types.ts` (added 6 new types: ConfidenceLevel, CitedSource, CitedClaim, ConstructAnswerInput, ConstructAnswerResult)
+  - `mcp-server/src/index.ts` (added tool definition, handleConstructAnswer handler, switch case)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `ConfidenceLevel` type: 'confident' | 'uncertain'
+  - Created `CitedSource` interface with: index (for [S0]), decisionId, title, pdfUrl, database, relevanceScore, optional excerpt
+  - Created `CitedClaim` interface: text, citations array (indices), confidence level
+  - Created `ConstructAnswerInput` interface: question, decisions array, optional pdfExcerpts
+  - Created `ConstructAnswerResult` interface: formattedAnswer, sources, claims, overallConfidence, optional noResultsWarning
+  - Tool description includes Hebrew+English documentation with usage examples
+  - Citation format: [S0], [S1], [S2], etc. (S = Source)
+  - Handler builds sources array mapping decisions to citation indices
+  - Confidence determined by: number of results, relevance scores
+  - No results case returns Hebrew warning: "לא נמצאו החלטות רלוונטיות לשאילתה זו"
+- **Learnings for next cycles**:
+  - Patterns: Citation indices start at 0 ([S0]) for consistent array indexing
+  - Patterns: Handler returns structured data for Claude to use when constructing actual response text
+  - Patterns: Confidence thresholds: >=3 decisions or single decision with >0.8 relevance = confident
+  - Patterns: Tool descriptions with markdown examples help Claude understand citation placement
+  - Helpful context: US-006 Task 1 complete, remaining tasks (2-6): sources section, claim citations, PDF excerpts, confidence indicators, no-results warning
+
