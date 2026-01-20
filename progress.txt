@@ -1224,3 +1224,26 @@
 
 ---
 
+## Iteration 54 — US-009 Task 3: Environment variable SCRAPER_API_KEY for live fetching
+- **What was done**: Verified existing implementation already provides complete SCRAPER_API_KEY environment variable support
+- **Files affected**: None (already implemented across multiple files)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - `index.ts` line 38: `const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY || '';`
+  - Used in `handleReadPdf()` (lines 933-940) with proper error handling when not set
+  - Used in `handleTriggerUpdate()` (lines 1158-1164) with proper error handling
+  - Used in `handleHealthCheck()` (lines 1276-1282) to report API key status
+  - README.md documentation:
+    - Environment Variables table (lines 246-251)
+    - Claude Desktop config snippet showing env setting (lines 26-28)
+    - PowerShell syntax: `$env:SCRAPER_API_KEY="your_key"` (line 64)
+    - Unix syntax: `export SCRAPER_API_KEY=your_key` (line 67)
+  - Scripts also validate SCRAPER_API_KEY: `index-all.ts` (lines 42-51), `daily-update.ts` (lines 38-44)
+- **Learnings for next cycles**:
+  - Patterns: Environment variable was implemented as part of initial server setup
+  - Patterns: Check existing implementation thoroughly - this task was already complete from earlier iterations
+  - Patterns: Environment variable documentation should include: description, required/optional, platform-specific syntax (PowerShell vs Unix)
+  - Helpful context: US-009 Task 3 complete, remaining tasks: first-run init (Task 4), typecheck (Task 6)
+
+---
+
