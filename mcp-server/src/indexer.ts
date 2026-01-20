@@ -190,6 +190,7 @@ export class DecisionIndexer {
       }
 
       results.set(database, totalNew);
+      console.log(`Found ${totalNew} new decisions in ${DATABASE_CONFIG[database].name}`);
     }
 
     this.db!.setMetadata('last_update', new Date().toISOString());

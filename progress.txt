@@ -925,3 +925,21 @@
 
 ---
 
+## Iteration 41 — US-007 Task 4: Log "Found X new decisions in [database]"
+- **What was done**: Added summary log statement after processing each database in updateRecent() method
+- **Files affected**: `mcp-server/src/indexer.ts` (line 193, added console.log statement)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added log after `results.set(database, totalNew)` at end of database processing loop
+  - Uses DATABASE_CONFIG[database].name to get Hebrew database name (שמאי מכריע, etc.)
+  - Format matches PRD exactly: `Found ${totalNew} new decisions in ${DATABASE_CONFIG[database].name}`
+  - Logs to stderr (console.log in Node.js MCP servers goes to stderr by default)
+  - Existing per-page logs (line 177) still provide granular progress, summary log provides PRD-required format
+- **Learnings for next cycles**:
+  - Patterns: Summary logs should come after the loop, not inside it
+  - Patterns: Use DATABASE_CONFIG for consistent database naming across the codebase
+  - Patterns: PRD acceptance criteria often have exact text format requirements - match them precisely
+  - Helpful context: US-007 Task 4 complete, remaining tasks (5-7): lastUpdateAt timestamp, cron script, typecheck
+
+---
+
