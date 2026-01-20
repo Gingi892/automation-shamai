@@ -47,3 +47,45 @@
   - Patterns: ScraperAPI URL built via `URLSearchParams` with api_key, url, render, premium params
   - Patterns: `buildScraperUrl()` method centralizes URL construction
   - Helpful context: The scraper defaults to premium=true and render=true via nullish coalescing (`??`)
+
+---
+
+## Iteration 2 — US-001 Task 2: Multiple selector strategies with fallbacks
+- **What was done**: Implemented multi-strategy fallback system for resilient HTML parsing
+- **Files affected**: `mcp-server/src/scraper.ts` (major refactor of parseDecisions method)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `SelectorStrategyType` type: 'css_primary' | 'css_structural' | 'regex_fallback'
+  - Created `SelectorConfig` interface with configurable selectors for each strategy
+  - Implemented `DEFAULT_SELECTORS` constant with:
+    - Primary selectors: class-based (e.g., `.dynamic-card`, `.result-item`)
+    - Structural selectors: tag/attribute-based (e.g., `div[ng-repeat]`, `article`)
+    - Regex patterns: raw HTML extraction (e.g., `/הכרעת שמאי[^<\n]{10,200}/g`)
+  - Strategy tracking: `lastStrategyUsed`, `strategyStats` map
+  - Helper methods: `getLastStrategyUsed()`, `getStrategyStats()`, `logStrategy()`
+  - Refactored `parseDecisions()` to call strategies in order and log warnings on fallback
+- **Learnings for next cycles**:
+  - Patterns: Cheerio CheerioAPI type for $ parameter in helper methods
+  - Patterns: Use `cheerio.Cheerio<cheerio.Element>` for element wrappers
+  - Traps: Regex patterns must be reset (use `g` flag) or create new instances per match
+  - Traps: HTML capture groups need cleaning with `.replace(/<[^>]*>/g, '')`
+  - Helpful context: Logging to stderr (not stdout) preserves MCP stdio protocol
+
+---
+
+## Iteration 3 — US-001 Task 3: Selector health check before full crawl
+- **What was done**: Implemented `checkSelectorHealth()` and `checkAllSelectorHealth()` methods to validate selectors against live pages before starting a full crawl
+- **Files affected**: `mcp-server/src/scraper.ts`
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `SelectorHealthResult` interface with: database, healthy, timestamp, strategies map, recommendedStrategy, warnings array, optional error
+  - `checkSelectorHealth(database)` fetches first page and tests all 3 strategies independently
+  - Returns which strategies are working, recommended strategy, and warnings for degradation
+  - `checkAllSelectorHealth()` iterates all 3 databases with rate limiting
+  - Logs health check progress to stderr
+  - Warnings generated for: primary selector failure, low item count (<5), all strategies failing
+- **Learnings for next cycles**:
+  - Patterns: Health checks should test all strategies independently, not short-circuit
+  - Patterns: Return recommended strategy to guide crawl behavior
+  - Patterns: Include timestamp in health results for staleness tracking
+  - Helpful context: Expected ~10 items per page based on gov.il pagination

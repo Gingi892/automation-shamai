@@ -44,7 +44,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Acceptance Criteria:**
 - [x] Use ScraperAPI with `render=true` and `premium=true` for JavaScript rendering
 - [x] Implement multiple selector strategies with fallbacks
-- [ ] Add selector health check that validates selectors before full crawl
+- [x] Add selector health check that validates selectors before full crawl
 - [ ] Parse HTML with Cheerio using adaptive patterns (class-based, structure-based, regex fallback)
 - [ ] Extract: title, PDF URL, block, plot, committee, appraiser, case type, dates
 - [ ] Log warning when primary selectors fail but fallback succeeds

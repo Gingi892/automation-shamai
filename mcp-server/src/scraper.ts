@@ -31,6 +31,23 @@ export interface SelectorStrategyResult {
 }
 
 /**
+ * Health check result for selector validation
+ */
+export interface SelectorHealthResult {
+  database: DatabaseType;
+  healthy: boolean;
+  timestamp: string;
+  strategies: {
+    css_primary: { working: boolean; itemCount: number };
+    css_structural: { working: boolean; itemCount: number };
+    regex_fallback: { working: boolean; itemCount: number };
+  };
+  recommendedStrategy: SelectorStrategyType | null;
+  warnings: string[];
+  error?: string;
+}
+
+/**
  * Selector configuration for different extraction strategies
  */
 interface SelectorConfig {
@@ -608,6 +625,105 @@ export class GovIlScraper {
     }
 
     return null;
+  }
+
+  /**
+   * Validate selectors against a live page before full crawl
+   * Tests all strategies and reports which ones are working
+   */
+  async checkSelectorHealth(database: DatabaseType): Promise<SelectorHealthResult> {
+    const result: SelectorHealthResult = {
+      database,
+      healthy: false,
+      timestamp: new Date().toISOString(),
+      strategies: {
+        css_primary: { working: false, itemCount: 0 },
+        css_structural: { working: false, itemCount: 0 },
+        regex_fallback: { working: false, itemCount: 0 }
+      },
+      recommendedStrategy: null,
+      warnings: []
+    };
+
+    try {
+      // Fetch first page to test selectors
+      console.error(`[Scraper] Health check: fetching first page of ${database}...`);
+      const html = await this.fetchPage(database, 0);
+
+      if (!html || html.length < 1000) {
+        result.error = 'Received empty or minimal HTML response';
+        result.warnings.push('ScraperAPI may be blocked or page structure changed');
+        return result;
+      }
+
+      // Test CSS Primary strategy
+      const primaryDecisions = this.parseWithCssPrimary(html, database);
+      result.strategies.css_primary = {
+        working: primaryDecisions.length > 0,
+        itemCount: primaryDecisions.length
+      };
+
+      // Test CSS Structural strategy
+      const structuralDecisions = this.parseWithCssStructural(html, database);
+      result.strategies.css_structural = {
+        working: structuralDecisions.length > 0,
+        itemCount: structuralDecisions.length
+      };
+
+      // Test Regex fallback strategy
+      const regexDecisions = this.parseWithRegex(html, database);
+      result.strategies.regex_fallback = {
+        working: regexDecisions.length > 0,
+        itemCount: regexDecisions.length
+      };
+
+      // Determine overall health and recommended strategy
+      if (result.strategies.css_primary.working) {
+        result.healthy = true;
+        result.recommendedStrategy = 'css_primary';
+      } else if (result.strategies.css_structural.working) {
+        result.healthy = true;
+        result.recommendedStrategy = 'css_structural';
+        result.warnings.push('Primary CSS selectors failed - using structural selectors');
+      } else if (result.strategies.regex_fallback.working) {
+        result.healthy = true;
+        result.recommendedStrategy = 'regex_fallback';
+        result.warnings.push('All CSS selectors failed - using regex fallback (less reliable)');
+      } else {
+        result.healthy = false;
+        result.warnings.push('All extraction strategies failed - selectors need updating');
+      }
+
+      // Add warnings for strategy degradation
+      if (result.strategies.css_primary.working && result.strategies.css_primary.itemCount < 5) {
+        result.warnings.push(`Primary selector found only ${result.strategies.css_primary.itemCount} items (expected ~10)`);
+      }
+
+      console.error(`[Scraper] Health check complete for ${database}: ${result.healthy ? 'HEALTHY' : 'UNHEALTHY'}`);
+
+    } catch (error) {
+      result.error = error instanceof Error ? error.message : String(error);
+      result.warnings.push('Failed to fetch page for health check');
+      console.error(`[Scraper] Health check failed for ${database}: ${result.error}`);
+    }
+
+    return result;
+  }
+
+  /**
+   * Check health of all databases
+   */
+  async checkAllSelectorHealth(): Promise<SelectorHealthResult[]> {
+    const databases: DatabaseType[] = ['decisive_appraiser', 'appeals_committee', 'appeals_board'];
+    const results: SelectorHealthResult[] = [];
+
+    for (const database of databases) {
+      const healthResult = await this.checkSelectorHealth(database);
+      results.push(healthResult);
+      await this.delay(); // Rate limit between checks
+    }
+
+    return results;
   }
 
   /**
