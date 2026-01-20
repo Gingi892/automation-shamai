@@ -111,7 +111,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] For each claim, cite the specific decision(s) supporting it
 - [x] When answering from PDF content, quote relevant excerpts
 - [x] Add confidence indicator: "בטוח" (confident) vs "ייתכן" (uncertain)
-- [ ] Warn when no relevant decisions found: "לא נמצאו החלטות רלוונטיות"
+- [x] Warn when no relevant decisions found: "לא נמצאו החלטות רלוונטיות"
 - [ ] Typecheck passes
 
 ### US-007: Implement incremental update mechanism

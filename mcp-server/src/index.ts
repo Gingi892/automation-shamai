@@ -1090,16 +1090,42 @@ function extractKeyPhrasesFromExcerpt(excerpt: string): string[] {
 async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPToolResult> {
   const { question, decisions, pdfExcerpts = [] } = params;
 
-  // Handle no results case
+  // Handle no results case - PRD requirement: Warn when no relevant decisions found
   if (!decisions || decisions.length === 0) {
+    const noResultsWarning = 'לא נמצאו החלטות רלוונטיות';
+    const formattedNoResultsAnswer = `
+## ⚠️ ${noResultsWarning}
+No relevant decisions found.
+
+---
+
+### הצעות / Suggestions:
+
+1. **חדד את החיפוש** / Refine your search:
+   - נסה מונחים אחרים או ספציפיים יותר
+   - Try different or more specific terms
+
+2. **בדוק את המאגר** / Check the database:
+   - האם המאגר הנכון נבחר? (שמאי מכריע / ועדת השגות / ועדת ערעורים)
+   - Is the correct database selected? (decisive_appraiser / appeals_committee / appeals_board)
+
+3. **הבהר את השאילתה** / Clarify the query:
+   - הוסף פרטים כמו גוש/חלקה, עיר, או סוג תיק
+   - Add details like block/plot, city, or case type
+
+---
+
+**רמת ביטחון / Confidence Level**: 🟡 ייתכן / Uncertain
+`.trim();
+
     const result: ConstructAnswerResult = {
-      formattedAnswer: '',
+      formattedAnswer: formattedNoResultsAnswer,
       sources: [],
       claims: [],
       quotedExcerpts: [],
       overallConfidence: 'uncertain',
       confidenceIndicator: 'ייתכן',  // Uncertain when no results found
-      noResultsWarning: 'לא נמצאו החלטות רלוונטיות לשאילתה זו. נסה לחדד את החיפוש, לבחור מאגר אחר, או להבהיר את השאילתה.'
+      noResultsWarning: noResultsWarning
     };
 
     return {
