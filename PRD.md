@@ -144,9 +144,9 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] README with installation steps
 - [x] Claude Desktop config snippet for `claude_desktop_config.json`
 - [x] Environment variable: `SCRAPER_API_KEY` for live fetching
-- [ ] First-run initialization creates database
+- [x] First-run initialization creates database
 - [x] Health check tool to verify setup
-- [ ] Typecheck passes
+- [x] Typecheck passes
 
 ### US-010: Implement fallback for selector failures
 **Description:** As a developer, I want the scraper to try multiple extraction strategies, so that gov.il page changes don't completely break data fetching.

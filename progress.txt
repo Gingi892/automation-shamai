@@ -1247,3 +1247,38 @@
 
 ---
 
+## Iteration 55 — US-009 Tasks 4 & 6: First-run initialization creates database & Typecheck passes
+- **What was done**: Verified existing implementation already provides complete first-run database initialization
+- **Files affected**: None (already implemented in `mcp-server/src/database.ts` and `mcp-server/src/index.ts`)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **US-009 COMPLETE**: All acceptance criteria met:
+  - [x] README with installation steps
+  - [x] Claude Desktop config snippet for `claude_desktop_config.json`
+  - [x] Environment variable: `SCRAPER_API_KEY` for live fetching
+  - [x] First-run initialization creates database
+  - [x] Health check tool to verify setup
+  - [x] Typecheck passes
+- **Implementation verified**:
+  - `DecisionDatabase.initialize()` at database.ts:37-54:
+    - Creates `~/.gov-il-mcp/` directory if not exists (lines 41-44)
+    - Opens/creates `decisions.db` file (line 47)
+    - Enables WAL mode for concurrent access (line 50)
+    - Calls `createSchema()` to set up tables, FTS5, triggers (line 52)
+  - `createSchema()` at database.ts:59-151:
+    - Creates `decisions` table with all columns (lines 63-80)
+    - Creates indexes for efficient querying (lines 83-89)
+    - Creates `decisions_fts` FTS5 virtual table (lines 94-104)
+    - Creates INSERT/DELETE/UPDATE triggers for FTS sync (lines 107-128)
+    - Creates `indexer_progress` and `metadata` tables (lines 131-151)
+  - `main()` at index.ts:1963-1973:
+    - Calls `getDatabase()` on startup which triggers `initialize()`
+    - Graceful fallback if initialization fails (sets `db = null`)
+- **Learnings for next cycles**:
+  - Patterns: First-run initialization was implemented as part of database module design (US-002)
+  - Patterns: `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` make initialization idempotent
+  - Patterns: better-sqlite3 `new Database(path)` creates file if it doesn't exist
+  - Patterns: Check existing code thoroughly - this task was already complete from US-002 work
+  - Helpful context: US-009 complete, ready to proceed to US-010 (fallback for selector failures)
+
+---
+
