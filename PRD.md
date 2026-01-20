@@ -108,7 +108,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Acceptance Criteria:**
 - [x] Format answers with inline citations: "[S0]", "[S1]", etc.
 - [x] Include sources section with: decision ID, title, PDF URL, relevance score
-- [ ] For each claim, cite the specific decision(s) supporting it
+- [x] For each claim, cite the specific decision(s) supporting it
 - [ ] When answering from PDF content, quote relevant excerpts
 - [ ] Add confidence indicator: "בטוח" (confident) vs "ייתכן" (uncertain)
 - [ ] Warn when no relevant decisions found: "לא נמצאו החלטות רלוונטיות"

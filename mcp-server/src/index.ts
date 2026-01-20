@@ -874,6 +874,148 @@ async function handleClarifyQuery(params: ClarifyQueryInput): Promise<MCPToolRes
   };
 }
 
+/**
+ * Generate claims from sources with citation mappings.
+ * Each claim is linked to the specific decision(s) that support it.
+ * This helps Claude construct accurate, well-cited answers.
+ */
+function generateClaimsFromSources(
+  question: string,
+  decisions: Decision[],
+  sources: CitedSource[],
+  pdfExcerpts: Array<{ decisionId: string; excerpt: string }>
+): CitedClaim[] {
+  const claims: CitedClaim[] = [];
+
+  // Group decisions by shared attributes to identify common themes
+  const decisionsByBlock = new Map<string, number[]>();
+  const decisionsByCommittee = new Map<string, number[]>();
+  const decisionsByCaseType = new Map<string, number[]>();
+  const decisionsByAppraiser = new Map<string, number[]>();
+
+  decisions.forEach((decision, index) => {
+    if (decision.block) {
+      const key = decision.block;
+      if (!decisionsByBlock.has(key)) decisionsByBlock.set(key, []);
+      decisionsByBlock.get(key)!.push(index);
+    }
+    if (decision.committee) {
+      const key = decision.committee;
+      if (!decisionsByCommittee.has(key)) decisionsByCommittee.set(key, []);
+      decisionsByCommittee.get(key)!.push(index);
+    }
+    if (decision.caseType) {
+      const key = decision.caseType;
+      if (!decisionsByCaseType.has(key)) decisionsByCaseType.set(key, []);
+      decisionsByCaseType.get(key)!.push(index);
+    }
+    if (decision.appraiser) {
+      const key = decision.appraiser;
+      if (!decisionsByAppraiser.has(key)) decisionsByAppraiser.set(key, []);
+      decisionsByAppraiser.get(key)!.push(index);
+    }
+  });
+
+  // Generate claims based on location (block/plot) if present in query
+  const hasLocationQuery = /גוש|חלקה|ג['׳]|ח['׳]|\d{4,}/.test(question);
+  if (hasLocationQuery) {
+    decisionsByBlock.forEach((indices, block) => {
+      const relevantDecisions = indices.map(i => decisions[i]);
+      const hasHighRelevance = relevantDecisions.some(d => (d.relevanceScore || 0) > 0.6);
+      claims.push({
+        text: `נמצאו ${indices.length} החלטות בגוש ${block}`,
+        citations: indices,
+        confidence: hasHighRelevance ? 'confident' : 'uncertain'
+      });
+    });
+  }
+
+  // Generate claims based on committee/location
+  const hasCommitteeQuery = /ועדה|עירייה|רשות|מקומי/.test(question);
+  const hasCityQuery = /תל אביב|ירושלים|חיפה|באר שבע|נתניה|רעננה|הרצליה|רמת גן|פתח תקווה|אשדוד/.test(question);
+  if (hasCommitteeQuery || hasCityQuery) {
+    decisionsByCommittee.forEach((indices, committee) => {
+      if (indices.length >= 1) {
+        const relevantDecisions = indices.map(i => decisions[i]);
+        const avgRelevance = relevantDecisions.reduce((sum, d) => sum + (d.relevanceScore || 0), 0) / indices.length;
+        claims.push({
+          text: `${indices.length} החלטות נמצאו מועדה ${committee}`,
+          citations: indices,
+          confidence: avgRelevance > 0.5 ? 'confident' : 'uncertain'
+        });
+      }
+    });
+  }
+
+  // Generate claims based on case type
+  const caseTypeKeywords = ['היטל השבחה', 'פיצויים', 'ירידת ערך', 'הפקעה', 'תכנית מתאר', 'שינוי ייעוד', 'היתר בניה', 'תמ"א 38', 'פינוי בינוי', 'תב"ע'];
+  const queriedCaseType = caseTypeKeywords.find(ct => question.includes(ct));
+  if (queriedCaseType) {
+    decisionsByCaseType.forEach((indices, caseType) => {
+      if (caseType.includes(queriedCaseType) || queriedCaseType.includes(caseType)) {
+        const relevantDecisions = indices.map(i => decisions[i]);
+        const hasHighRelevance = relevantDecisions.some(d => (d.relevanceScore || 0) > 0.6);
+        claims.push({
+          text: `${indices.length} החלטות עוסקות ב${caseType}`,
+          citations: indices,
+          confidence: hasHighRelevance ? 'confident' : 'uncertain'
+        });
+      }
+    });
+  }
+
+  // Generate claims based on appraiser if queried
+  const hasAppraiserQuery = /שמאי|מעריך/.test(question);
+  if (hasAppraiserQuery) {
+    decisionsByAppraiser.forEach((indices, appraiser) => {
+      if (indices.length >= 1) {
+        claims.push({
+          text: `שמאי ${appraiser} טיפל ב-${indices.length} מקרים`,
+          citations: indices,
+          confidence: indices.length > 1 ? 'confident' : 'uncertain'
+        });
+      }
+    });
+  }
+
+  // Generate claims from PDF excerpts if available
+  pdfExcerpts.forEach(({ decisionId, excerpt }) => {
+    const sourceIndex = sources.findIndex(s => s.decisionId === decisionId);
+    if (sourceIndex >= 0 && excerpt.length > 50) {
+      // Extract a meaningful claim from the excerpt
+      const truncatedExcerpt = excerpt.length > 150 ? excerpt.substring(0, 150) + '...' : excerpt;
+      claims.push({
+        text: `מתוך ההחלטה: "${truncatedExcerpt}"`,
+        citations: [sourceIndex],
+        confidence: 'confident' // Direct quotes from PDF are high confidence
+      });
+    }
+  });
+
+  // If no specific claims were generated, create general source claims
+  if (claims.length === 0 && decisions.length > 0) {
+    // Create a claim for each decision with its key details
+    decisions.slice(0, 5).forEach((decision, index) => {
+      const details: string[] = [];
+      if (decision.caseType) details.push(decision.caseType);
+      if (decision.committee) details.push(`ועדה: ${decision.committee}`);
+      if (decision.decisionDate) details.push(`תאריך: ${decision.decisionDate}`);
+
+      const claimText = details.length > 0
+        ? `החלטה ${index + 1}: ${details.join(', ')}`
+        : `החלטה רלוונטית נמצאה: ${decision.title.substring(0, 80)}`;
+
+      claims.push({
+        text: claimText,
+        citations: [index],
+        confidence: (decision.relevanceScore || 0) > 0.6 ? 'confident' : 'uncertain'
+      });
+    });
+  }
+
+  return claims;
+}
+
 // Handler for constructing answers with citations (US-006)
 async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPToolResult> {
   const { question, decisions, pdfExcerpts = [] } = params;
@@ -971,8 +1113,9 @@ ${sourcesSection}
 4. ציין רמת ביטחון: ${overallConfidence === 'confident' ? 'בטוח' : 'ייתכן'} / Confidence: ${overallConfidence === 'confident' ? 'confident' : 'uncertain'}
 `.trim();
 
-  // Initialize empty claims array - Claude will populate this when constructing actual answer
-  const claims: CitedClaim[] = [];
+  // Generate claims from sources with citation mappings
+  // Each claim links to the specific decision(s) that support it
+  const claims: CitedClaim[] = generateClaimsFromSources(question, decisions, sources, pdfExcerpts);
 
   const result: ConstructAnswerResult = {
     formattedAnswer,
