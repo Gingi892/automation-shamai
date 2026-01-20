@@ -339,8 +339,13 @@ export class GovIlScraper {
           decisions.push({
             title,
             url,
-            publishDate: null,
-            ...metadata
+            block: metadata.block ?? null,
+            plot: metadata.plot ?? null,
+            committee: metadata.committee ?? null,
+            appraiser: metadata.appraiser ?? null,
+            caseType: metadata.caseType ?? null,
+            decisionDate: metadata.decisionDate ?? null,
+            publishDate: null
           });
         }
       });
@@ -433,8 +438,13 @@ export class GovIlScraper {
       decisions.push({
         title,
         url,
-        publishDate,
-        ...metadata
+        block: metadata.block ?? null,
+        plot: metadata.plot ?? null,
+        committee: metadata.committee ?? null,
+        appraiser: metadata.appraiser ?? null,
+        caseType: metadata.caseType ?? null,
+        decisionDate: metadata.decisionDate ?? null,
+        publishDate
       });
     }
 
@@ -446,7 +456,7 @@ export class GovIlScraper {
    */
   private extractDecisionFromElement(
     $: cheerio.CheerioAPI,
-    $el: cheerio.Cheerio<cheerio.Element>,
+    $el: ReturnType<cheerio.CheerioAPI>,
     selectors: { title: string[]; pdfLink: string[]; date: string[] },
     database: DatabaseType
   ): ParsedDecision | null {
@@ -490,8 +500,13 @@ export class GovIlScraper {
     return {
       title,
       url,
-      publishDate,
-      ...metadata
+      block: metadata.block ?? null,
+      plot: metadata.plot ?? null,
+      committee: metadata.committee ?? null,
+      appraiser: metadata.appraiser ?? null,
+      caseType: metadata.caseType ?? null,
+      decisionDate: metadata.decisionDate ?? null,
+      publishDate
     };
   }
 
@@ -694,7 +709,8 @@ export class GovIlScraper {
       caseType: parsed.caseType,
       decisionDate: parsed.decisionDate,
       publishDate: parsed.publishDate,
-      contentHash
+      contentHash,
+      pdfText: null  // PDF text is extracted separately, not from HTML scraping
     };
   }
 

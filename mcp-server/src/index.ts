@@ -540,7 +540,7 @@ async function main() {
   });
 
   // Handle tool calls
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> => {
     const { name, arguments: args } = request.params;
 
     try {

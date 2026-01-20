@@ -407,3 +407,64 @@
   - Traps: Unicode directional controls (RTL marks, embeddings) can cause display issues - strip them
   - Traps: PDF extraction often produces excessive line breaks and spacing artifacts
   - Helpful context: Hebrew Unicode range is 0x0590-0x05FF (includes letters, vowels, cantillation)
+
+---
+
+## Iteration 20 — US-003 Task 4: Cache extracted text in database (avoid re-downloading)
+- **What was done**: Implemented PDF text caching in SQLite database to avoid redundant downloads
+- **Files affected**:
+  - `mcp-server/src/types.ts` (added pdfText field to Decision interface and DecisionRow)
+  - `mcp-server/src/database.ts` (added getCachedPdfText, savePdfText, hasCachedPdfText methods)
+  - `mcp-server/src/pdf-extractor.ts` (added extractWithCache method and database integration)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `pdfText: string | null` field to Decision interface
+  - Added `pdf_text: string | null` field to DecisionRow interface
+  - Updated `rowToDecision()` to map pdf_text from row to Decision
+  - Three new database methods:
+    - `getCachedPdfText(decisionId)`: Returns cached text or null
+    - `savePdfText(decisionId, text)`: Saves extracted text to cache
+    - `hasCachedPdfText(decisionId)`: Quick check if cached
+  - `extractWithCache(decisionId, pdfUrl)` method in PdfExtractor:
+    - Checks cache first, returns immediately if found (cached=true)
+    - Downloads and extracts only on cache miss
+    - Saves to cache after successful extraction
+  - PdfExtractor accepts optional `database` reference for caching
+  - `setDatabase()` method allows late binding of database reference
+- **Learnings for next cycles**:
+  - Patterns: The `decisions` table already had `pdf_text TEXT` column - just needed to use it
+  - Patterns: Cache-aside pattern: check cache → miss → fetch → store → return
+  - Patterns: Use `type` import for circular dependency avoidance (`import type { DecisionDatabase }`)
+  - Patterns: Page count estimation for cached results: ~3000 chars per page for Hebrew legal docs
+  - Traps: Remember to add fields to both Decision interface AND DecisionRow interface
+  - Helpful context: SQLite UPDATE returns `changes` count to verify success
+
+---
+
+## Iteration 21 — US-003 Tasks 5-7: Partial extraction, structured output, typecheck
+- **What was done**: Verified existing implementation, fixed type errors to pass typecheck, marked US-003 complete
+- **Files affected**:
+  - `mcp-server/src/pdf-extractor.ts` (line 279: fixed pdf.Options type annotation)
+  - `mcp-server/src/scraper.ts` (lines 339, 433, 490: fixed Partial spread to explicit nullable fields; line 449: fixed cheerio.Element type; line 685: added pdfText field)
+  - `mcp-server/src/index.ts` (line 543: added explicit return type for MCP handler)
+  - `mcp-server/tsconfig.json` (changed rootDir from "./src" to "." to include scripts)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **US-003 COMPLETE**: All acceptance criteria met:
+  - [x] Download PDF using ScraperAPI (handles any blocking)
+  - [x] Extract text using pdf-parse library
+  - [x] Handle Hebrew RTL text properly
+  - [x] Cache extracted text in database (avoid re-downloading)
+  - [x] Support partial extraction (first N pages) for large PDFs
+  - [x] Return structured output: { fullText, pageCount, extractedPages }
+  - [x] Typecheck passes
+- **Implementation details verified**:
+  - Partial extraction: `maxPages` option in PdfExtractor (lines 184, 190, 195, 282-284), `setMaxPages()` method
+  - Structured output: `PdfExtractionResult` interface (lines 175-180) with fullText, pageCount, extractedPages, cached
+- **Learnings for next cycles**:
+  - Patterns: pdf-parse default import doesn't create namespace - use inline type `{ max?: number }` instead of `pdf.Options`
+  - Patterns: cheerio Element type changed in newer versions - use `ReturnType<cheerio.CheerioAPI>` for generic element
+  - Patterns: Partial<T> spread with nullable fields needs explicit `?? null` coalescing to satisfy `T`
+  - Patterns: MCP SDK handler may need explicit return type to satisfy complex type inference
+  - Traps: tsconfig rootDir must cover all included directories (scripts/** needs rootDir: "." not "./src")
+  - Traps: Decision type with new fields (pdfText) must be updated in all places that construct Decision objects
+  - Helpful context: US-003 complete, ready to proceed to US-004 (Hebrew-aware tool descriptions)

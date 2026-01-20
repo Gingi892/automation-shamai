@@ -276,7 +276,7 @@ export class PdfExtractor {
     console.error(`[PdfExtractor] Extracting text from PDF (${pdfBuffer.length} bytes)`);
 
     // Configure pdf-parse options
-    const options: pdf.Options = {};
+    const options: { max?: number } = {};
 
     // If maxPages is set, limit extraction
     if (this.maxPages > 0) {

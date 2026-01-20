@@ -72,9 +72,9 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Extract text using pdf-parse library
 - [x] Handle Hebrew RTL text properly
 - [x] Cache extracted text in database (avoid re-downloading)
-- [ ] Support partial extraction (first N pages) for large PDFs
-- [ ] Return structured output: { fullText, pageCount, extractedPages }
-- [ ] Typecheck passes
+- [x] Support partial extraction (first N pages) for large PDFs
+- [x] Return structured output: { fullText, pageCount, extractedPages }
+- [x] Typecheck passes
 
 ### US-004: Design Hebrew-aware tool descriptions
 **Description:** As a developer, I want tool descriptions that help Claude correctly parse Hebrew natural language queries into structured parameters, so that searches return relevant results.
