@@ -2,6 +2,79 @@
 
 MCP (Model Context Protocol) server for accessing Israeli land appraisal decisions from gov.il with full database support.
 
+## Quick Start (Claude Desktop)
+
+### 1. Install Dependencies
+
+```bash
+cd mcp-server
+npm install
+npm run build
+```
+
+### 2. Add to Claude Desktop Config
+
+**Windows:** Edit `%APPDATA%\Claude\claude_desktop_config.json`
+**macOS:** Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "gov-il-land-appraisal": {
+      "command": "node",
+      "args": ["C:/path/to/mcp-server/dist/index.js"],
+      "env": {
+        "SCRAPER_API_KEY": "your_scraper_api_key_here"
+      }
+    }
+  }
+}
+```
+
+> **Note:** Replace `C:/path/to/mcp-server` with your actual installation path. Use forward slashes even on Windows.
+
+### 3. First Run
+
+On first launch, the server automatically:
+- Creates `~/.gov-il-mcp/` directory
+- Initializes SQLite database with FTS5 at `~/.gov-il-mcp/decisions.db`
+- Sets up Hebrew full-text search indexes
+
+### 4. Verify Setup
+
+Use the `health_check` tool in Claude to verify everything is working:
+
+```
+Ask Claude: "Use the health_check tool to verify the gov.il MCP server"
+```
+
+The health check reports:
+- ✅ Database connection status
+- ✅ Decision count
+- ✅ FTS5 Hebrew search functionality
+- ✅ SCRAPER_API_KEY availability (for updates)
+
+### 5. Populate Database (Required)
+
+Before searching, you need to index decisions from gov.il:
+
+```bash
+# Set ScraperAPI key (required for fetching)
+# Windows PowerShell:
+$env:SCRAPER_API_KEY="your_api_key_here"
+
+# macOS/Linux:
+export SCRAPER_API_KEY=your_api_key_here
+
+# Run full index (takes ~3 hours for 20,000+ decisions)
+npm run index-all
+
+# Or index fewer pages for testing
+npx tsx scripts/index-all.ts --max-pages=10
+```
+
+---
+
 ## Overview
 
 This MCP server provides access to **20,000+ decisions** from three government databases:
@@ -86,12 +159,15 @@ Add to your Claude configuration:
 | `search_decisions` | Search by committee, block/plot, appraiser, date, etc. |
 | `get_decision` | Get full details of a specific decision |
 | `get_decision_pdf` | Get the PDF URL for a decision |
+| `read_pdf` | Extract and read PDF text content (requires SCRAPER_API_KEY) |
 | `get_statistics` | Get database statistics |
 | `list_committees` | List all local committees |
 | `list_appraisers` | List all appraisers |
 | `compare_decisions` | Compare multiple decisions |
 | `semantic_search` | AI-powered semantic search |
 | `trigger_update` | Fetch new decisions from gov.il |
+| `clarify_query` | Get clarification prompts for ambiguous queries |
+| `health_check` | Verify server setup and configuration |
 
 ### Example Searches
 

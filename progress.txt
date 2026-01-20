@@ -1149,3 +1149,34 @@
 
 ---
 
+## Iteration 51 — US-009 Task 5: Health check tool to verify setup
+- **What was done**: Implemented `health_check` MCP tool to verify server setup and configuration
+- **Files affected**: `mcp-server/src/index.ts` (added tool definition, handler function, and switch case)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `health_check` tool definition with comprehensive Hebrew+English description (lines 730-781)
+  - Tool checks 5 components: database connection, decision count, FTS5 functionality, SCRAPER_API_KEY, embeddings
+  - Created `handleHealthCheck()` handler function (lines 1214-1330) that:
+    - Tests database connection via `db.getStats()`
+    - Tests FTS5 by running a search query
+    - Checks SCRAPER_API_KEY environment variable
+    - Checks embeddings availability
+    - Returns server version and Node.js version
+  - Supports optional `verbose` parameter for detailed per-database statistics
+  - Returns structured JSON with:
+    - `healthy: boolean` - overall health status
+    - `status` - component-level status details
+    - `issues` + `issuesHe` - bilingual list of problems
+    - `suggestions` + `suggestionsHe` - bilingual actionable suggestions
+  - Added case in switch statement (line 2046)
+  - Updated default case tool list to include `health_check`
+- **Learnings for next cycles**:
+  - Patterns: Health check tools should test actual functionality (not just check existence)
+  - Patterns: FTS5 verification via running a minimal search query is reliable
+  - Patterns: Bilingual output (English + Hebrew) follows established pattern from other tools
+  - Patterns: `isError: !healthy` in result allows MCP clients to detect unhealthy state
+  - Patterns: Optional verbose mode provides detailed stats without bloating default response
+  - Helpful context: US-009 Task 5 complete, remaining tasks: README (already exists), config snippet (already exists), env var doc (already exists), first-run init (already exists), typecheck
+
+---
+

@@ -141,7 +141,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Description:** As a user, I want easy installation in Claude Desktop, so that I can start using the server quickly.
 
 **Acceptance Criteria:**
-- [ ] README with installation steps
+- [x] README with installation steps
 - [ ] Claude Desktop config snippet for `claude_desktop_config.json`
 - [ ] Environment variable: `SCRAPER_API_KEY` for live fetching
 - [ ] First-run initialization creates database
