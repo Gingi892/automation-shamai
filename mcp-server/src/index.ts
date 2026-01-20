@@ -155,13 +155,41 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'get_decision',
-    description: 'קבלת פרטי החלטה לפי מזהה / Get details of a specific decision by its ID',
+    description: `קבלת פרטי החלטה מלאים לפי מזהה / Get complete details of a specific decision by its ID.
+
+## מתי להשתמש / When to Use
+- After search_decisions returns results, use this to get full details of a specific decision
+- When user asks about a specific decision they already know
+- To verify decision details before citing in an answer
+
+## מידע מוחזר / Returned Information
+| Field | Hebrew | Description |
+|-------|--------|-------------|
+| id | מזהה | Unique decision identifier |
+| title | כותרת | Full decision title |
+| url | קישור | Link to PDF document |
+| database | מאגר | Source database (decisive_appraiser/appeals_committee/appeals_board) |
+| block | גוש | Block number if available |
+| plot | חלקה | Plot number if available |
+| committee | ועדה | Local committee name |
+| appraiser | שמאי | Appraiser name if available |
+| caseType | סוג תיק | Case type (היטל השבחה, פיצויים, etc.) |
+| decisionDate | תאריך החלטה | Date of the decision |
+| publishDate | תאריך פרסום | Publication date |
+
+## דוגמה / Example
+Input: { "id": "decisive_appraiser_12345" }
+Output: Full decision object with all available fields
+
+## הערות / Notes
+- Returns null/error if decision ID not found
+- Use read_pdf to get the actual decision text content`,
     inputSchema: {
       type: 'object',
       properties: {
         id: {
           type: 'string',
-          description: 'מזהה ההחלטה (ID) / The decision ID'
+          description: 'מזהה ההחלטה הייחודי / The unique decision ID (e.g., "decisive_appraiser_12345")'
         }
       },
       required: ['id']
@@ -169,13 +197,39 @@ Returns results in <100ms from pre-indexed local database.`,
   },
   {
     name: 'get_decision_pdf',
-    description: 'קבלת קישור ל-PDF של ההחלטה / Get the PDF URL for a specific decision. Use this to access the full decision document.',
+    description: `קבלת קישור ל-PDF של ההחלטה / Get the PDF URL for a specific decision document.
+
+## מתי להשתמש / When to Use
+- To provide user with direct link to the official decision document
+- Before calling read_pdf to verify PDF is available
+- When user wants to download or view the original document
+
+## ההבדל בין get_decision_pdf ל-read_pdf / Difference from read_pdf
+| Tool | Purpose | Returns |
+|------|---------|---------|
+| get_decision_pdf | Get link to PDF | URL only (fast, no API key needed) |
+| read_pdf | Extract text from PDF | Full text content (requires SCRAPER_API_KEY) |
+
+## פלט / Output
+Returns JSON with:
+- id: Decision identifier
+- title: Decision title
+- pdfUrl: Direct URL to PDF document (gov.il)
+- database: Source database
+
+## דוגמה / Example
+Input: { "id": "decisive_appraiser_12345" }
+Output: { "id": "...", "title": "...", "pdfUrl": "https://free-justice.openapi.gov.il/...", "database": "decisive_appraiser" }
+
+## שגיאות אפשריות / Possible Errors
+- Decision not found: Invalid ID
+- No PDF URL available: Some decisions may not have PDF links`,
     inputSchema: {
       type: 'object',
       properties: {
         id: {
           type: 'string',
-          description: 'מזהה ההחלטה (ID) / The decision ID'
+          description: 'מזהה ההחלטה הייחודי / The unique decision ID'
         }
       },
       required: ['id']
@@ -223,7 +277,39 @@ Returns:
   },
   {
     name: 'get_statistics',
-    description: 'קבלת סטטיסטיקות על מאגר ההחלטות / Get statistics about the indexed decisions database',
+    description: `קבלת סטטיסטיקות על מאגר ההחלטות / Get statistics about the indexed decisions database.
+
+## מתי להשתמש / When to Use
+- To provide user with overview of available data
+- To check database health and recency
+- When user asks "how many decisions" or "what's available"
+
+## מידע מוחזר / Returned Information
+| Field | Hebrew | Description |
+|-------|--------|-------------|
+| totalDocuments | סה"כ מסמכים | Total number of indexed decisions |
+| byDatabase | לפי מאגר | Breakdown by database with Hebrew names |
+| lastIndexedAt | אינדוקס אחרון | When the database was last fully indexed |
+| lastUpdateAt | עדכון אחרון | When incremental update last ran |
+
+## פירוט מאגרים / Database Breakdown
+| Database ID | Hebrew Name | Est. Size |
+|-------------|-------------|-----------|
+| decisive_appraiser | שמאי מכריע | ~10,000+ |
+| appeals_committee | ועדת השגות | ~5,000+ |
+| appeals_board | ועדת ערעורים | ~5,000+ |
+
+## דוגמת פלט / Example Output
+{
+  "totalDocuments": 20000,
+  "byDatabase": [
+    { "database": "decisive_appraiser", "name": "שמאי מכריע", "count": 10500 },
+    { "database": "appeals_committee", "name": "ועדת השגות", "count": 5200 },
+    { "database": "appeals_board", "name": "ועדת ערעורים", "count": 4300 }
+  ],
+  "lastIndexedAt": "2024-01-15T10:30:00Z",
+  "lastUpdateAt": "2024-01-20T08:00:00Z"
+}`,
     inputSchema: {
       type: 'object',
       properties: {}
@@ -231,7 +317,42 @@ Returns:
   },
   {
     name: 'list_committees',
-    description: 'רשימת כל הוועדות המקומיות במאגר / List all local committees (ועדות מקומיות) that have decisions in the database',
+    description: `רשימת כל הוועדות המקומיות במאגר / List all local committees (ועדות מקומיות) that have decisions in the database.
+
+## מתי להשתמש / When to Use
+- To show user which cities/committees are available in the database
+- To help user select a valid committee name for filtering
+- When user asks "which areas have decisions" or "show me available cities"
+
+## מידע מוחזר / Returned Information
+- count: Total number of unique committees
+- committees: Array of committee names (Hebrew strings)
+
+## דוגמאות ועדות נפוצות / Common Committee Examples
+| Hebrew | English |
+|--------|---------|
+| תל אביב יפו | Tel Aviv-Yafo |
+| ירושלים | Jerusalem |
+| חיפה | Haifa |
+| באר שבע | Beer Sheva |
+| נתניה | Netanya |
+| ראשון לציון | Rishon LeZion |
+| פתח תקווה | Petah Tikva |
+| אשדוד | Ashdod |
+| הרצליה | Herzliya |
+| רעננה | Ra'anana |
+
+## שימוש בתוצאות / Using Results
+Use the returned committee name (exactly as spelled) in search_decisions committee parameter:
+\`\`\`json
+{ "committee": "תל אביב יפו" }
+\`\`\`
+
+## דוגמת פלט / Example Output
+{
+  "count": 150,
+  "committees": ["תל אביב יפו", "ירושלים", "חיפה", ...]
+}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -245,7 +366,37 @@ Returns:
   },
   {
     name: 'list_appraisers',
-    description: 'רשימת כל השמאים במאגר / List all appraisers (שמאים) that have decisions in the database',
+    description: `רשימת כל השמאים במאגר / List all appraisers (שמאים) that have decisions in the database.
+
+## מתי להשתמש / When to Use
+- To show user which appraisers have decisions in the database
+- To help user select a valid appraiser name for filtering
+- When user asks "which appraisers are available" or wants to search by appraiser
+
+## מידע מוחזר / Returned Information
+- count: Total number of unique appraisers
+- appraisers: Array of appraiser names (Hebrew strings)
+
+## שימוש בתוצאות / Using Results
+Use the returned appraiser name (exactly as spelled) in search_decisions appraiser parameter:
+\`\`\`json
+{ "appraiser": "כהן" }
+\`\`\`
+
+## הערה חשובה / Important Note
+Appraiser names appear in the decisive_appraiser database primarily.
+Appeals committee and appeals board decisions may not have appraiser information.
+
+## דוגמת פלט / Example Output
+{
+  "count": 85,
+  "appraisers": ["כהן יוסף", "לוי דוד", "גרוס משה", ...]
+}
+
+## טיפים לחיפוש / Search Tips
+- Search by last name (שם משפחה) is more reliable: { "appraiser": "כהן" }
+- Full name if known: { "appraiser": "כהן יוסף" }
+- Partial matches work: "כהן" will find "כהן יוסף", "כהן דוד", etc.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -259,14 +410,49 @@ Returns:
   },
   {
     name: 'compare_decisions',
-    description: 'השוואת מספר החלטות זו לזו / Compare multiple decisions side by side',
+    description: `השוואת מספר החלטות זו לזו / Compare multiple decisions side by side.
+
+## מתי להשתמש / When to Use
+- When user wants to compare similar cases
+- To analyze patterns across multiple decisions
+- To show consistency or variations in rulings
+- When analyzing decisions from same block/plot over time
+
+## דוגמאות שימוש / Usage Examples
+
+### השוואת החלטות באותו גוש / Comparing decisions in same block:
+User: "השווה את ההחלטות בגוש 6158"
+1. First search: search_decisions({ block: "6158" })
+2. Then compare: compare_decisions({ ids: ["id1", "id2", "id3"] })
+
+### השוואת פסיקות אותו שמאי / Comparing same appraiser's rulings:
+User: "איך שמאי כהן פסק בתיקים דומים?"
+1. First search: search_decisions({ appraiser: "כהן", caseType: "היטל השבחה" })
+2. Then compare: compare_decisions({ ids: [...] })
+
+## מידע מוחזר / Returned Information
+| Field | Description |
+|-------|-------------|
+| count | Number of valid decisions found |
+| requestedIds | Original IDs requested |
+| foundIds | IDs that were found |
+| decisions | Full decision objects for comparison |
+
+## טיפים להשוואה יעילה / Tips for Effective Comparison
+- Compare 2-5 decisions for clarity
+- Choose decisions with similar attributes (same caseType, same area)
+- Look for: outcome patterns, valuation methods, reasoning differences
+
+## שגיאות אפשריות / Possible Errors
+- If no valid IDs found: Returns error
+- If some IDs invalid: Returns only found decisions, lists missing IDs`,
     inputSchema: {
       type: 'object',
       properties: {
         ids: {
           type: 'array',
           items: { type: 'string' },
-          description: 'רשימת מזהי החלטות להשוואה / Array of decision IDs to compare'
+          description: 'רשימת מזהי החלטות להשוואה (2-10 מזהים מומלץ) / Array of decision IDs to compare (2-10 IDs recommended)'
         }
       },
       required: ['ids']
@@ -274,13 +460,44 @@ Returns:
   },
   {
     name: 'semantic_search',
-    description: 'חיפוש סמנטי בשפה טבעית באמצעות AI. מתאים לשאילתות מושגיות כמו "פיצויים על הפקעת קרקע ליד תל אביב" / Search for decisions using natural language and AI embeddings. Better for conceptual queries.',
+    description: `חיפוש סמנטי בשפה טבעית באמצעות AI / Search for decisions using natural language and AI embeddings.
+
+## מתי להשתמש vs search_decisions / When to Use vs search_decisions
+
+| Scenario | Use | Reason |
+|----------|-----|--------|
+| "גוש 6158 חלקה 25" | search_decisions | Exact parameters available |
+| "היטל השבחה בתל אביב" | search_decisions | Clear keywords and filters |
+| "פיצויים על הפקעה ליד הים" | semantic_search | Conceptual, location-based |
+| "תיקים דומים לשלי" | semantic_search | Requires understanding |
+| "מה המגמה בפסיקות" | semantic_search | Pattern/trend questions |
+
+## יתרונות החיפוש הסמנטי / Advantages of Semantic Search
+- מבין הקשר / Understands context
+- מוצא דומיות מושגית / Finds conceptual similarity
+- עובד טוב עם עברית חופשית / Works well with free Hebrew text
+- מדרג לפי רלוונטיות אמיתית / Ranks by true relevance
+
+## מגבלות / Limitations
+- דורש הגדרת embeddings / Requires embeddings setup
+- איטי יותר מחיפוש רגיל / Slower than keyword search
+- לא זמין אם לא הוגדר / Not available if not configured
+
+## דוגמאות שאילתות מתאימות / Suitable Query Examples
+| Query | Why Semantic Works Better |
+|-------|---------------------------|
+| "תיקים שהשמאי פסק לטובת הועדה" | Understands "לטובת" concept |
+| "מקרים של הפקעה לצורכי ציבור" | Conceptual understanding |
+| "החלטות עם פיצוי גבוה" | Relative term understanding |
+
+## פלט / Output
+Results include relevanceScore (0-1) indicating semantic similarity to query.`,
     inputSchema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'שאילתת חיפוש בשפה טבעית / Natural language search query'
+          description: 'שאילתת חיפוש בשפה טבעית (עברית מומלץ) / Natural language search query (Hebrew recommended)'
         },
         limit: {
           type: 'number',
@@ -290,7 +507,7 @@ Returns:
         database: {
           type: 'string',
           enum: ['decisive_appraiser', 'appeals_committee', 'appeals_board'],
-          description: 'סינון לפי מאגר מסוים / Filter by specific database: decisive_appraiser=שמאי מכריע, appeals_committee=ועדת השגות, appeals_board=ועדת ערעורים'
+          description: 'סינון לפי מאגר מסוים (אופציונלי) / Filter by specific database (optional): decisive_appraiser=שמאי מכריע, appeals_committee=ועדת השגות, appeals_board=ועדת ערעורים'
         }
       },
       required: ['query']
@@ -298,13 +515,58 @@ Returns:
   },
   {
     name: 'trigger_update',
-    description: 'הפעלת עדכון לשליפת החלטות חדשות מ-gov.il. דורש הגדרת SCRAPER_API_KEY / Trigger an update to fetch new decisions from gov.il. Requires SCRAPER_API_KEY environment variable.',
+    description: `הפעלת עדכון לשליפת החלטות חדשות מ-gov.il / Trigger an incremental update to fetch new decisions from gov.il.
+
+## מתי להשתמש / When to Use
+- When user asks "check for new decisions"
+- When database needs to be refreshed with latest data
+- When user suspects missing recent decisions
+- NOT for routine use - updates run automatically via cron
+
+## דרישות / Requirements
+- SCRAPER_API_KEY environment variable must be set
+- Internet access to gov.il
+
+## איך זה עובד / How It Works
+1. Checks first N pages of each database (most recent decisions)
+2. Compares content hash to detect new decisions
+3. Adds only decisions not already in database
+4. Updates lastUpdateAt timestamp
+
+## פרמטרים / Parameters
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| pagesToCheck | 5 | Number of recent pages to scan per database |
+
+Pages × 10 items = decisions checked per database
+Example: pagesToCheck=5 → ~50 recent decisions per database → ~150 total
+
+## פלט / Output
+{
+  "success": true,
+  "newDecisionsFound": 12,
+  "byDatabase": {
+    "decisive_appraiser": 5,
+    "appeals_committee": 4,
+    "appeals_board": 3
+  },
+  "timestamp": "2024-01-20T10:30:00Z"
+}
+
+## עדכון אוטומטי / Automatic Updates
+Daily cron job runs: \`npm run daily-update\`
+This tool is for manual/on-demand updates only.
+
+## שגיאות אפשריות / Possible Errors
+- Missing SCRAPER_API_KEY: Cannot fetch from gov.il
+- Network error: gov.il unreachable
+- Scraping blocked: ScraperAPI issue`,
     inputSchema: {
       type: 'object',
       properties: {
         pagesToCheck: {
           type: 'number',
-          description: 'מספר עמודים אחרונים לבדוק להחלטות חדשות (ברירת מחדל: 5) / Number of recent pages to check for new decisions',
+          description: 'מספר עמודים אחרונים לבדוק להחלטות חדשות (ברירת מחדל: 5, מומלץ: 3-10) / Number of recent pages to check for new decisions (default: 5, recommended: 3-10)',
           default: 5
         }
       }
