@@ -152,7 +152,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Description:** As a developer, I want the scraper to try multiple extraction strategies, so that gov.il page changes don't completely break data fetching.
 
 **Acceptance Criteria:**
-- [ ] Strategy 1: CSS selectors (primary)
+- [x] Strategy 1: CSS selectors (primary)
 - [ ] Strategy 2: XPath patterns (fallback 1)
 - [ ] Strategy 3: Regex on raw HTML (fallback 2)
 - [ ] Strategy 4: Return cached data with warning (fallback 3)

@@ -1282,3 +1282,24 @@
 
 ---
 
+## Iteration 56 — US-010 Task 1: Strategy 1: CSS selectors (primary)
+- **What was done**: Verified existing implementation already provides CSS primary selectors strategy
+- **Files affected**: None (already implemented in `mcp-server/src/scraper.ts` during US-001 Iteration 2)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation verified**:
+  - `parseWithCssPrimary()` method at scraper.ts:299-355 implements primary CSS selector extraction
+  - Primary selectors defined in `DEFAULT_SELECTORS.primary` (lines 80-112):
+    - Container selectors: `.dynamic-card`, `.result-item`, `div.ng-scope[ng-repeat]`, etc.
+    - Title selectors: `h3.txt.bold`, `h3.ng-binding`, `.item-title`, etc.
+    - PDF link selectors: `a[href*="free-justice.openapi.gov.il"]`, `a[href*=".pdf"]`, etc.
+  - Table-based layout fallback within Strategy 1 (lines 319-352)
+  - Called first in `parseDecisions()` strategy cascade (lines 261-267)
+  - Strategy tracking via `lastStrategyUsed = 'css_primary'` and `logStrategy()` call
+- **Learnings for next cycles**:
+  - Patterns: CSS primary strategy was implemented as part of US-001 multi-strategy system
+  - Patterns: US-010 tasks overlap with US-001 implementation - verify before re-implementing
+  - Patterns: Strategy 1 handles both div-based and table-based HTML layouts
+  - Helpful context: US-010 Task 1 complete, remaining tasks: XPath (Task 2), Regex (Task 3), Cached data (Task 4), Logging (Task 5), Alert (Task 6), Typecheck (Task 7)
+
+---
+
