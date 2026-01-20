@@ -626,3 +626,60 @@
   - Patterns: Task 7 (typecheck) serves as final validation gate for user story completion
   - Helpful context: US-004 complete, ready to proceed to US-005 (query clarification tool)
 
+---
+
+## Iteration 29 — US-005 Task 1: Tool clarify_query that returns structured clarification prompts
+- **What was done**: Implemented `clarify_query` MCP tool with comprehensive ambiguity detection and Hebrew clarification prompts
+- **Files affected**:
+  - `mcp-server/src/types.ts` (added 5 new types: AmbiguityType, ClarificationOption, ClarificationPrompt, ClarifyQueryInput, ClarifyQueryResult)
+  - `mcp-server/src/index.ts` (added tool definition, CLARIFICATION_PROMPTS constant, detection patterns, handleClarifyQuery handler)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `AmbiguityType` union type: 'missing_database' | 'vague_location' | 'unclear_date_range' | 'ambiguous_case_type' | 'missing_search_terms'
+  - Created `CLARIFICATION_PROMPTS` constant with Hebrew+English questions and multiple-choice options
+  - Added detection patterns:
+    - `DATABASE_KEYWORDS`: Maps database types to Hebrew keywords (שמאי מכריע, השגה, ערעור, etc.)
+    - `CASE_TYPE_KEYWORDS`: 10 case types from PRD (היטל השבחה, פיצויים, etc.)
+    - `YEAR_PATTERN`: Regex for Gregorian (20\d{2}) and Hebrew years (תשפ"ד)
+    - `BLOCK_PLOT_PATTERN`: Regex for גוש/חלקה patterns
+    - `commonCities`: Array of 10 major Israeli cities
+  - Handler logic:
+    - Detects missing database keywords → suggests database selection
+    - Detects vague location (no city or block/plot) → suggests location clarification
+    - Detects year without date range → suggests date range options
+    - Detects general legal terms without case type → suggests case type selection
+    - Extracts suggested parameters even when ambiguous
+    - Respects `previousClarifications` to avoid asking same question twice
+  - Tool description includes usage flow and examples
+- **Learnings for next cycles**:
+  - Patterns: Use Record<AmbiguityType, ClarificationPrompt> for type-safe prompt lookup
+  - Patterns: Hebrew year patterns need multiple regex alternatives (תשפ"ד variants)
+  - Patterns: Tool descriptions with markdown tables help Claude understand when/how to use the tool
+  - Patterns: Include both Hebrew and English in options for better LLM understanding
+  - Traps: Query length check should come first to avoid other ambiguity checks on very short queries
+  - Helpful context: This task partially implements Tasks 2, 3, 4 of US-005 (ambiguity detection, Hebrew questions, previousClarifications)
+
+---
+
+## Iteration 30 — US-005 Tasks 2-6: Complete query clarification tool validation
+- **What was done**: Verified existing implementation and marked remaining US-005 tasks complete
+- **Files affected**: `PRD.md` (marked checkboxes), no code changes needed
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **US-005 COMPLETE**: All acceptance criteria met:
+  - [x] Tool: `clarify_query` that returns structured clarification prompts
+  - [x] Detect ambiguity patterns: missing database, vague location, unclear date range
+  - [x] Generate Hebrew clarification questions with multiple-choice options
+  - [x] Example: "באיזה מאגר לחפש?" with options [שמאי מכריע, ועדת השגות, ועדת ערעורים]
+  - [x] Track clarification state to avoid asking same question twice
+  - [x] Typecheck passes
+- **Implementation verified**:
+  - Ambiguity detection (index.ts:690-742): Detects 5 types - missing_database, vague_location, unclear_date_range, ambiguous_case_type, missing_search_terms
+  - Hebrew questions (index.ts:601-660): CLARIFICATION_PROMPTS constant with Hebrew+English questions and multiple-choice options
+  - Example implementation (index.ts:602-613): Exact PRD example "באיזה מאגר לחפש?" with [שמאי מכריע, ועדת השגות, ועדת ערעורים] options
+  - Clarification tracking (index.ts:683): Uses `previousClarifications` array to skip already-asked questions
+- **Learnings for next cycles**:
+  - Patterns: Iteration 29 implemented comprehensive solution covering all US-005 acceptance criteria
+  - Patterns: Always verify full implementation before marking tasks incomplete - code may already satisfy multiple criteria
+  - Patterns: PRD checkbox updates can lag behind actual implementation
+  - Helpful context: US-005 complete, ready to proceed to US-006 (answer construction with citations)
+

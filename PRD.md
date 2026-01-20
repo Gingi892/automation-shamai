@@ -96,11 +96,11 @@ The existing `gov-il-live` MCP server is non-functional because:
 
 **Acceptance Criteria:**
 - [x] Tool: `clarify_query` that returns structured clarification prompts
-- [ ] Detect ambiguity patterns: missing database, vague location, unclear date range
-- [ ] Generate Hebrew clarification questions with multiple-choice options
-- [ ] Example: "באיזה מאגר לחפש?" with options [שמאי מכריע, ועדת השגות, ועדת ערעורים]
-- [ ] Track clarification state to avoid asking same question twice
-- [ ] Typecheck passes
+- [x] Detect ambiguity patterns: missing database, vague location, unclear date range
+- [x] Generate Hebrew clarification questions with multiple-choice options
+- [x] Example: "באיזה מאגר לחפש?" with options [שמאי מכריע, ועדת השגות, ועדת ערעורים]
+- [x] Track clarification state to avoid asking same question twice
+- [x] Typecheck passes
 
 ### US-006: Build answer construction with citations
 **Description:** As a developer, I want answers to include proper citations to source documents, so that users can verify the information and access original PDFs.
