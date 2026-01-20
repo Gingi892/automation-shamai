@@ -517,3 +517,17 @@
   - Patterns: Iteration 22 notes explicitly stated "This task also partially completes US-004 Tasks 2, 3, 5"
   - Helpful context: Always verify PRD checkboxes match actual code state before starting work
 
+---
+
+## Iteration 24 — US-004 Task 3: Specify default database (decisive_appraiser) when unclear
+- **What was done**: Verified existing implementation already specifies default database (implemented in iteration 22), marked task complete
+- **Files affected**: `mcp-server/src/index.ts` (line 45, already implemented)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Line 45: `**Default**: If database unclear from query, use decisive_appraiser (largest dataset).`
+  - This guidance helps Claude select the default database when no Hebrew keyword matches
+- **Learnings for next cycles**:
+  - Patterns: Iteration 22 implemented multiple US-004 tasks together (Tasks 2, 3, 5, 6)
+  - Patterns: PRD checkboxes must be updated when side-effect work completes tasks
+  - Helpful context: US-004 Tasks 3, 4, 5, 6 were all done in iteration 22 but checkboxes lagged
+
