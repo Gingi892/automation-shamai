@@ -581,3 +581,29 @@
   - Patterns: "When in doubt, use FEWER parameters" is a good heuristic for search tools
   - Helpful context: Iteration 22 had partial negative guidance, this iteration made it more explicit and comprehensive
 
+---
+
+## Iteration 27 — US-004 Task 6: Document common case types
+- **What was done**: Expanded the "Common Case Types" section with full documentation table including English translations and descriptions
+- **Files affected**: `mcp-server/src/index.ts` (lines 59-73, expanded from simple list to full documentation table)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Converted simple comma-separated list to markdown table with 3 columns
+  - Documented 10 case types per PRD:
+    - היטל השבחה (Betterment Levy) - Tax on property value increase due to planning
+    - פיצויים (Compensation) - Compensation for planning restrictions
+    - ירידת ערך (Depreciation) - Claims for property value decrease
+    - הפקעה (Expropriation) - Land expropriation for public purposes
+    - תכנית מתאר (Master Plan) - Master/outline plan disputes
+    - שינוי ייעוד (Zoning Change) - Land use designation changes
+    - היתר בניה (Building Permit) - Building permit disputes
+    - תמ"א 38 (TAMA 38) - Earthquake reinforcement program disputes
+    - פינוי בינוי (Urban Renewal) - Urban renewal projects
+    - תב"ע (Zoning Plan) - Local zoning plan disputes
+  - Added mapping tip: "When user mentions these terms, use exact Hebrew value for caseType parameter"
+- **Learnings for next cycles**:
+  - Patterns: Table format with English translations helps LLM understand Hebrew legal terms
+  - Patterns: Including description helps Claude explain results to users
+  - Patterns: "Mapping tip" at end reinforces how to use the information
+  - Helpful context: PRD asked for 3 examples but documenting all 10 provides comprehensive coverage
+

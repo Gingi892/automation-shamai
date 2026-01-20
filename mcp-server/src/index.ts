@@ -57,7 +57,20 @@ const TOOLS: Tool[] = [
 | "ירידת ערך רעננה" | { caseType: "ירידת ערך", committee: "רעננה" } |
 
 ## סוגי תיקים נפוצים / Common Case Types
-היטל השבחה, פיצויים, ירידת ערך, הפקעה, תכנית מתאר, שינוי ייעוד, היתר בניה, תמ"א 38, פינוי בינוי, תב"ע
+| Case Type (Hebrew) | English | Description |
+|-------------------|---------|-------------|
+| היטל השבחה | Betterment Levy | Tax on property value increase due to planning changes |
+| פיצויים | Compensation | Compensation for planning restrictions or damages |
+| ירידת ערך | Depreciation | Claims for property value decrease due to planning |
+| הפקעה | Expropriation | Land expropriation for public purposes |
+| תכנית מתאר | Master Plan | Disputes related to master/outline plans |
+| שינוי ייעוד | Zoning Change | Land use/zoning designation changes |
+| היתר בניה | Building Permit | Building permit related disputes |
+| תמ"א 38 | TAMA 38 | National earthquake reinforcement program disputes |
+| פינוי בינוי | Urban Renewal | Urban renewal/evacuation-construction projects |
+| תב"ע | Zoning Plan | Local zoning/building plan disputes |
+
+**Mapping tip**: When user mentions these terms, use exact Hebrew value for caseType parameter.
 
 ## הנחיות חשובות / Important Guidelines (CRITICAL)
 **אל תמציא פרמטרים שהמשתמש לא ציין / Don't invent parameters user didn't mention:**

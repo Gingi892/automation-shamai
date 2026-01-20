@@ -88,7 +88,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Specify default database (decisive_appraiser) when unclear
 - [x] Include Hebrew descriptions for all parameters
 - [x] Add negative guidance: "Don't invent parameters user didn't mention"
-- [ ] Document common case types: היטל השבחה, פיצויים, ירידת ערך
+- [x] Document common case types: היטל השבחה, פיצויים, ירידת ערך
 - [ ] Typecheck passes
 
 ### US-005: Implement query clarification tool
