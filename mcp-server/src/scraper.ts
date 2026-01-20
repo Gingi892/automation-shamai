@@ -497,6 +497,8 @@ export class GovIlScraper {
 
   /**
    * Parse metadata from Hebrew decision title
+   * Extracts: block, plot, committee, appraiser, caseType, decisionDate
+   * Handles multiple title formats from all three databases
    */
   private parseTitleMetadata(title: string, database: DatabaseType): Partial<ParsedDecision> {
     const metadata: Partial<ParsedDecision> = {
@@ -508,49 +510,164 @@ export class GovIlScraper {
       decisionDate: null
     };
 
-    // Pattern for decisive appraiser decisions:
-    // הכרעת שמאי מכריע מיום DD-MM-YYYY בעניין [caseType] נ [committee] ג [block] ח [plot] - [appraiser]
+    // ====== Strategy 1: Full pattern for decisive appraiser decisions ======
+    // Format: הכרעת שמאי מכריע מיום DD-MM-YYYY בעניין [caseType] נ [committee] ג [block] ח [plot] - [appraiser]
     const decisivePattern = /הכרעת שמאי (מכריע|מייעץ) מיום (\d{2}-\d{2}-\d{4}) בעניין ([^נ]+)נ ([^ג]+)ג (\d+) ח (\d+)\s*-?\s*(.+)?/;
-    const match = title.match(decisivePattern);
+    const decisiveMatch = title.match(decisivePattern);
 
-    if (match) {
-      metadata.decisionDate = match[2];
-      metadata.caseType = match[3].trim();
-      metadata.committee = match[4].trim().replace(/ועדה מקומית\s*/i, '');
-      metadata.block = match[5];
-      metadata.plot = match[6];
-      if (match[7]) {
-        metadata.appraiser = match[7].trim();
+    if (decisiveMatch) {
+      metadata.decisionDate = decisiveMatch[2];
+      metadata.caseType = decisiveMatch[3].trim();
+      metadata.committee = decisiveMatch[4].trim().replace(/ועדה מקומית\s*/i, '').trim();
+      metadata.block = decisiveMatch[5];
+      metadata.plot = decisiveMatch[6];
+      if (decisiveMatch[7]) {
+        metadata.appraiser = decisiveMatch[7].trim();
       }
-    } else {
-      // Try simpler patterns
+      return metadata;
+    }
 
-      // Block and plot: ג XXXX ח YYYY or גוש XXXX חלקה YYYY
-      const blockPlotMatch = title.match(/[גג](?:וש)?\s*(\d+)\s*[חח](?:לקה)?\s*(\d+)/);
-      if (blockPlotMatch) {
-        metadata.block = blockPlotMatch[1];
-        metadata.plot = blockPlotMatch[2];
+    // ====== Strategy 2: Appeals committee pattern ======
+    // Format: החלטה בהשגה [number] [committee] גוש [block] חלקה [plot]
+    const appealsCommitteePattern = /החלטה ב?השגה(?:\s+מס['׳]?\s*|\s+)(\d+)?\s*([^גג]+)?[גג](?:וש)?\s*(\d+)\s*[חח](?:לקה)?\s*(\d+)/;
+    const appealsCommMatch = title.match(appealsCommitteePattern);
+
+    if (appealsCommMatch) {
+      if (appealsCommMatch[2]) {
+        metadata.committee = appealsCommMatch[2].trim().replace(/ועדה מקומית\s*/i, '').trim();
+      }
+      metadata.block = appealsCommMatch[3];
+      metadata.plot = appealsCommMatch[4];
+      // Default case type for appeals committee
+      if (!metadata.caseType) {
+        metadata.caseType = 'השגה';
+      }
+    }
+
+    // ====== Strategy 3: Appeals board pattern ======
+    // Format: ערעור [number] [details] / ערר מס' [number]
+    const appealsBoardPattern = /ערעור|ערר\s*מס['׳]?\s*(\d+)?/;
+    const appealsBoardMatch = title.match(appealsBoardPattern);
+
+    if (appealsBoardMatch) {
+      // Default case type for appeals board
+      if (!metadata.caseType) {
+        metadata.caseType = 'ערעור';
+      }
+    }
+
+    // ====== Extract block and plot (multiple patterns) ======
+    if (!metadata.block || !metadata.plot) {
+      // Pattern 1: ג XXXX ח YYYY (short form)
+      const blockPlotShort = title.match(/[גג]\s*(\d+)\s*[חח]\s*(\d+)/);
+      if (blockPlotShort) {
+        metadata.block = metadata.block || blockPlotShort[1];
+        metadata.plot = metadata.plot || blockPlotShort[2];
       }
 
-      // Committee: ועדה מקומית XXX
-      const committeeMatch = title.match(/ועדה מקומית\s+([^\s,]+)/);
-      if (committeeMatch) {
-        metadata.committee = committeeMatch[1].trim();
+      // Pattern 2: גוש XXXX חלקה YYYY (long form)
+      const blockPlotLong = title.match(/גוש\s*(\d+)\s*(?:,?\s*)?חלקה\s*(\d+)/);
+      if (blockPlotLong) {
+        metadata.block = metadata.block || blockPlotLong[1];
+        metadata.plot = metadata.plot || blockPlotLong[2];
       }
 
-      // Date patterns
-      const dateMatch = title.match(/(\d{2}[-./]\d{2}[-./]\d{4})/);
-      if (dateMatch) {
-        metadata.decisionDate = dateMatch[1].replace(/\./g, '-');
+      // Pattern 3: Block/Plot in parentheses (גוש 1234, חלקה 56)
+      const blockPlotParen = title.match(/גוש\s*(\d+)\s*,\s*חלקה\s*(\d+)/);
+      if (blockPlotParen) {
+        metadata.block = metadata.block || blockPlotParen[1];
+        metadata.plot = metadata.plot || blockPlotParen[2];
+      }
+    }
+
+    // ====== Extract committee (multiple patterns) ======
+    if (!metadata.committee) {
+      // Pattern 1: ועדה מקומית לתכנון ובניה XXX
+      const committeeFullMatch = title.match(/ועדה מקומית(?:\s+לתכנון\s+(?:ו)?בניה)?\s+([א-ת\s-]+?)(?:\s+גוש|\s+[גג]\s|\s+-|$)/);
+      if (committeeFullMatch) {
+        metadata.committee = committeeFullMatch[1].trim();
       }
 
-      // Case type: היטל השבחה, פיצויים, etc.
-      if (title.includes('היטל השבחה')) {
-        metadata.caseType = 'היטל השבחה';
-      } else if (title.includes('פיצויים')) {
-        metadata.caseType = 'פיצויים';
-      } else if (title.includes('ירידת ערך')) {
-        metadata.caseType = 'ירידת ערך';
+      // Pattern 2: Short committee name after 'נ'
+      const committeeAfterN = title.match(/\sנ\s+([א-ת\s-]+?)(?:\s+גוש|\s+[גג]\s)/);
+      if (committeeAfterN && !metadata.committee) {
+        metadata.committee = committeeAfterN[1].trim().replace(/ועדה מקומית\s*/i, '').trim();
+      }
+
+      // Pattern 3: Committee in context with לתו"ב
+      const committeeTub = title.match(/לתו"ב\s+([א-ת\s-]+?)(?:\s+גוש|\s+[גג]\s|\s+-|$)/);
+      if (committeeTub && !metadata.committee) {
+        metadata.committee = committeeTub[1].trim();
+      }
+    }
+
+    // ====== Extract appraiser (multiple patterns) ======
+    if (!metadata.appraiser) {
+      // Pattern 1: After hyphen at end (common in decisive appraiser format)
+      const appraiserHyphen = title.match(/\s-\s*([א-ת\s]+)$/);
+      if (appraiserHyphen) {
+        metadata.appraiser = appraiserHyphen[1].trim();
+      }
+
+      // Pattern 2: שמאי/שמאית [name]
+      const appraiserTitle = title.match(/שמאי(?:ת)?\s+(?:מכריע(?:ה)?|מייעץ|מייעצת)?\s*[:-]?\s*([א-ת\s']+?)(?:\s+מיום|\s+החליט|$)/);
+      if (appraiserTitle && !metadata.appraiser) {
+        metadata.appraiser = appraiserTitle[1].trim();
+      }
+
+      // Pattern 3: After colon in metadata section
+      const appraiserColon = title.match(/שמאי\s*:\s*([א-ת\s']+?)(?:\s*[,;]|$)/);
+      if (appraiserColon && !metadata.appraiser) {
+        metadata.appraiser = appraiserColon[1].trim();
+      }
+    }
+
+    // ====== Extract date (multiple patterns) ======
+    if (!metadata.decisionDate) {
+      // Pattern 1: DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+      const dateStandard = title.match(/(\d{1,2})[-./](\d{1,2})[-./](\d{4})/);
+      if (dateStandard) {
+        const day = dateStandard[1].padStart(2, '0');
+        const month = dateStandard[2].padStart(2, '0');
+        const year = dateStandard[3];
+        metadata.decisionDate = `${day}-${month}-${year}`;
+      }
+
+      // Pattern 2: After "מיום" keyword
+      const dateMiyom = title.match(/מיום\s+(\d{1,2}[-./]\d{1,2}[-./]\d{4})/);
+      if (dateMiyom && !metadata.decisionDate) {
+        metadata.decisionDate = dateMiyom[1].replace(/[./]/g, '-');
+      }
+
+      // Pattern 3: YYYY-MM-DD (ISO format)
+      const dateISO = title.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateISO && !metadata.decisionDate) {
+        metadata.decisionDate = `${dateISO[3]}-${dateISO[2]}-${dateISO[1]}`;
+      }
+    }
+
+    // ====== Extract case type (comprehensive list) ======
+    if (!metadata.caseType) {
+      // Priority order: most specific to general
+      const caseTypes: [RegExp, string][] = [
+        [/היטל השבחה/, 'היטל השבחה'],
+        [/פיצויים?\s*(?:בגין|על|בשל)?\s*הפקעה/, 'פיצויים בגין הפקעה'],
+        [/פיצויי(?:ם)?\s+(?:בגין\s+)?תכנית/, 'פיצויים'],
+        [/פיצויים/, 'פיצויים'],
+        [/ירידת ערך/, 'ירידת ערך'],
+        [/השבחה/, 'היטל השבחה'],
+        [/196\s*א/, '196א'],
+        [/197/, '197'],
+        [/השגה/, 'השגה'],
+        [/ערעור|ערר/, 'ערעור'],
+        [/שומה/, 'שומה']
+      ];
+
+      for (const [pattern, caseType] of caseTypes) {
+        if (pattern.test(title)) {
+          metadata.caseType = caseType;
+          break;
+        }
       }
     }
 

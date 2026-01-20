@@ -90,6 +90,28 @@
 
 ---
 
+## Iteration 5 — US-001 Task 5: Extract title, PDF URL, block, plot, committee, appraiser, case type, dates
+- **What was done**: Enhanced `parseTitleMetadata()` method with comprehensive extraction patterns for all three databases
+- **Files affected**: `mcp-server/src/scraper.ts` (lines 501-650, major refactor of parseTitleMetadata)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Strategy 1: Full pattern for decisive appraiser format (הכרעת שמאי מכריע מיום...)
+  - Strategy 2: Appeals committee pattern (החלטה בהשגה...)
+  - Strategy 3: Appeals board pattern (ערעור/ערר מס'...)
+  - Block/plot extraction: 3 patterns (short ג/ח, long גוש/חלקה, parenthesized)
+  - Committee extraction: 3 patterns (full name, after נ, with לתו"ב)
+  - Appraiser extraction: 3 patterns (after hyphen, שמאי title, after colon)
+  - Date extraction: 3 patterns (DD-MM-YYYY variants, מיום keyword, ISO format)
+  - Case type extraction: 11 types with priority ordering (היטל השבחה, פיצויים, ירידת ערך, etc.)
+- **Learnings for next cycles**:
+  - Patterns: Hebrew regex patterns need careful character handling (ג vs גוש, multiple forms)
+  - Patterns: Early return after full pattern match improves performance
+  - Patterns: Priority-ordered case type matching prevents incorrect classifications
+  - Traps: Hebrew text may contain both Hebrew and ASCII quotes ('׳ vs ')
+  - Helpful context: ParsedDecision interface defines all required fields in types.ts:79-89
+
+---
+
 ## Iteration 3 — US-001 Task 3: Selector health check before full crawl
 - **What was done**: Implemented `checkSelectorHealth()` and `checkAllSelectorHealth()` methods to validate selectors against live pages before starting a full crawl
 - **Files affected**: `mcp-server/src/scraper.ts`

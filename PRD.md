@@ -46,7 +46,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Implement multiple selector strategies with fallbacks
 - [x] Add selector health check that validates selectors before full crawl
 - [x] Parse HTML with Cheerio using adaptive patterns (class-based, structure-based, regex fallback)
-- [ ] Extract: title, PDF URL, block, plot, committee, appraiser, case type, dates
+- [x] Extract: title, PDF URL, block, plot, committee, appraiser, case type, dates
 - [ ] Log warning when primary selectors fail but fallback succeeds
 - [ ] Support pagination through `?skip=N` parameter
 - [ ] Typecheck passes
