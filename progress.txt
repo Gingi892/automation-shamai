@@ -144,3 +144,35 @@
   - Patterns: Check existing code before implementing - this was done in iteration 2
   - Patterns: Always log to stderr in MCP servers to avoid corrupting protocol
   - Helpful context: Multiple iterations may implement related acceptance criteria together
+
+---
+
+## Iteration 7 — US-001 Task 7: Support pagination through ?skip=N parameter
+- **What was done**: Verified existing implementation already supports pagination via `?skip=N` parameter
+- **Files affected**: None (already implemented in `mcp-server/src/scraper.ts` lines 229-232 and 237-254)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - `buildGovIlUrl(database, skip)` method (lines 229-232): Constructs URL with `?skip=${skip}` parameter
+  - `fetchPage(database, page)` method (lines 237-254): Calculates `skip = page * this.pageSize` (10 items per page)
+  - `pageSize` constant set to 10 (line 167) matching gov.il's pagination
+  - Indexer uses `fetchPage(database, page)` which automatically handles pagination
+- **Learnings for next cycles**:
+  - Patterns: Pagination was implemented as part of the core fetch mechanism from the start
+  - Patterns: `URLSearchParams` provides clean URL building with proper encoding
+  - Helpful context: Gov.il uses 10 items per page consistently across all three databases
+
+---
+
+## Iteration 8 — US-001 Task 8: Verify TypeScript type check passes
+- **What was done**: Ran TypeScript type check to validate US-001 completion
+- **Files affected**: None (validation only)
+- **Validation**: `npx tsc --noEmit` succeeds with no errors
+- **US-001 COMPLETE**: All acceptance criteria met:
+  - [x] Use ScraperAPI with `render=true` and `premium=true` for JavaScript rendering
+  - [x] Implement multiple selector strategies with fallbacks
+  - [x] Add selector health check that validates selectors before full crawl
+  - [x] Parse HTML with Cheerio using adaptive patterns (class-based, structure-based, regex fallback)
+  - [x] Extract: title, PDF URL, block, plot, committee, appraiser, case type, dates
+  - [x] Log warning when primary selectors fail but fallback succeeds
+  - [x] Support pagination through `?skip=N` parameter
+  - [x] Typecheck passes

@@ -48,8 +48,8 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Parse HTML with Cheerio using adaptive patterns (class-based, structure-based, regex fallback)
 - [x] Extract: title, PDF URL, block, plot, committee, appraiser, case type, dates
 - [x] Log warning when primary selectors fail but fallback succeeds
-- [ ] Support pagination through `?skip=N` parameter
-- [ ] Typecheck passes
+- [x] Support pagination through `?skip=N` parameter
+- [x] Typecheck passes
 
 ### US-002: Create local SQLite index with FTS5
 **Description:** As a developer, I want a local SQLite database with full-text search, so that queries return results in milliseconds without hitting gov.il.
