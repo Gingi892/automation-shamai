@@ -119,7 +119,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 
 **Acceptance Criteria:**
 - [x] Tool: `trigger_update` checks first N pages for new decisions
-- [ ] Compare content hash to detect duplicates
+- [x] Compare content hash to detect duplicates
 - [ ] Skip already-indexed decisions
 - [ ] Log: "Found X new decisions in [database]"
 - [ ] Store lastUpdateAt timestamp

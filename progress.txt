@@ -878,3 +878,26 @@
 
 ---
 
+## Iteration 39 — US-007 Task 2: Compare content hash to detect duplicates
+- **What was done**: Verified existing implementation already compares content hashes to detect duplicates
+- **Files affected**: None (already implemented in `mcp-server/src/indexer.ts` and `mcp-server/src/database.ts`)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Content hash generation in scraper.ts:695-715 uses MD5 of `title|url|database`
+  - `existsByHash(contentHash)` method in database.ts:277-285 checks for existing hash
+  - `updateRecent()` in indexer.ts:168-173 calls `existsByHash()` before inserting:
+    ```typescript
+    if (!this.db!.existsByHash(decision.contentHash)) {
+      this.db!.insertDecision(decision);
+      newCount++;
+    }
+    ```
+  - Database has index on content_hash column for efficient lookups (database.ts:89)
+- **Learnings for next cycles**:
+  - Patterns: Content hash is derived from MD5 of `title|url|database` - covers core identity
+  - Patterns: Check existing code thoroughly - many US-007 tasks were implemented early
+  - Patterns: Hash-based deduplication is already integrated into updateRecent() flow
+  - Helpful context: US-007 Task 2 complete, remaining tasks (3-6): skip indexed, log format, lastUpdateAt, cron script
+
+---
+
