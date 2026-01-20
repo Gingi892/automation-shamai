@@ -57,7 +57,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Acceptance Criteria:**
 - [x] SQLite database with FTS5 extension for Hebrew text search
 - [x] Table schema: id, database, title, url, block, plot, committee, appraiser, caseType, decisionDate, publishDate, contentHash, indexedAt
-- [ ] FTS5 virtual table indexing: title, committee, appraiser, caseType
+- [x] FTS5 virtual table indexing: title, committee, appraiser, caseType
 - [ ] Support filtering by any combination of fields
 - [ ] Support date range queries (fromDate, toDate)
 - [ ] Return results with relevance ranking

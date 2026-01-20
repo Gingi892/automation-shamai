@@ -223,3 +223,21 @@
   - Patterns: SQL columns use snake_case, TypeScript uses camelCase with converter function
   - Patterns: Schema was implemented correctly in iteration 9 as part of better-sqlite3 migration
   - Helpful context: PRD schema and database.ts schema match exactly
+
+---
+
+## Iteration 11 — US-002 Task 3: FTS5 virtual table indexing
+- **What was done**: Verified existing FTS5 virtual table implementation indexes all required columns
+- **Files affected**: None (already implemented in `mcp-server/src/database.ts` lines 94-128)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - FTS5 virtual table `decisions_fts` created at lines 94-104
+  - Indexes exactly 4 columns per PRD: `title`, `committee`, `appraiser`, `case_type`
+  - Uses `unicode61` tokenizer for Hebrew text support
+  - External content mode (`content='decisions'`) avoids data duplication
+  - Three triggers (INSERT/DELETE/UPDATE) at lines 107-128 keep FTS5 synchronized
+  - `search()` method at lines 291-410 uses FTS5 MATCH with bm25() ranking
+- **Learnings for next cycles**:
+  - Patterns: FTS5 was implemented in iteration 9 alongside better-sqlite3 migration
+  - Patterns: Check completion criteria against existing code before starting work
+  - Helpful context: PRD column names use camelCase (caseType), SQL uses snake_case (case_type)
