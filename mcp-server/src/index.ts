@@ -37,9 +37,44 @@ import {
 // Configuration
 const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY || '';
 
-// Initialize database
-let db: DecisionDatabase;
+// Initialize database (nullable for graceful unavailability handling)
+let db: DecisionDatabase | null = null;
 let embeddings: EmbeddingsManager | null = null;
+
+/**
+ * Helper function to check if database is available and return appropriate error response.
+ * Used by all handlers that require database access.
+ * @returns Error response if database unavailable, null if database is available
+ */
+function checkDatabaseAvailable(): MCPToolResult | null {
+  if (!db) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          error: 'Database unavailable',
+          errorHe: 'מסד הנתונים אינו זמין',
+          suggestion: 'The database is not initialized or has been closed. Please restart the MCP server. If the problem persists, check that the database file exists at ~/.gov-il-mcp/decisions.db and has proper permissions.',
+          suggestionHe: 'מסד הנתונים לא אותחל או נסגר. אנא הפעל מחדש את שרת ה-MCP. אם הבעיה נמשכת, בדוק שקובץ מסד הנתונים קיים ב-~/.gov-il-mcp/decisions.db ויש הרשאות מתאימות.',
+          possibleCauses: [
+            'Server startup failed to initialize database',
+            'Database file is missing or corrupted',
+            'Insufficient permissions to access database directory',
+            'Disk space is full'
+          ],
+          possibleCausesHe: [
+            'הפעלת השרת נכשלה באתחול מסד הנתונים',
+            'קובץ מסד הנתונים חסר או פגום',
+            'אין הרשאות מספיקות לגישה לתיקיית מסד הנתונים',
+            'הדיסק מלא'
+          ]
+        })
+      }],
+      isError: true
+    };
+  }
+  return null;
+}
 
 // Tool definitions
 const TOOLS: Tool[] = [
@@ -696,6 +731,10 @@ When decisions array is empty:
 
 // Tool handlers
 async function handleSearchDecisions(params: SearchParams): Promise<MCPToolResult> {
+  // Check database availability
+  const dbError = checkDatabaseAvailable();
+  if (dbError) return dbError;
+
   const searchParams: SearchParams = {
     query: params.query,
     database: params.database,
@@ -736,7 +775,7 @@ async function handleSearchDecisions(params: SearchParams): Promise<MCPToolResul
   }
 
   // Regular search
-  const result = db.search(searchParams);
+  const result = db!.search(searchParams);
 
   return {
     content: [{
@@ -753,7 +792,11 @@ async function handleSearchDecisions(params: SearchParams): Promise<MCPToolResul
 }
 
 async function handleGetDecision(params: { id: string }): Promise<MCPToolResult> {
-  const decision = db.getDecision(params.id);
+  // Check database availability
+  const dbError = checkDatabaseAvailable();
+  if (dbError) return dbError;
+
+  const decision = db!.getDecision(params.id);
 
   if (!decision) {
     return {
@@ -779,7 +822,11 @@ async function handleGetDecision(params: { id: string }): Promise<MCPToolResult>
 }
 
 async function handleGetDecisionPdf(params: { id: string }): Promise<MCPToolResult> {
-  const decision = db.getDecision(params.id);
+  // Check database availability
+  const dbError = checkDatabaseAvailable();
+  if (dbError) return dbError;
+
+  const decision = db!.getDecision(params.id);
 
   if (!decision) {
     return {
@@ -826,6 +873,10 @@ async function handleGetDecisionPdf(params: { id: string }): Promise<MCPToolResu
 }
 
 async function handleReadPdf(params: { id: string; maxPages?: number }): Promise<MCPToolResult> {
+  // Check database availability
+  const dbError = checkDatabaseAvailable();
+  if (dbError) return dbError;
+
   // Check for SCRAPER_API_KEY first
   if (!SCRAPER_API_KEY) {
     return {
@@ -840,7 +891,7 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
     };
   }
 
-  const decision = db.getDecision(params.id);
+  const decision = db!.getDecision(params.id);
 
   if (!decision) {
     return {
@@ -877,7 +928,7 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
     // Create PDF extractor with database for caching
     const pdfExtractor = createPdfExtractor(SCRAPER_API_KEY, {
       maxPages: params.maxPages || 0,
-      database: db
+      database: db!
     });
 
     // Extract with caching support
@@ -915,7 +966,11 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
 }
 
 async function handleGetStatistics(): Promise<MCPToolResult> {
-  const stats = db.getStats();
+  // Check database availability
+  const dbError = checkDatabaseAvailable();
+  if (dbError) return dbError;
+
+  const stats = db!.getStats();
 
   const databaseNames: Record<DatabaseType, string> = {
     decisive_appraiser: 'שמאי מכריע',
@@ -941,7 +996,11 @@ async function handleGetStatistics(): Promise<MCPToolResult> {
 }
 
 async function handleListCommittees(params: { limit?: number }): Promise<MCPToolResult> {
-  const committees = db.getDistinctValues('committee', params.limit || 100);
+  // Check database availability
+  const dbError = checkDatabaseAvailable();
+  if (dbError) return dbError;
+
+  const committees = db!.getDistinctValues('committee', params.limit || 100);
 
   return {
     content: [{
@@ -955,7 +1014,11 @@ async function handleListCommittees(params: { limit?: number }): Promise<MCPTool
 }
 
 async function handleListAppraisers(params: { limit?: number }): Promise<MCPToolResult> {
-  const appraisers = db.getDistinctValues('appraiser', params.limit || 100);
+  // Check database availability
+  const dbError = checkDatabaseAvailable();
+  if (dbError) return dbError;
+
+  const appraisers = db!.getDistinctValues('appraiser', params.limit || 100);
 
   return {
     content: [{
@@ -969,7 +1032,11 @@ async function handleListAppraisers(params: { limit?: number }): Promise<MCPTool
 }
 
 async function handleCompareDecisions(params: { ids: string[] }): Promise<MCPToolResult> {
-  const decisions = params.ids.map(id => db.getDecision(id)).filter(d => d !== null);
+  // Check database availability
+  const dbError = checkDatabaseAvailable();
+  if (dbError) return dbError;
+
+  const decisions = params.ids.map(id => db!.getDecision(id)).filter(d => d !== null);
 
   if (decisions.length === 0) {
     return {
@@ -1705,16 +1772,23 @@ ${sourcesSection}
 
 // Main server setup
 async function main() {
-  // Initialize database
-  db = await getDatabase();
-  console.error('Database initialized');
+  // Initialize database (graceful handling if unavailable)
+  try {
+    db = await getDatabase();
+    console.error('[MCP Server] Database initialized successfully');
+  } catch (error) {
+    console.error('[MCP Server] WARNING: Database initialization failed:', error instanceof Error ? error.message : String(error));
+    console.error('[MCP Server] Server will continue but database-dependent tools will return errors.');
+    console.error('[MCP Server] Check that ~/.gov-il-mcp/ directory is accessible and has write permissions.');
+    db = null;
+  }
 
   // Try to initialize embeddings (optional)
   try {
     embeddings = await getEmbeddings();
-    console.error('Semantic search initialized');
+    console.error('[MCP Server] Semantic search initialized');
   } catch (error) {
-    console.error('Semantic search not available:', error);
+    console.error('[MCP Server] Semantic search not available:', error instanceof Error ? error.message : String(error));
     embeddings = null;
   }
 
