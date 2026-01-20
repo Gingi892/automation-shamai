@@ -241,3 +241,28 @@
   - Patterns: FTS5 was implemented in iteration 9 alongside better-sqlite3 migration
   - Patterns: Check completion criteria against existing code before starting work
   - Helpful context: PRD column names use camelCase (caseType), SQL uses snake_case (case_type)
+
+---
+
+## Iteration 12 — US-002 Task 4: Support filtering by any combination of fields
+- **What was done**: Verified existing implementation already supports filtering by any combination of fields
+- **Files affected**: None (already implemented in `mcp-server/src/database.ts` lines 291-410)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - `search()` method uses `conditions.push()` pattern to build AND-joined WHERE clause
+  - Supported filters that combine freely:
+    - `database` (exact match, line 300-303)
+    - `committee` (LIKE partial match, line 306-309)
+    - `block` (exact match, line 312-315)
+    - `plot` (exact match, line 316-319)
+    - `appraiser` (LIKE partial match, line 322-325)
+    - `caseType` (LIKE partial match, line 328-331)
+    - `fromDate`/`toDate` (date range, lines 334-341)
+    - `query` (FTS5 full-text search, lines 344-348)
+  - All filters work together via: `WHERE ${conditions.join(' AND ')}` (lines 363, 386)
+  - `SearchParams` interface in types.ts:41-54 defines all filter fields
+- **Learnings for next cycles**:
+  - Patterns: The `1=1` base condition (line 294) simplifies dynamic AND clause building
+  - Patterns: LIKE with `%value%` provides partial Hebrew name matching
+  - Patterns: Exact match for block/plot since these are numeric identifiers
+  - Helpful context: Implementation was done in iteration 9 as part of better-sqlite3 migration
