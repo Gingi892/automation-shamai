@@ -709,3 +709,27 @@
   - Patterns: Tool descriptions with markdown examples help Claude understand citation placement
   - Helpful context: US-006 Task 1 complete, remaining tasks (2-6): sources section, claim citations, PDF excerpts, confidence indicators, no-results warning
 
+---
+
+## Iteration 32 — US-006 Task 2: Include sources section with decision ID, title, PDF URL, relevance score
+- **What was done**: Enhanced `handleConstructAnswer` to include a detailed sources section with all required fields
+- **Files affected**: `mcp-server/src/index.ts` (lines 939-972, added sourcesSection builder and updated formattedAnswer template)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `sourcesSection` variable that maps each source to a formatted block
+  - Each source block includes:
+    - `[S#]` bold header for citation reference
+    - Decision ID in code format (`decisionId`)
+    - Title (Hebrew/English)
+    - PDF URL with fallback text "לא זמין / Not available" when null
+    - Relevance Score as percentage (e.g., "85%") or "N/A" when undefined
+    - Optional Excerpt truncated to 200 characters
+  - Added horizontal rule separators (`---`) for visual clarity
+  - Renamed section header from "Available Sources" to "מקורות / Sources Section"
+- **Learnings for next cycles**:
+  - Patterns: Use Math.round(score * 100) + '%' for human-readable relevance percentages
+  - Patterns: Bilingual labels (Hebrew / English) maintain consistency with rest of tool descriptions
+  - Patterns: Template literals with conditional expressions for optional fields (excerpt)
+  - Patterns: Truncate long excerpts with length check + ellipsis for readability
+  - Helpful context: US-006 Task 2 complete, remaining tasks (3-6): claim citations, PDF excerpts, confidence indicators, no-results warning
+
