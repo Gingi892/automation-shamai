@@ -1,11 +1,13 @@
 /**
  * PDF Text Extractor for Gov.il Land Appraisal Decisions
  * Downloads PDFs using ScraperAPI and extracts text using pdf-parse
+ * Supports caching extracted text in SQLite database
  *
  * US-003: Implement PDF text extraction
  */
 
 import pdf from 'pdf-parse';
+import type { DecisionDatabase } from './database.js';
 
 /**
  * Hebrew RTL Text Processing Utilities
@@ -180,15 +182,25 @@ export interface PdfExtractionResult {
 export interface PdfExtractorOptions {
   apiKey: string;
   maxPages?: number;  // Limit extraction to first N pages for large PDFs
+  database?: DecisionDatabase;  // Optional database for caching
 }
 
 export class PdfExtractor {
   private apiKey: string;
   private maxPages: number;
+  private database: DecisionDatabase | null;
 
   constructor(options: PdfExtractorOptions) {
     this.apiKey = options.apiKey;
     this.maxPages = options.maxPages ?? 0;  // 0 = extract all pages
+    this.database = options.database ?? null;
+  }
+
+  /**
+   * Set the database for caching
+   */
+  setDatabase(database: DecisionDatabase): void {
+    this.database = database;
   }
 
   /**
@@ -303,6 +315,50 @@ export class PdfExtractor {
   async downloadAndExtract(pdfUrl: string): Promise<PdfExtractionResult> {
     const buffer = await this.downloadPdf(pdfUrl);
     return this.extractText(buffer);
+  }
+
+  /**
+   * Extract PDF text with caching support
+   * Checks database cache first, downloads only if not cached
+   * Saves extracted text to cache after successful extraction
+   *
+   * @param decisionId - The decision ID for cache lookup/storage
+   * @param pdfUrl - The URL to download PDF from (if not cached)
+   * @returns PdfExtractionResult with cached=true if from cache
+   */
+  async extractWithCache(decisionId: string, pdfUrl: string): Promise<PdfExtractionResult> {
+    // Check cache first
+    if (this.database) {
+      const cachedText = this.database.getCachedPdfText(decisionId);
+      if (cachedText !== null) {
+        console.error(`[PdfExtractor] Cache HIT for decision ${decisionId}`);
+        // Return cached result - we don't know original page count, estimate from text
+        // Average Hebrew legal doc: ~3000 chars per page
+        const estimatedPages = Math.max(1, Math.ceil(cachedText.length / 3000));
+        return {
+          fullText: cachedText,
+          pageCount: estimatedPages,
+          extractedPages: estimatedPages,
+          cached: true
+        };
+      }
+      console.error(`[PdfExtractor] Cache MISS for decision ${decisionId}`);
+    }
+
+    // Download and extract
+    const result = await this.downloadAndExtract(pdfUrl);
+
+    // Save to cache
+    if (this.database && result.fullText) {
+      const saved = this.database.savePdfText(decisionId, result.fullText);
+      if (saved) {
+        console.error(`[PdfExtractor] Saved ${result.fullText.length} chars to cache for decision ${decisionId}`);
+      } else {
+        console.error(`[PdfExtractor] WARNING: Failed to save to cache for decision ${decisionId}`);
+      }
+    }
+
+    return result;
   }
 
   /**

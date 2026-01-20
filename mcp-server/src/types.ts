@@ -18,6 +18,7 @@ export interface Decision {
   decisionDate: string | null;
   publishDate: string | null;
   contentHash: string;         // For change detection
+  pdfText: string | null;      // Cached extracted PDF text
   indexedAt: string;
   relevanceScore?: number;     // FTS5 bm25 relevance score (only present when using text search)
 }
@@ -35,6 +36,7 @@ export interface DecisionRow {
   decision_date: string | null;
   publish_date: string | null;
   content_hash: string;
+  pdf_text: string | null;
   indexed_at: string;
 }
 
@@ -148,6 +150,7 @@ export function rowToDecision(row: DecisionRow, relevanceScore?: number): Decisi
     decisionDate: row.decision_date,
     publishDate: row.publish_date,
     contentHash: row.content_hash,
+    pdfText: row.pdf_text,
     indexedAt: row.indexed_at
   };
 

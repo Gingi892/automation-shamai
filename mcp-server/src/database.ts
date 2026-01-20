@@ -553,6 +553,46 @@ export class DecisionDatabase {
   }
 
   /**
+   * Get cached PDF text for a decision
+   * Returns null if not cached
+   */
+  getCachedPdfText(decisionId: string): string | null {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = this.db.prepare(
+      `SELECT pdf_text FROM decisions WHERE id = ?`
+    ).get(decisionId) as { pdf_text: string | null } | undefined;
+
+    return row?.pdf_text || null;
+  }
+
+  /**
+   * Save extracted PDF text to database cache
+   */
+  savePdfText(decisionId: string, pdfText: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.prepare(
+      `UPDATE decisions SET pdf_text = ? WHERE id = ?`
+    ).run(pdfText, decisionId);
+
+    return result.changes > 0;
+  }
+
+  /**
+   * Check if PDF text is cached for a decision
+   */
+  hasCachedPdfText(decisionId: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = this.db.prepare(
+      `SELECT 1 FROM decisions WHERE id = ? AND pdf_text IS NOT NULL`
+    ).get(decisionId);
+
+    return !!row;
+  }
+
+  /**
    * Close the database connection
    */
   close(): void {
