@@ -119,6 +119,37 @@ export interface MCPToolResult {
   isError?: boolean;
 }
 
+// Query clarification types
+export type AmbiguityType = 'missing_database' | 'vague_location' | 'unclear_date_range' | 'ambiguous_case_type' | 'missing_search_terms';
+
+export interface ClarificationOption {
+  value: string;
+  label: string;           // Hebrew label for display
+  labelEn?: string;        // Optional English label
+}
+
+export interface ClarificationPrompt {
+  ambiguityType: AmbiguityType;
+  question: string;        // Hebrew question
+  questionEn?: string;     // Optional English question
+  options: ClarificationOption[];
+  allowMultiple?: boolean; // Whether multiple options can be selected
+  allowFreeText?: boolean; // Whether user can provide free text instead
+}
+
+export interface ClarifyQueryInput {
+  originalQuery: string;   // The user's original Hebrew query
+  previousClarifications?: string[];  // Ambiguity types already clarified (to avoid asking again)
+}
+
+export interface ClarifyQueryResult {
+  needsClarification: boolean;
+  clarifications: ClarificationPrompt[];
+  detectedAmbiguities: AmbiguityType[];
+  suggestedParams?: Partial<SearchParams>;  // Parameters that could be extracted despite ambiguity
+  originalQuery: string;
+}
+
 // Database configuration
 export const DATABASE_CONFIG: Record<DatabaseType, { name: string; url: string }> = {
   decisive_appraiser: {

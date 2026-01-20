@@ -95,7 +95,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Description:** As a developer, I want a tool that Claude can use to ask clarifying questions, so that ambiguous queries get resolved before searching.
 
 **Acceptance Criteria:**
-- [ ] Tool: `clarify_query` that returns structured clarification prompts
+- [x] Tool: `clarify_query` that returns structured clarification prompts
 - [ ] Detect ambiguity patterns: missing database, vague location, unclear date range
 - [ ] Generate Hebrew clarification questions with multiple-choice options
 - [ ] Example: "באיזה מאגר לחפש?" with options [שמאי מכריע, ועדת השגות, ועדת ערעורים]

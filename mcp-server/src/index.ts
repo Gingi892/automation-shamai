@@ -19,7 +19,11 @@ import {
   DatabaseType,
   SearchParams,
   DATABASE_CONFIG,
-  MCPToolResult
+  MCPToolResult,
+  AmbiguityType,
+  ClarificationPrompt,
+  ClarifyQueryInput,
+  ClarifyQueryResult
 } from './types.js';
 
 // Configuration
@@ -256,6 +260,50 @@ Returns results in <100ms from pre-indexed local database.`,
           default: 5
         }
       }
+    }
+  },
+  {
+    name: 'clarify_query',
+    description: `זיהוי עמימות בשאילתה והצעת שאלות הבהרה / Detect ambiguity in user query and suggest clarification questions.
+
+Use this tool BEFORE searching when the user's query is ambiguous or incomplete.
+
+## סוגי עמימות / Ambiguity Types
+| Type | Hebrew | When to Detect |
+|------|--------|----------------|
+| missing_database | חסר מאגר | No database keywords (שמאי מכריע/השגה/ערעור) |
+| vague_location | מיקום עמום | No specific city/committee or block/plot |
+| unclear_date_range | טווח תאריכים לא ברור | Year mentioned but unclear if range |
+| ambiguous_case_type | סוג תיק לא ברור | General legal terms without specific case type |
+| missing_search_terms | חסרים מונחי חיפוש | Query too short or generic |
+
+## Usage Flow
+1. User provides query → Call clarify_query first
+2. If needsClarification=true → Present clarification questions to user
+3. User answers → Use answers to refine search_decisions parameters
+4. Call search_decisions with refined parameters
+
+## Example
+Query: "החלטות בתל אביב"
+→ Detects: missing_database (no שמאי מכריע/השגה/ערעור keyword)
+→ Returns clarification: "באיזה מאגר לחפש?" with options
+
+## Avoiding Repeated Questions
+Pass previousClarifications array with ambiguity types already resolved to avoid asking the same question twice.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        originalQuery: {
+          type: 'string',
+          description: 'השאילתה המקורית של המשתמש בעברית / The original user query in Hebrew'
+        },
+        previousClarifications: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'סוגי עמימות שכבר הובהרו (למניעת שאלות חוזרות) / Ambiguity types already clarified to avoid re-asking'
+        }
+      },
+      required: ['originalQuery']
     }
   }
 ];
@@ -549,6 +597,201 @@ async function handleTriggerUpdate(params: { pagesToCheck?: number }): Promise<M
   }
 }
 
+// Clarification prompts for different ambiguity types
+const CLARIFICATION_PROMPTS: Record<AmbiguityType, ClarificationPrompt> = {
+  missing_database: {
+    ambiguityType: 'missing_database',
+    question: 'באיזה מאגר לחפש?',
+    questionEn: 'Which database should we search?',
+    options: [
+      { value: 'decisive_appraiser', label: 'שמאי מכריע', labelEn: 'Decisive Appraiser' },
+      { value: 'appeals_committee', label: 'ועדת השגות', labelEn: 'Appeals Committee' },
+      { value: 'appeals_board', label: 'ועדת ערעורים', labelEn: 'Appeals Board' },
+      { value: 'all', label: 'כל המאגרים', labelEn: 'All databases' }
+    ],
+    allowMultiple: true
+  },
+  vague_location: {
+    ambiguityType: 'vague_location',
+    question: 'האם תרצה לצמצם לאזור מסוים?',
+    questionEn: 'Would you like to narrow down to a specific area?',
+    options: [
+      { value: 'specify_city', label: 'ציין עיר/ועדה', labelEn: 'Specify city/committee' },
+      { value: 'specify_block', label: 'ציין גוש וחלקה', labelEn: 'Specify block and plot' },
+      { value: 'no_location', label: 'חפש בכל הארץ', labelEn: 'Search nationwide' }
+    ],
+    allowFreeText: true
+  },
+  unclear_date_range: {
+    ambiguityType: 'unclear_date_range',
+    question: 'לאיזה טווח תאריכים לחפש?',
+    questionEn: 'What date range should we search?',
+    options: [
+      { value: 'last_year', label: 'שנה אחרונה', labelEn: 'Last year' },
+      { value: 'last_3_years', label: '3 שנים אחרונות', labelEn: 'Last 3 years' },
+      { value: 'last_5_years', label: '5 שנים אחרונות', labelEn: 'Last 5 years' },
+      { value: 'all_time', label: 'כל הזמן', labelEn: 'All time' }
+    ],
+    allowFreeText: true
+  },
+  ambiguous_case_type: {
+    ambiguityType: 'ambiguous_case_type',
+    question: 'איזה סוג תיק מעניין אותך?',
+    questionEn: 'What type of case interests you?',
+    options: [
+      { value: 'היטל השבחה', label: 'היטל השבחה', labelEn: 'Betterment Levy' },
+      { value: 'פיצויים', label: 'פיצויים', labelEn: 'Compensation' },
+      { value: 'ירידת ערך', label: 'ירידת ערך', labelEn: 'Depreciation' },
+      { value: 'all_types', label: 'כל סוגי התיקים', labelEn: 'All case types' }
+    ],
+    allowFreeText: true
+  },
+  missing_search_terms: {
+    ambiguityType: 'missing_search_terms',
+    question: 'השאילתה קצרה מדי. מה בדיוק אתה מחפש?',
+    questionEn: 'The query is too short. What exactly are you looking for?',
+    options: [
+      { value: 'add_details', label: 'אוסיף פרטים נוספים', labelEn: 'I will add more details' },
+      { value: 'show_recent', label: 'הצג החלטות אחרונות', labelEn: 'Show recent decisions' },
+      { value: 'show_statistics', label: 'הצג סטטיסטיקות', labelEn: 'Show statistics' }
+    ],
+    allowFreeText: true
+  }
+};
+
+// Database keywords for detection
+const DATABASE_KEYWORDS: Record<DatabaseType, string[]> = {
+  decisive_appraiser: ['שמאי מכריע', 'הכרעה', 'הכרעת שמאי', 'מכריע'],
+  appeals_committee: ['השגה', 'ועדת השגות', 'השגות'],
+  appeals_board: ['ערעור', 'ועדת ערעורים', 'ערר', 'ערעורים']
+};
+
+// Case type keywords
+const CASE_TYPE_KEYWORDS = [
+  'היטל השבחה', 'פיצויים', 'ירידת ערך', 'הפקעה',
+  'תכנית מתאר', 'שינוי ייעוד', 'היתר בניה',
+  'תמ"א 38', 'פינוי בינוי', 'תב"ע'
+];
+
+// Year pattern for date detection
+const YEAR_PATTERN = /\b(19|20)\d{2}\b|תשפ"?[א-ת]|תש[פע]"?[א-ת]/;
+
+// Block/plot pattern
+const BLOCK_PLOT_PATTERN = /גוש\s*\d+|חלקה\s*\d+|ג['׳]?\s*\d+|ח['׳]?\s*\d+/;
+
+async function handleClarifyQuery(params: ClarifyQueryInput): Promise<MCPToolResult> {
+  const { originalQuery, previousClarifications = [] } = params;
+  const query = originalQuery.trim();
+
+  const detectedAmbiguities: AmbiguityType[] = [];
+  const clarifications: ClarificationPrompt[] = [];
+  const suggestedParams: Partial<SearchParams> = {};
+
+  // Check for minimum query length
+  if (query.length < 3) {
+    if (!previousClarifications.includes('missing_search_terms')) {
+      detectedAmbiguities.push('missing_search_terms');
+    }
+  }
+
+  // Check for database keywords
+  let hasDbKeyword = false;
+  for (const [dbType, keywords] of Object.entries(DATABASE_KEYWORDS)) {
+    for (const keyword of keywords) {
+      if (query.includes(keyword)) {
+        hasDbKeyword = true;
+        suggestedParams.database = dbType as DatabaseType;
+        break;
+      }
+    }
+    if (hasDbKeyword) break;
+  }
+
+  if (!hasDbKeyword && !previousClarifications.includes('missing_database')) {
+    detectedAmbiguities.push('missing_database');
+  }
+
+  // Check for location specificity (city names or block/plot)
+  const hasBlockPlot = BLOCK_PLOT_PATTERN.test(query);
+  // Common Israeli cities - check if query mentions any
+  const commonCities = ['תל אביב', 'ירושלים', 'חיפה', 'באר שבע', 'רעננה', 'נתניה', 'הרצליה', 'פתח תקווה', 'ראשון לציון', 'אשדוד'];
+  const hasCityName = commonCities.some(city => query.includes(city));
+
+  if (!hasBlockPlot && !hasCityName && query.length > 10 && !previousClarifications.includes('vague_location')) {
+    // Only suggest location clarification for longer queries that don't have location info
+    detectedAmbiguities.push('vague_location');
+  }
+
+  // Check for date/year mentions without clear range
+  const hasYear = YEAR_PATTERN.test(query);
+  const hasDateRange = query.includes('מ-') || query.includes('עד') || query.includes('בין') ||
+                       query.includes('מתאריך') || query.includes('לתאריך');
+
+  if (hasYear && !hasDateRange && !previousClarifications.includes('unclear_date_range')) {
+    detectedAmbiguities.push('unclear_date_range');
+  }
+
+  // Check for case type specificity
+  const hasCaseType = CASE_TYPE_KEYWORDS.some(caseType => query.includes(caseType));
+  // General legal terms that might need clarification
+  const generalTerms = ['החלטות', 'פסיקות', 'תיקים', 'עניינים'];
+  const hasGeneralTerms = generalTerms.some(term => query.includes(term));
+
+  if (!hasCaseType && hasGeneralTerms && !previousClarifications.includes('ambiguous_case_type')) {
+    detectedAmbiguities.push('ambiguous_case_type');
+  }
+
+  // Build clarification prompts for detected ambiguities
+  for (const ambiguity of detectedAmbiguities) {
+    clarifications.push(CLARIFICATION_PROMPTS[ambiguity]);
+  }
+
+  // Extract any parameters we could determine despite ambiguity
+  if (hasCaseType) {
+    for (const caseType of CASE_TYPE_KEYWORDS) {
+      if (query.includes(caseType)) {
+        suggestedParams.caseType = caseType;
+        break;
+      }
+    }
+  }
+
+  if (hasCityName) {
+    for (const city of commonCities) {
+      if (query.includes(city)) {
+        suggestedParams.committee = city;
+        break;
+      }
+    }
+  }
+
+  // Extract block/plot if present
+  const blockMatch = query.match(/גוש\s*(\d+)|ג['׳]?\s*(\d+)/);
+  if (blockMatch) {
+    suggestedParams.block = blockMatch[1] || blockMatch[2];
+  }
+
+  const plotMatch = query.match(/חלקה\s*(\d+)|ח['׳]?\s*(\d+)/);
+  if (plotMatch) {
+    suggestedParams.plot = plotMatch[1] || plotMatch[2];
+  }
+
+  const result: ClarifyQueryResult = {
+    needsClarification: clarifications.length > 0,
+    clarifications,
+    detectedAmbiguities,
+    suggestedParams: Object.keys(suggestedParams).length > 0 ? suggestedParams : undefined,
+    originalQuery: query
+  };
+
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify(result, null, 2)
+    }]
+  };
+}
+
 // Main server setup
 async function main() {
   // Initialize database
@@ -613,6 +856,9 @@ async function main() {
 
         case 'trigger_update':
           return await handleTriggerUpdate(args as { pagesToCheck?: number });
+
+        case 'clarify_query':
+          return await handleClarifyQuery(args as ClarifyQueryInput);
 
         default:
           return {
