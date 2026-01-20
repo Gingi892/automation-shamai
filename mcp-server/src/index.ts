@@ -936,14 +936,33 @@ async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPT
   // Claude will use this structure to build actual answers
   const citationGuide = sources.map(s => `[S${s.index}]`).join(', ');
 
+  // Build detailed sources section with all required fields per PRD
+  const sourcesSection = sources.map(s => {
+    const relevancePercent = s.relevanceScore !== undefined
+      ? `${Math.round(s.relevanceScore * 100)}%`
+      : 'N/A';
+    return `
+**[S${s.index}]**
+- מזהה / Decision ID: \`${s.decisionId}\`
+- כותרת / Title: ${s.title}
+- קישור ל-PDF / PDF URL: ${s.pdfUrl || 'לא זמין / Not available'}
+- ציון רלוונטיות / Relevance Score: ${relevancePercent}${s.excerpt ? `
+- ציטוט / Excerpt: "${s.excerpt.substring(0, 200)}${s.excerpt.length > 200 ? '...' : ''}"` : ''}`;
+  }).join('\n');
+
   const formattedAnswer = `
 ## מבנה התשובה / Answer Structure
 
 השתמש בציטוטים הבאים בתשובתך / Use these citations in your answer:
 ${citationGuide}
 
-### מקורות זמינים / Available Sources:
-${sources.map(s => `- [S${s.index}]: ${s.title}${s.excerpt ? ` (ציטוט: "${s.excerpt.substring(0, 100)}...")` : ''}`).join('\n')}
+---
+
+## מקורות / Sources Section
+
+${sourcesSection}
+
+---
 
 ### הנחיות לבניית תשובה / Answer Construction Guidelines:
 1. הצב ציטוט [S#] מיד אחרי כל טענה / Place [S#] citation immediately after each claim
