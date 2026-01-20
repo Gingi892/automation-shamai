@@ -1,0 +1,49 @@
+# Progress Log
+
+## Learnings
+(Notes discovered during implementation)
+
+### Pre-Implementation Research (2026-01-20)
+
+**Gov.il Site Structure:**
+- All three databases use AngularJS with client-side rendering
+- Dynamic content loaded via `ng-controller="dynamicCtrl"`
+- Pagination: `?skip=N` parameter (10 items per page)
+- PDF URLs pattern: `https://free-justice.openapi.gov.il/...`
+- Search autocomplete: `https://searchgov.gov.il/govil/Suggestext/`
+
+**Existing Code Issues (from QA-FINDINGS.md):**
+- 19 issues identified, 3 CRITICAL
+- ALL CSS selectors are outdated
+- Tool name mismatch: README says `search_land_decisions`, code has `search_decisions`
+- Non-existent `search_and_read` tool documented but not implemented
+- Angular wait timeout too short (2s fallback)
+- No filter success verification
+
+**Working Components:**
+- SQLite database layer (`mcp-server/src/database.ts`) - GOOD
+- Type definitions (`mcp-server/src/types.ts`) - GOOD
+- Indexer logic (`mcp-server/src/indexer.ts`) - GOOD
+- Basic MCP server structure (`mcp-server/src/index.ts`) - GOOD
+
+**Broken Components:**
+- Scraper selectors (`mcp-server/src/scraper.ts`) - BROKEN
+- Puppeteer flow (`mcp-server-live/src/`) - BROKEN
+
+**Key Design Decisions:**
+1. Keep SQLite + FTS5 approach (proven to work)
+2. Rebuild scraper with multiple fallback strategies
+3. Add selector health check before full crawl
+4. Improve tool descriptions with Hebrew examples
+5. Add query clarification tool for ambiguous queries
+
+---
+
+## Iteration 1 — US-001 Task 1: ScraperAPI render/premium configuration
+- **What was done**: Verified existing implementation in scraper.ts already uses `render=true` and `premium=true` as defaults
+- **Files affected**: None (already implemented in `mcp-server/src/scraper.ts` lines 32-33 and 40-45)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Learnings for next cycles**:
+  - Patterns: ScraperAPI URL built via `URLSearchParams` with api_key, url, render, premium params
+  - Patterns: `buildScraperUrl()` method centralizes URL construction
+  - Helpful context: The scraper defaults to premium=true and render=true via nullish coalescing (`??`)
