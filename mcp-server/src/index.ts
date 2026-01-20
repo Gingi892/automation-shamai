@@ -33,13 +33,38 @@ let embeddings: EmbeddingsManager | null = null;
 const TOOLS: Tool[] = [
   {
     name: 'search_decisions',
-    description: `Search Israeli land appraisal decisions across three government databases:
-- שמאי מכריע (Decisive Appraiser) - ~10,000+ decisions
-- ועדת השגות (Appeals Committee) - ~5,000+ decisions
-- ועדת ערעורים (Appeals Board) - ~5,000+ decisions
+    description: `Search Israeli land appraisal decisions across three government databases.
 
-Supports filtering by: committee, block/plot, appraiser, case type, date range.
-Supports full-text search in Hebrew and semantic search.
+## מאגרים / Databases
+| Hebrew Keywords | Database ID | Description |
+|-----------------|-------------|-------------|
+| "שמאי מכריע", "הכרעה", "הכרעת שמאי" | decisive_appraiser | ~10,000+ הכרעות שמאי מכריע |
+| "השגה", "ועדת השגות" | appeals_committee | ~5,000+ החלטות ועדת השגות |
+| "ערעור", "ועדת ערעורים", "ערר" | appeals_board | ~5,000+ החלטות ועדת ערעורים |
+
+**Default**: If database unclear from query, use decisive_appraiser (largest dataset).
+
+## דוגמאות שאילתות / Query Examples
+| User Query (Hebrew) | Expected Parameters |
+|---------------------|---------------------|
+| "החלטות בנתניה" | { committee: "נתניה" } |
+| "גוש 6158 חלקה 25" | { block: "6158", plot: "25" } |
+| "היטל השבחה תל אביב" | { caseType: "היטל השבחה", committee: "תל אביב" } |
+| "ערעורים מ-2024" | { database: "appeals_board", fromDate: "2024-01-01" } |
+| "שמאי מכריע כהן" | { database: "decisive_appraiser", appraiser: "כהן" } |
+| "פיצויים על הפקעה" | { caseType: "פיצויים" } |
+| "החלטות השגה בירושלים 2023" | { database: "appeals_committee", committee: "ירושלים", fromDate: "2023-01-01", toDate: "2023-12-31" } |
+| "ירידת ערך רעננה" | { caseType: "ירידת ערך", committee: "רעננה" } |
+
+## סוגי תיקים נפוצים / Common Case Types
+היטל השבחה, פיצויים, ירידת ערך, הפקעה, תכנית מתאר, שינוי ייעוד, היתר בניה, תמ"א 38, פינוי בינוי, תב"ע
+
+## חשוב / Important Guidelines
+- Extract ONLY parameters the user explicitly mentioned
+- Don't invent block/plot numbers if not stated
+- Don't assume database if no keywords match the table above
+- For date ranges, convert Hebrew years (תשפ"ד = 2024) to Gregorian
+
 Returns results in <100ms from pre-indexed local database.`,
     inputSchema: {
       type: 'object',

@@ -80,7 +80,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Description:** As a developer, I want tool descriptions that help Claude correctly parse Hebrew natural language queries into structured parameters, so that searches return relevant results.
 
 **Acceptance Criteria:**
-- [ ] Include 6+ diverse Hebrew query examples with expected parameter extraction
+- [x] Include 6+ diverse Hebrew query examples with expected parameter extraction
 - [ ] Add database selection table mapping Hebrew keywords to databases:
   - "שמאי מכריע", "הכרעה" → decisive_appraiser
   - "השגה", "ועדת השגות" → appeals_committee

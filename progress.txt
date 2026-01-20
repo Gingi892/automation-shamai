@@ -468,3 +468,33 @@
   - Traps: tsconfig rootDir must cover all included directories (scripts/** needs rootDir: "." not "./src")
   - Traps: Decision type with new fields (pdfText) must be updated in all places that construct Decision objects
   - Helpful context: US-003 complete, ready to proceed to US-004 (Hebrew-aware tool descriptions)
+
+---
+
+## Iteration 22 — US-004 Task 1: Include 6+ diverse Hebrew query examples with expected parameter extraction
+- **What was done**: Enhanced search_decisions tool description with 8 Hebrew query examples showing expected parameter extraction
+- **Files affected**: `mcp-server/src/index.ts` (lines 33-69, major enhancement of search_decisions description)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added database selection table mapping Hebrew keywords to database IDs:
+    - "שמאי מכריע", "הכרעה", "הכרעת שמאי" → decisive_appraiser
+    - "השגה", "ועדת השגות" → appeals_committee
+    - "ערעור", "ועדת ערעורים", "ערר" → appeals_board
+  - Added 8 Hebrew query examples with expected parameters (PRD required 6+):
+    1. "החלטות בנתניה" → { committee: "נתניה" }
+    2. "גוש 6158 חלקה 25" → { block: "6158", plot: "25" }
+    3. "היטל השבחה תל אביב" → { caseType: "היטל השבחה", committee: "תל אביב" }
+    4. "ערעורים מ-2024" → { database: "appeals_board", fromDate: "2024-01-01" }
+    5. "שמאי מכריע כהן" → { database: "decisive_appraiser", appraiser: "כהן" }
+    6. "פיצויים על הפקעה" → { caseType: "פיצויים" }
+    7. "החלטות השגה בירושלים 2023" → multi-param with date range
+    8. "ירידת ערך רעננה" → { caseType: "ירידת ערך", committee: "רעננה" }
+  - Added common case types list (10 types)
+  - Added "Important Guidelines" with negative guidance about not inventing parameters
+  - Specified default database (decisive_appraiser) when unclear
+- **Learnings for next cycles**:
+  - Patterns: MCP tool descriptions support markdown tables for structured guidance
+  - Patterns: Example tables with User Query → Expected Parameters help LLM understand mapping
+  - Patterns: Negative guidance ("Don't invent...") prevents hallucination of parameters
+  - Patterns: Hebrew year conversion note (תשפ"ד = 2024) helps with date handling
+  - Helpful context: This task also partially completes US-004 Tasks 2, 3, 5 (database table, default, negative guidance)
