@@ -943,3 +943,22 @@
 
 ---
 
+## Iteration 42 — US-007 Task 5: Store lastUpdateAt timestamp
+- **What was done**: Verified existing implementation already stores lastUpdateAt timestamp in metadata table
+- **Files affected**: None (already implemented across multiple files)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - `updateRecent()` at indexer.ts:196 stores timestamp: `this.db!.setMetadata('last_update', new Date().toISOString())`
+  - `getStats()` at database.ts:469-476 retrieves the value from metadata table
+  - `IndexerStats` interface at types.ts:110 includes `lastUpdateAt: string | null`
+  - `setMetadata()` at database.ts:535-542 and `getMetadata()` at database.ts:547-553 provide key-value storage
+  - Metadata table created in schema at database.ts:144-151 with key, value, updated_at columns
+- **Learnings for next cycles**:
+  - Patterns: The metadata table provides flexible key-value storage for timestamps and settings
+  - Patterns: `last_update` key stores ISO timestamp after each incremental update
+  - Patterns: Check getStats() return type and implementation to verify field presence
+  - Patterns: Task was implemented alongside updateRecent() functionality in earlier iterations
+  - Helpful context: US-007 Task 5 complete, remaining tasks (6-7): cron script, typecheck
+
+---
+

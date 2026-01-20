@@ -122,7 +122,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Compare content hash to detect duplicates
 - [x] Skip already-indexed decisions
 - [x] Log: "Found X new decisions in [database]"
-- [ ] Store lastUpdateAt timestamp
+- [x] Store lastUpdateAt timestamp
 - [ ] Script for daily cron job: `npm run daily-update`
 - [ ] Typecheck passes
 
