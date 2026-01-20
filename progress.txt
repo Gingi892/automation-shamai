@@ -1396,3 +1396,61 @@
   - Helpful context: US-010 Task 4 complete, remaining tasks: Log strategy (Task 5), Alert mechanism (Task 6), Typecheck (Task 7)
 
 ---
+
+## Iteration 60 — US-010 Task 5: Log which strategy succeeded
+- **What was done**: Enhanced fetchAndParse() to log a clear summary of which strategy succeeded after each page fetch
+- **Files affected**: `mcp-server/src/scraper.ts` (lines 1018-1024)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added final strategy logging after parseDecisions() completes
+  - Success log: `[Scraper] ✓ {database} page {N}: Strategy '{name}' succeeded ({count} items)`
+  - Failure log: `[Scraper] ✗ {database} page {N}: All strategies failed (0 items)`
+  - Uses existing `getLastStrategyUsed()` method to retrieve the strategy that worked
+  - Provides clear, at-a-glance visibility into which extraction path was used
+- **Learnings for next cycles**:
+  - Patterns: Final summary logging in fetchAndParse() complements per-strategy logging in parseDecisions()
+  - Patterns: Checkmark (✓) and cross (✗) provide visual distinction in log output
+  - Helpful context: US-010 Task 5 complete, remaining tasks: Alert mechanism (Task 6), Typecheck (Task 7)
+
+---
+
+## Iteration 61 — US-010 Task 6: Alert mechanism when primary strategy fails 3+ times
+- **What was done**: Implemented alert mechanism that triggers when css_primary strategy fails 3+ consecutive times
+- **Files affected**: `mcp-server/src/scraper.ts` (lines 59-75: new interfaces, lines 269-273: tracking fields, lines 319-385: methods)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `PrimaryStrategyAlert` interface with: consecutiveFailures, threshold, lastDatabase, lastPage, timestamp, message
+  - Added `AlertHandler` callback type for custom alert handling
+  - Private fields: `consecutivePrimaryFailures` counter, `PRIMARY_FAILURE_THRESHOLD = 3`, `alertHandler`, `alertTriggered` flag
+  - `handlePrimaryStrategyResult(success)` tracks consecutive failures and triggers alert at threshold
+  - Alert only fires once per failure sequence (reset by `alertTriggered` flag)
+  - Always logs to stderr with ⚠️ indicator; optionally calls custom handler
+  - Public methods: `setAlertHandler()`, `getConsecutivePrimaryFailures()`, `resetPrimaryFailureCount()`
+  - Integrated into `parseDecisions()` after primary strategy check
+- **Learnings for next cycles**:
+  - Patterns: Use `alertTriggered` flag to prevent repeated alerts in same failure sequence
+  - Patterns: Always log critical alerts to stderr in addition to custom handlers
+  - Patterns: Provide reset method for testing and manual intervention
+  - Helpful context: US-010 Task 6 complete, remaining task: Typecheck (Task 7)
+
+---
+
+## Iteration 62 — US-010 Task 7: Verify TypeScript type check passes
+- **What was done**: Ran TypeScript type check to validate US-010 completion
+- **Files affected**: None (validation only)
+- **Validation**: `npx tsc --noEmit` succeeds with no errors
+- **US-010 COMPLETE**: All acceptance criteria met:
+  - [x] Strategy 1: CSS selectors (primary)
+  - [x] Strategy 2: XPath patterns (fallback 1)
+  - [x] Strategy 3: Regex on raw HTML (fallback 2)
+  - [x] Strategy 4: Return cached data with warning (fallback 3)
+  - [x] Log which strategy succeeded
+  - [x] Alert mechanism when primary strategy fails 3+ times
+  - [x] Typecheck passes
+- **Learnings for next cycles**:
+  - Patterns: US-010 Tasks 1-6 were implemented across iterations 56-61
+  - Patterns: Task 7 (typecheck) serves as final validation gate for user story completion
+  - Patterns: Multi-strategy fallback system provides resilience against gov.il page structure changes
+  - Helpful context: US-010 complete - ALL PRD USER STORIES NOW COMPLETE
+
+---
