@@ -128,3 +128,19 @@
   - Patterns: Return recommended strategy to guide crawl behavior
   - Patterns: Include timestamp in health results for staleness tracking
   - Helpful context: Expected ~10 items per page based on gov.il pagination
+
+---
+
+## Iteration 6 — US-001 Task 6: Log warning when primary selectors fail but fallback succeeds
+- **What was done**: Verified existing implementation already logs warnings when fallback strategies are used
+- **Files affected**: None (already implemented in `mcp-server/src/scraper.ts` lines 275 and 285)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Line 275: `console.error('[Scraper] WARNING: Primary CSS selectors failed, structural selectors succeeded')`
+  - Line 285: `console.error('[Scraper] WARNING: All CSS selectors failed, using regex fallback')`
+  - Warnings are logged to stderr (not stdout) to preserve MCP stdio protocol
+  - `logStrategy()` method (lines 202-211) also logs success/failure for each strategy
+- **Learnings for next cycles**:
+  - Patterns: Check existing code before implementing - this was done in iteration 2
+  - Patterns: Always log to stderr in MCP servers to avoid corrupting protocol
+  - Helpful context: Multiple iterations may implement related acceptance criteria together
