@@ -353,8 +353,12 @@ export class DecisionDatabase {
     let decisions: Decision[];
     let totalCount: number;
 
+    let rankedByRelevance = false;
+
     if (useFts && ftsQuery) {
       // FTS5 query with relevance ranking using bm25()
+      rankedByRelevance = true;
+
       const countSql = `
         SELECT COUNT(*) as count
         FROM decisions d
@@ -378,10 +382,11 @@ export class DecisionDatabase {
       `;
 
       const rows = this.db.prepare(searchSql).all(ftsQuery, ...values, limit + 1, offset) as (DecisionRow & { relevance_score: number })[];
-      decisions = rows.slice(0, limit).map(row => rowToDecision(row));
+      // Pass relevance_score to rowToDecision for inclusion in Decision objects
+      decisions = rows.slice(0, limit).map(row => rowToDecision(row, row.relevance_score));
 
     } else {
-      // Standard query without FTS
+      // Standard query without FTS - no relevance ranking
       const countSql = `
         SELECT COUNT(*) as count FROM decisions d WHERE ${conditions.join(' AND ')}
       `;
@@ -405,7 +410,8 @@ export class DecisionDatabase {
       decisions,
       totalCount,
       hasMore,
-      query: params
+      query: params,
+      rankedByRelevance
     };
   }
 
