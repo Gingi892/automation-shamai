@@ -283,3 +283,42 @@
   - Patterns: Date comparisons work correctly with SQLite string comparison when using ISO format (YYYY-MM-DD)
   - Patterns: Date range was implemented in iteration 9 as part of better-sqlite3 migration
   - Helpful context: Check existing code for already-implemented features before starting work
+
+---
+
+## Iteration 14 — US-002 Task 6: Return results with relevance ranking
+- **What was done**: Added relevance score support to search results when using FTS5 full-text search
+- **Files affected**:
+  - `mcp-server/src/types.ts` (added relevanceScore to Decision, rankedByRelevance to SearchResult, updated rowToDecision)
+  - `mcp-server/src/database.ts` (updated search method to include scores and ranking flag)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added optional `relevanceScore?: number` field to `Decision` interface
+  - Added `rankedByRelevance: boolean` field to `SearchResult` interface
+  - Updated `rowToDecision()` to accept optional relevance score and normalize bm25 values
+  - bm25() returns negative scores (more negative = more relevant), so we negate to get positive scores
+  - `rankedByRelevance` is true only when FTS5 text search is used
+  - Non-FTS searches order by decision_date DESC, FTS searches order by bm25() ASC (most relevant first)
+- **Learnings for next cycles**:
+  - Patterns: bm25() returns negative values, negate to get positive relevance scores (higher = better)
+  - Patterns: Optional fields in TypeScript interfaces allow gradual data inclusion
+  - Patterns: Track whether ranking was applied so consumers know how results are ordered
+  - Traps: The `relevance_score` column from SQL query needs to match the row type
+  - Helpful context: FTS5 bm25() is efficient - no need for separate relevance computation
+
+---
+
+## Iteration 15 — US-002 Task 7: Index location ~/.gov-il-mcp/decisions.db
+- **What was done**: Verified existing implementation already uses correct default path for database
+- **Files affected**: None (already implemented in `mcp-server/src/database.ts` line 31)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Default database path in constructor: `path.join(os.homedir(), '.gov-il-mcp', 'decisions.db')`
+  - Uses `os.homedir()` for cross-platform home directory resolution
+  - Directory auto-created in `initialize()` method (lines 41-44) if not exists
+  - Path matches PRD specification: `~/.gov-il-mcp/decisions.db`
+- **Learnings for next cycles**:
+  - Patterns: Implementation was done in iteration 9 during better-sqlite3 migration
+  - Patterns: `os.homedir()` provides cross-platform home directory path
+  - Patterns: Always verify existing code before implementing - many tasks already complete
+  - Helpful context: The `getDbPath()` method (line 569-571) exposes the path for debugging

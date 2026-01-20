@@ -61,7 +61,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Support filtering by any combination of fields
 - [x] Support date range queries (fromDate, toDate)
 - [x] Return results with relevance ranking
-- [ ] Index location: `~/.gov-il-mcp/decisions.db`
+- [x] Index location: `~/.gov-il-mcp/decisions.db`
 - [ ] Typecheck passes
 
 ### US-003: Implement PDF text extraction
