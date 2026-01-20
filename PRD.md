@@ -153,7 +153,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 
 **Acceptance Criteria:**
 - [x] Strategy 1: CSS selectors (primary)
-- [ ] Strategy 2: XPath patterns (fallback 1)
+- [x] Strategy 2: XPath patterns (fallback 1)
 - [ ] Strategy 3: Regex on raw HTML (fallback 2)
 - [ ] Strategy 4: Return cached data with warning (fallback 3)
 - [ ] Log which strategy succeeded

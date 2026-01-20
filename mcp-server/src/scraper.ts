@@ -21,8 +21,9 @@ export interface ScraperOptions {
 
 /**
  * Selector strategy types for fallback system
+ * Order: css_primary → xpath_patterns → css_structural → regex_fallback
  */
-export type SelectorStrategyType = 'css_primary' | 'css_structural' | 'regex_fallback';
+export type SelectorStrategyType = 'css_primary' | 'xpath_patterns' | 'css_structural' | 'regex_fallback';
 
 export interface SelectorStrategyResult {
   strategy: SelectorStrategyType;
@@ -39,12 +40,26 @@ export interface SelectorHealthResult {
   timestamp: string;
   strategies: {
     css_primary: { working: boolean; itemCount: number };
+    xpath_patterns: { working: boolean; itemCount: number };
     css_structural: { working: boolean; itemCount: number };
     regex_fallback: { working: boolean; itemCount: number };
   };
   recommendedStrategy: SelectorStrategyType | null;
   warnings: string[];
   error?: string;
+}
+
+/**
+ * XPath-like pattern for DOM traversal
+ * Simplified XPath syntax: /tag[@attr=value]/child/...
+ */
+interface XPathPattern {
+  // Path segments from root/context, e.g., ['div', 'ul', 'li']
+  path: string[];
+  // Attribute constraints for container matching
+  attributes?: { [key: string]: string | RegExp };
+  // Element text content pattern (optional)
+  textPattern?: RegExp;
 }
 
 /**
@@ -57,6 +72,13 @@ interface SelectorConfig {
     title: string[];
     pdfLink: string[];
     date: string[];
+  };
+  // XPath-like patterns (path-based, resilient to class changes)
+  xpath: {
+    container: XPathPattern[];
+    title: XPathPattern[];
+    pdfLink: XPathPattern[];
+    date: XPathPattern[];
   };
   // Structural CSS selectors (tag/attribute-based, less fragile)
   structural: {
@@ -107,6 +129,53 @@ const DEFAULT_SELECTORS: SelectorConfig = {
       '.publish-date',
       'span.date',
       '.decision-date'
+    ]
+  },
+  // XPath-like patterns based on DOM structure (resilient to class name changes)
+  xpath: {
+    container: [
+      // Pattern: //main//div[contains child heading and link]
+      { path: ['main', 'div', 'div'], attributes: { 'data-ng-repeat': /.*/ } },
+      // Pattern: //body//div[@ng-repeat]
+      { path: ['body', 'div', 'div'], attributes: { 'ng-repeat': /.*/ } },
+      // Pattern: //ul/li (list-based layouts)
+      { path: ['main', 'ul', 'li'] },
+      { path: ['div', 'ul', 'li'] },
+      // Pattern: //table/tbody/tr (table-based layouts)
+      { path: ['table', 'tbody', 'tr'] },
+      // Pattern: //section/div (section-based layouts)
+      { path: ['section', 'div'] },
+      // Pattern: //article (semantic HTML)
+      { path: ['article'] }
+    ],
+    title: [
+      // Pattern: //h3[contains Hebrew text]
+      { path: ['h3'], textPattern: /[\u0590-\u05FF]{5,}/ },
+      // Pattern: //h4[contains Hebrew text]
+      { path: ['h4'], textPattern: /[\u0590-\u05FF]{5,}/ },
+      // Pattern: //a[contains Hebrew text and href to gov.il]
+      { path: ['a'], attributes: { 'href': /gov\.il/ }, textPattern: /[\u0590-\u05FF]{5,}/ },
+      // Pattern: //strong or //b with Hebrew decision text
+      { path: ['strong'], textPattern: /הכרעת|החלטה|ערעור|ערר/ },
+      { path: ['b'], textPattern: /הכרעת|החלטה|ערעור|ערר/ }
+    ],
+    pdfLink: [
+      // Pattern: //a[@href contains 'pdf']
+      { path: ['a'], attributes: { 'href': /\.pdf/i } },
+      // Pattern: //a[@href contains 'free-justice']
+      { path: ['a'], attributes: { 'href': /free-justice\.openapi\.gov\.il/ } },
+      // Pattern: //a[@href contains 'openapi']
+      { path: ['a'], attributes: { 'href': /openapi\.gov\.il/ } },
+      // Pattern: //a[@target='_blank'] (common for document links)
+      { path: ['a'], attributes: { 'target': '_blank', 'href': /gov\.il/ } }
+    ],
+    date: [
+      // Pattern: //bdi[contains date text]
+      { path: ['bdi'], textPattern: /\d{1,2}[./-]\d{1,2}[./-]\d{4}/ },
+      // Pattern: //time[@datetime]
+      { path: ['time'], attributes: { 'datetime': /.*/ } },
+      // Pattern: //span[contains date pattern]
+      { path: ['span'], textPattern: /\d{1,2}[./-]\d{1,2}[./-]\d{4}/ }
     ]
   },
   structural: {
@@ -178,6 +247,7 @@ export class GovIlScraper {
 
     // Initialize strategy stats
     this.strategyStats.set('css_primary', { success: 0, fail: 0 });
+    this.strategyStats.set('xpath_patterns', { success: 0, fail: 0 });
     this.strategyStats.set('css_structural', { success: 0, fail: 0 });
     this.strategyStats.set('regex_fallback', { success: 0, fail: 0 });
   }
@@ -255,7 +325,7 @@ export class GovIlScraper {
 
   /**
    * Parse decisions from HTML page using multi-strategy fallback system
-   * Strategy order: 1) CSS Primary, 2) CSS Structural, 3) Regex fallback
+   * Strategy order: 1) CSS Primary, 2) XPath Patterns, 3) CSS Structural, 4) Regex fallback
    */
   parseDecisions(html: string, database: DatabaseType): ParsedDecision[] {
     // Strategy 1: CSS Primary selectors (class-based)
@@ -267,22 +337,32 @@ export class GovIlScraper {
     }
     this.logStrategy('css_primary', false, 0);
 
-    // Strategy 2: CSS Structural selectors (tag/attribute-based, more resilient)
+    // Strategy 2: XPath patterns (path-based, resilient to class changes)
+    decisions = this.parseWithXPathPatterns(html, database);
+    if (decisions.length > 0) {
+      this.lastStrategyUsed = 'xpath_patterns';
+      this.logStrategy('xpath_patterns', true, decisions.length);
+      console.error(`[Scraper] WARNING: Primary CSS selectors failed, XPath patterns succeeded`);
+      return decisions;
+    }
+    this.logStrategy('xpath_patterns', false, 0);
+
+    // Strategy 3: CSS Structural selectors (tag/attribute-based, more resilient)
     decisions = this.parseWithCssStructural(html, database);
     if (decisions.length > 0) {
       this.lastStrategyUsed = 'css_structural';
       this.logStrategy('css_structural', true, decisions.length);
-      console.error(`[Scraper] WARNING: Primary CSS selectors failed, structural selectors succeeded`);
+      console.error(`[Scraper] WARNING: Primary and XPath selectors failed, structural selectors succeeded`);
       return decisions;
     }
     this.logStrategy('css_structural', false, 0);
 
-    // Strategy 3: Regex fallback on raw HTML
+    // Strategy 4: Regex fallback on raw HTML
     decisions = this.parseWithRegex(html, database);
     if (decisions.length > 0) {
       this.lastStrategyUsed = 'regex_fallback';
       this.logStrategy('regex_fallback', true, decisions.length);
-      console.error(`[Scraper] WARNING: All CSS selectors failed, using regex fallback`);
+      console.error(`[Scraper] WARNING: All CSS and XPath selectors failed, using regex fallback`);
       return decisions;
     }
     this.logStrategy('regex_fallback', false, 0);
@@ -355,7 +435,178 @@ export class GovIlScraper {
   }
 
   /**
-   * Strategy 2: Parse using structural CSS selectors (tag/attribute-based)
+   * Strategy 2: Parse using XPath-like patterns (path-based, resilient to class changes)
+   * Uses DOM path traversal to find elements based on structure rather than class names
+   */
+  private parseWithXPathPatterns(html: string, database: DatabaseType): ParsedDecision[] {
+    const $ = cheerio.load(html);
+    const decisions: ParsedDecision[] = [];
+
+    // Try each XPath container pattern
+    for (const containerPattern of this.selectors.xpath.container) {
+      const containers = this.findElementsByXPathPattern($, containerPattern);
+
+      for (const container of containers) {
+        const $container = $(container);
+        const decision = this.extractDecisionFromXPathElement($, $container, database);
+        if (decision) {
+          decisions.push(decision);
+        }
+      }
+
+      if (decisions.length > 0) {
+        break; // Found items with this pattern
+      }
+    }
+
+    return decisions;
+  }
+
+  /**
+   * Find elements matching an XPath-like pattern
+   * Traverses DOM based on path segments and attribute constraints
+   */
+  private findElementsByXPathPattern($: cheerio.CheerioAPI, pattern: XPathPattern): cheerio.Element[] {
+    const results: cheerio.Element[] = [];
+
+    // Build a CSS selector from the path
+    // e.g., ['main', 'div', 'div'] becomes 'main div div'
+    const pathSelector = pattern.path.join(' ');
+
+    $(pathSelector).each((_, element) => {
+      // Check attribute constraints
+      if (pattern.attributes) {
+        let matchesAllAttrs = true;
+        for (const [attrName, attrValue] of Object.entries(pattern.attributes)) {
+          const elemAttr = $(element).attr(attrName);
+          if (elemAttr === undefined) {
+            matchesAllAttrs = false;
+            break;
+          }
+          if (attrValue instanceof RegExp) {
+            if (!attrValue.test(elemAttr)) {
+              matchesAllAttrs = false;
+              break;
+            }
+          } else if (elemAttr !== attrValue) {
+            matchesAllAttrs = false;
+            break;
+          }
+        }
+        if (!matchesAllAttrs) return;
+      }
+
+      // Check text content pattern
+      if (pattern.textPattern) {
+        const text = $(element).text().trim();
+        if (!pattern.textPattern.test(text)) return;
+      }
+
+      results.push(element);
+    });
+
+    return results;
+  }
+
+  /**
+   * Extract decision data from an element found via XPath pattern
+   */
+  private extractDecisionFromXPathElement(
+    $: cheerio.CheerioAPI,
+    $container: ReturnType<cheerio.CheerioAPI>,
+    database: DatabaseType
+  ): ParsedDecision | null {
+    // Try to extract title using XPath title patterns
+    let title = '';
+    for (const titlePattern of this.selectors.xpath.title) {
+      const titleElements = this.findElementsByXPathPattern($, titlePattern);
+      for (const titleEl of titleElements) {
+        // Only consider elements within or matching the container
+        if ($container.find(titleEl).length > 0 || $container.is(titleEl)) {
+          const text = $(titleEl).text().trim();
+          if (text && text.length >= 5) {
+            title = text;
+            break;
+          }
+        }
+      }
+      if (title) break;
+    }
+
+    // Fallback: try h3, h4, a within container
+    if (!title || title.length < 5) {
+      title = $container.find('h3').first().text().trim() ||
+              $container.find('h4').first().text().trim() ||
+              $container.find('a').first().text().trim();
+    }
+
+    if (!title || title.length < 5) return null;
+
+    // Extract PDF URL using XPath patterns
+    let url: string | null = null;
+    for (const pdfPattern of this.selectors.xpath.pdfLink) {
+      const pdfElements = this.findElementsByXPathPattern($, pdfPattern);
+      for (const pdfEl of pdfElements) {
+        if ($container.find(pdfEl).length > 0 || $container.is(pdfEl)) {
+          const href = $(pdfEl).attr('href');
+          if (href) {
+            url = href.startsWith('http') ? href : `https://free-justice.openapi.gov.il${href}`;
+            break;
+          }
+        }
+      }
+      if (url) break;
+    }
+
+    // Fallback: find any PDF link in container
+    if (!url) {
+      const anyPdfLink = $container.find('a[href*=".pdf"], a[href*="gov.il"]').first().attr('href');
+      if (anyPdfLink) {
+        url = anyPdfLink.startsWith('http') ? anyPdfLink : `https://free-justice.openapi.gov.il${anyPdfLink}`;
+      }
+    }
+
+    // Extract date using XPath patterns
+    let publishDate: string | null = null;
+    for (const datePattern of this.selectors.xpath.date) {
+      const dateElements = this.findElementsByXPathPattern($, datePattern);
+      for (const dateEl of dateElements) {
+        if ($container.find(dateEl).length > 0 || $container.is(dateEl)) {
+          const text = $(dateEl).text().trim();
+          const dateMatch = text.match(/(\d{1,2}[./-]\d{1,2}[./-]\d{4})/);
+          if (dateMatch) {
+            publishDate = dateMatch[1];
+            break;
+          }
+          // Also check datetime attribute
+          const datetime = $(dateEl).attr('datetime');
+          if (datetime) {
+            publishDate = datetime;
+            break;
+          }
+        }
+      }
+      if (publishDate) break;
+    }
+
+    // Parse Hebrew title for metadata
+    const metadata = this.parseTitleMetadata(title, database);
+
+    return {
+      title,
+      url,
+      block: metadata.block ?? null,
+      plot: metadata.plot ?? null,
+      committee: metadata.committee ?? null,
+      appraiser: metadata.appraiser ?? null,
+      caseType: metadata.caseType ?? null,
+      decisionDate: metadata.decisionDate ?? null,
+      publishDate
+    };
+  }
+
+  /**
+   * Strategy 3: Parse using structural CSS selectors (tag/attribute-based)
    */
   private parseWithCssStructural(html: string, database: DatabaseType): ParsedDecision[] {
     const $ = cheerio.load(html);
@@ -380,7 +631,7 @@ export class GovIlScraper {
   }
 
   /**
-   * Strategy 3: Parse using regex patterns on raw HTML
+   * Strategy 4: Parse using regex patterns on raw HTML
    */
   private parseWithRegex(html: string, database: DatabaseType): ParsedDecision[] {
     const decisions: ParsedDecision[] = [];
@@ -771,6 +1022,7 @@ export class GovIlScraper {
       timestamp: new Date().toISOString(),
       strategies: {
         css_primary: { working: false, itemCount: 0 },
+        xpath_patterns: { working: false, itemCount: 0 },
         css_structural: { working: false, itemCount: 0 },
         regex_fallback: { working: false, itemCount: 0 }
       },
@@ -796,6 +1048,13 @@ export class GovIlScraper {
         itemCount: primaryDecisions.length
       };
 
+      // Test XPath Patterns strategy
+      const xpathDecisions = this.parseWithXPathPatterns(html, database);
+      result.strategies.xpath_patterns = {
+        working: xpathDecisions.length > 0,
+        itemCount: xpathDecisions.length
+      };
+
       // Test CSS Structural strategy
       const structuralDecisions = this.parseWithCssStructural(html, database);
       result.strategies.css_structural = {
@@ -810,18 +1069,22 @@ export class GovIlScraper {
         itemCount: regexDecisions.length
       };
 
-      // Determine overall health and recommended strategy
+      // Determine overall health and recommended strategy (in priority order)
       if (result.strategies.css_primary.working) {
         result.healthy = true;
         result.recommendedStrategy = 'css_primary';
+      } else if (result.strategies.xpath_patterns.working) {
+        result.healthy = true;
+        result.recommendedStrategy = 'xpath_patterns';
+        result.warnings.push('Primary CSS selectors failed - using XPath patterns');
       } else if (result.strategies.css_structural.working) {
         result.healthy = true;
         result.recommendedStrategy = 'css_structural';
-        result.warnings.push('Primary CSS selectors failed - using structural selectors');
+        result.warnings.push('Primary and XPath selectors failed - using structural selectors');
       } else if (result.strategies.regex_fallback.working) {
         result.healthy = true;
         result.recommendedStrategy = 'regex_fallback';
-        result.warnings.push('All CSS selectors failed - using regex fallback (less reliable)');
+        result.warnings.push('All CSS and XPath selectors failed - using regex fallback (less reliable)');
       } else {
         result.healthy = false;
         result.warnings.push('All extraction strategies failed - selectors need updating');
