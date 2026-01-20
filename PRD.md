@@ -62,7 +62,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Support date range queries (fromDate, toDate)
 - [x] Return results with relevance ranking
 - [x] Index location: `~/.gov-il-mcp/decisions.db`
-- [ ] Typecheck passes
+- [x] Typecheck passes
 
 ### US-003: Implement PDF text extraction
 **Description:** As a developer, I want to extract text from decision PDFs, so that Claude can answer questions about the actual decision content.

@@ -322,3 +322,23 @@
   - Patterns: `os.homedir()` provides cross-platform home directory path
   - Patterns: Always verify existing code before implementing - many tasks already complete
   - Helpful context: The `getDbPath()` method (line 569-571) exposes the path for debugging
+
+---
+
+## Iteration 16 — US-002 Task 8: Verify TypeScript type check passes
+- **What was done**: Ran TypeScript type check to validate US-002 completion
+- **Files affected**: None (validation only)
+- **Validation**: `npx tsc --noEmit` succeeds with no errors
+- **US-002 COMPLETE**: All acceptance criteria met:
+  - [x] SQLite database with FTS5 extension for Hebrew text search
+  - [x] Table schema: id, database, title, url, block, plot, committee, appraiser, caseType, decisionDate, publishDate, contentHash, indexedAt
+  - [x] FTS5 virtual table indexing: title, committee, appraiser, caseType
+  - [x] Support filtering by any combination of fields
+  - [x] Support date range queries (fromDate, toDate)
+  - [x] Return results with relevance ranking
+  - [x] Index location: `~/.gov-il-mcp/decisions.db`
+  - [x] Typecheck passes
+- **Learnings for next cycles**:
+  - Patterns: better-sqlite3 migration in iteration 9 laid foundation for all US-002 criteria
+  - Patterns: Many tasks were already implemented as side effects of earlier iterations
+  - Helpful context: US-002 complete, ready to proceed to US-003 (PDF text extraction)
