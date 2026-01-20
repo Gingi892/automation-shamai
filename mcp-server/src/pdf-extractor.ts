@@ -7,6 +7,169 @@
 
 import pdf from 'pdf-parse';
 
+/**
+ * Hebrew RTL Text Processing Utilities
+ * Handles proper normalization and cleanup of Hebrew text from PDFs
+ */
+
+// Unicode ranges for Hebrew characters
+const HEBREW_RANGE_START = 0x0590;
+const HEBREW_RANGE_END = 0x05FF;
+
+// RTL control characters
+const RTL_MARK = '\u200F';           // Right-to-Left Mark
+const LTR_MARK = '\u200E';           // Left-to-Right Mark
+const RTL_EMBEDDING = '\u202B';      // Right-to-Left Embedding
+const LTR_EMBEDDING = '\u202A';      // Left-to-Right Embedding
+const POP_DIRECTIONAL = '\u202C';    // Pop Directional Formatting
+const RTL_OVERRIDE = '\u202E';       // Right-to-Left Override
+const LTR_OVERRIDE = '\u202D';       // Left-to-Right Override
+const RTL_ISOLATE = '\u2067';        // Right-to-Left Isolate
+const LTR_ISOLATE = '\u2066';        // Left-to-Right Isolate
+const POP_ISOLATE = '\u2069';        // Pop Directional Isolate
+const FIRST_STRONG_ISOLATE = '\u2068'; // First Strong Isolate
+
+/**
+ * Check if a character is a Hebrew letter
+ */
+function isHebrewChar(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return code >= HEBREW_RANGE_START && code <= HEBREW_RANGE_END;
+}
+
+/**
+ * Check if a string contains Hebrew characters
+ */
+function containsHebrew(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    if (isHebrewChar(text[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Remove all Unicode directional control characters
+ * These can cause display issues and are not needed in extracted text
+ */
+function removeDirectionalControls(text: string): string {
+  const directionalChars = [
+    RTL_MARK, LTR_MARK, RTL_EMBEDDING, LTR_EMBEDDING,
+    POP_DIRECTIONAL, RTL_OVERRIDE, LTR_OVERRIDE,
+    RTL_ISOLATE, LTR_ISOLATE, POP_ISOLATE, FIRST_STRONG_ISOLATE
+  ];
+
+  let result = text;
+  for (const char of directionalChars) {
+    result = result.split(char).join('');
+  }
+  return result;
+}
+
+/**
+ * Normalize Hebrew final letters (sofit forms)
+ * PDF extraction sometimes produces incorrect final form usage
+ */
+function normalizeHebrewFinalLetters(text: string): string {
+  // Map of final forms to their regular counterparts for checking context
+  // Final letters should only appear at end of words
+  const finalLetters: Record<string, string> = {
+    'ך': 'כ',  // Final Kaf
+    'ם': 'מ',  // Final Mem
+    'ן': 'נ',  // Final Nun
+    'ף': 'פ',  // Final Pe
+    'ץ': 'צ'   // Final Tsadi
+  };
+
+  const regularToFinal: Record<string, string> = {
+    'כ': 'ך',
+    'מ': 'ם',
+    'נ': 'ן',
+    'פ': 'ף',
+    'צ': 'ץ'
+  };
+
+  const result: string[] = [];
+  const chars = [...text];
+
+  for (let i = 0; i < chars.length; i++) {
+    const char = chars[i];
+    const nextChar = chars[i + 1];
+    const isEndOfWord = !nextChar || !isHebrewChar(nextChar);
+
+    // If this is a final letter in the middle of a word, convert to regular form
+    if (finalLetters[char] && !isEndOfWord) {
+      result.push(finalLetters[char]);
+    }
+    // If this is a regular letter at the end of a word, convert to final form
+    else if (regularToFinal[char] && isEndOfWord) {
+      result.push(regularToFinal[char]);
+    }
+    else {
+      result.push(char);
+    }
+  }
+
+  return result.join('');
+}
+
+/**
+ * Clean up common PDF extraction artifacts in Hebrew text
+ */
+function cleanHebrewPdfArtifacts(text: string): string {
+  let result = text;
+
+  // Remove zero-width characters that PDF extraction sometimes leaves
+  result = result.replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+  // Normalize multiple spaces to single space
+  result = result.replace(/  +/g, ' ');
+
+  // Fix common Hebrew punctuation issues
+  // Hebrew uses different quote marks than English
+  result = result.replace(/״/g, '"');  // Gershayim to double quote
+  result = result.replace(/׳/g, "'");  // Geresh to single quote
+
+  // Clean up line breaks - PDF often has excessive line breaks
+  // Replace single line breaks with space, keep double for paragraphs
+  result = result.replace(/([^\n])\n([^\n])/g, '$1 $2');
+  result = result.replace(/\n{3,}/g, '\n\n');
+
+  // Trim whitespace from each line
+  result = result.split('\n').map(line => line.trim()).join('\n');
+
+  // Remove empty lines at start/end
+  result = result.trim();
+
+  return result;
+}
+
+/**
+ * Process Hebrew RTL text from PDF extraction
+ * Main function that applies all Hebrew text normalization
+ */
+function processHebrewText(text: string): string {
+  if (!text || !containsHebrew(text)) {
+    return text;
+  }
+
+  console.error('[PdfExtractor] Processing Hebrew RTL text');
+
+  let processed = text;
+
+  // Step 1: Remove directional control characters
+  processed = removeDirectionalControls(processed);
+
+  // Step 2: Normalize Hebrew final letters
+  processed = normalizeHebrewFinalLetters(processed);
+
+  // Step 3: Clean up PDF extraction artifacts
+  processed = cleanHebrewPdfArtifacts(processed);
+
+  return processed;
+}
+
 export interface PdfExtractionResult {
   fullText: string;
   pageCount: number;
@@ -111,9 +274,9 @@ export class PdfExtractor {
     try {
       const data = await pdf(pdfBuffer, options);
 
-      // Hebrew text handling: pdf-parse returns text in logical order
-      // which works correctly for RTL Hebrew text
-      const fullText = data.text;
+      // Process Hebrew RTL text - normalizes final letters, removes
+      // directional controls, and cleans up PDF extraction artifacts
+      const fullText = processHebrewText(data.text);
 
       const extractedPages = this.maxPages > 0
         ? Math.min(this.maxPages, data.numpages)

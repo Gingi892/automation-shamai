@@ -70,7 +70,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Acceptance Criteria:**
 - [x] Download PDF using ScraperAPI (handles any blocking)
 - [x] Extract text using pdf-parse library
-- [ ] Handle Hebrew RTL text properly
+- [x] Handle Hebrew RTL text properly
 - [ ] Cache extracted text in database (avoid re-downloading)
 - [ ] Support partial extraction (first N pages) for large PDFs
 - [ ] Return structured output: { fullText, pageCount, extractedPages }

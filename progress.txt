@@ -385,3 +385,25 @@
   - Patterns: `data.text` contains all extracted text, `data.numpages` is total page count
   - Patterns: Implementation was done in iteration 17 as part of PDF download task
   - Helpful context: pdf-parse returns text in logical order which works correctly for RTL Hebrew
+
+---
+
+## Iteration 19 — US-003 Task 3: Handle Hebrew RTL text properly
+- **What was done**: Implemented comprehensive Hebrew RTL text processing in pdf-extractor.ts
+- **Files affected**: `mcp-server/src/pdf-extractor.ts` (added ~130 lines of Hebrew text processing utilities)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added Unicode constants for Hebrew range (0x0590-0x05FF) and RTL control characters
+  - `isHebrewChar()` and `containsHebrew()` helper functions for character detection
+  - `removeDirectionalControls()` strips all Unicode directional markers (RTL/LTR marks, embeddings, isolates)
+  - `normalizeHebrewFinalLetters()` fixes misplaced sofit forms (ך,ם,ן,ף,ץ) - converts finals mid-word to regular and regular at word-end to final
+  - `cleanHebrewPdfArtifacts()` handles: zero-width characters, multiple spaces, Hebrew punctuation (״→", ׳→'), excessive line breaks
+  - `processHebrewText()` orchestrates all processing steps, only runs if text contains Hebrew
+  - Updated `extractText()` method to use `processHebrewText()` on pdf-parse output
+- **Learnings for next cycles**:
+  - Patterns: Hebrew final letters (sofit) are: ך(כ), ם(מ), ן(נ), ף(פ), ץ(צ)
+  - Patterns: Use `[...text]` spread to properly iterate Hebrew characters (handles multi-byte)
+  - Patterns: Hebrew punctuation (Gershayim ״, Geresh ׳) differs from ASCII quotes
+  - Traps: Unicode directional controls (RTL marks, embeddings) can cause display issues - strip them
+  - Traps: PDF extraction often produces excessive line breaks and spacing artifacts
+  - Helpful context: Hebrew Unicode range is 0x0590-0x05FF (includes letters, vowels, cantillation)
