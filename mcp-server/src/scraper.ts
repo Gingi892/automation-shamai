@@ -1014,6 +1014,15 @@ export class GovIlScraper {
 
     const html = await this.fetchPage(database, page);
     const parsed = this.parseDecisions(html, database);
+
+    // Log final strategy used for this fetch operation
+    const strategyUsed = this.getLastStrategyUsed();
+    if (strategyUsed) {
+      console.error(`[Scraper] ✓ ${database} page ${page}: Strategy '${strategyUsed}' succeeded (${parsed.length} items)`);
+    } else {
+      console.error(`[Scraper] ✗ ${database} page ${page}: All strategies failed (0 items)`);
+    }
+
     return parsed.map(p => this.toDecision(p, database));
   }
 

@@ -1282,6 +1282,38 @@
 
 ---
 
+## Iteration 57 — US-010 Task 2: Strategy 2: XPath patterns (fallback 1)
+- **What was done**: Implemented XPath-like pattern matching as the second fallback strategy for DOM element extraction
+- **Files affected**: `mcp-server/src/scraper.ts` (added ~250 lines)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `XPathPattern` interface with: path (string[]), attributes (Record), textPattern (RegExp)
+  - Added `xpath` configuration to `SelectorConfig` interface
+  - Defined XPath patterns in `DEFAULT_SELECTORS.xpath` for containers, titles, PDF links, dates:
+    - Container patterns: `['main', 'div', 'div']` with ng-repeat attr, `['table', 'tbody', 'tr']`, `['article']`
+    - Title patterns: `['h3']` with Hebrew text pattern, `['a']` with gov.il href
+    - PDF link patterns: `['a']` with .pdf or gov.il href attributes
+    - Date patterns: `['bdi']` with date text pattern, `['time']` with datetime attr
+  - Added `parseWithXPathPatterns()` method (lines 441-462)
+  - Added `findElementsByXPathPattern()` helper for matching elements by path + attributes + text patterns
+  - Added `extractDecisionFromXPathElement()` for extracting decision data from matched containers
+  - Updated `parseDecisions()` to include XPath as Strategy 2 in cascade
+  - Updated `SelectorStrategyType` to include 'xpath_patterns'
+  - Updated `SelectorHealthResult.strategies` to include xpath_patterns
+  - Updated `checkSelectorHealth()` to test XPath strategy
+  - Updated constructor to initialize xpath_patterns stats
+- **Learnings for next cycles**:
+  - Patterns: Cheerio doesn't natively support XPath, but path-based CSS selectors (tag chains) work similarly
+  - Patterns: XPath-like patterns use path array ['parent', 'child', 'grandchild'] joined as CSS selector
+  - Patterns: Attribute matching with regex allows flexible constraints (e.g., `{ 'ng-repeat': /.*/ }`)
+  - Patterns: Text content patterns (textPattern) filter elements by text content matching
+  - Patterns: The strategy order is now: css_primary → xpath_patterns → css_structural → regex_fallback
+  - Traps: When using instanceof RegExp check, ensure attributes object values can be string OR RegExp
+  - Traps: `$container.is(element)` checks if container matches element, `$container.find(element)` finds within
+  - Helpful context: US-010 Task 2 complete, remaining tasks: Regex (Task 3, already implemented), Cached data (Task 4), Logging (Task 5), Alert (Task 6), Typecheck (Task 7)
+
+---
+
 ## Iteration 56 — US-010 Task 1: Strategy 1: CSS selectors (primary)
 - **What was done**: Verified existing implementation already provides CSS primary selectors strategy
 - **Files affected**: None (already implemented in `mcp-server/src/scraper.ts` during US-001 Iteration 2)
@@ -1303,3 +1335,64 @@
 
 ---
 
+## Iteration 58 — US-010 Task 3: Strategy 3: Regex on raw HTML (fallback 2)
+- **What was done**: Verified existing implementation already provides complete regex fallback strategy
+- **Files affected**: None (already implemented in `mcp-server/src/scraper.ts`)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation verified**:
+  - `DEFAULT_SELECTORS.regex` at scraper.ts:210-228:
+    - `title`: 6 regex patterns for Hebrew decision titles (`/הכרעת שמאי/`, `/החלטת ועד/`, `/ערעור/`, h3/h4 tags, JSON title field)
+    - `pdfUrl`: 3 regex patterns for PDF URLs (free-justice.openapi.gov.il, .gov.il, href attributes)
+    - `date`: 2 regex patterns for dates (DD/MM/YYYY and YYYY-MM-DD formats)
+  - `parseWithRegex()` method at scraper.ts:636-703:
+    - Extracts titles using regex patterns with HTML tag cleaning
+    - Extracts PDF URLs with href attribute parsing
+    - Extracts dates using date patterns
+    - Combines extracted data into ParsedDecision objects
+    - Uses `parseTitleMetadata()` for Hebrew title metadata extraction
+  - Strategy cascade at scraper.ts:361-368: Regex is Strategy 4 (fallback 2) after CSS and XPath fail
+  - Health check at scraper.ts:1066-1087: Tests regex strategy in `checkSelectorHealth()`
+- **Learnings for next cycles**:
+  - Patterns: Regex fallback was implemented as part of US-001 multi-strategy system
+  - Patterns: US-010 tasks heavily overlap with US-001 implementation - always verify first
+  - Patterns: Regex uses global flag (/g) for multiple matches in single HTML document
+  - Patterns: Title length validation (10-300 chars) prevents false positives from short/long matches
+  - Patterns: URL normalization handles relative URLs by prepending `https:` or `https://free-justice.openapi.gov.il`
+  - Helpful context: US-010 Task 3 complete, remaining tasks: Cached data (Task 4), Logging (Task 5), Alert (Task 6), Typecheck (Task 7)
+
+---
+
+
+## Iteration 59 — US-010 Task 4: Strategy 4: Return cached data with warning (fallback 3)
+- **What was done**: Implemented cached data fallback as the final strategy when all extraction strategies fail
+- **Files affected**: 
+  - `mcp-server/src/scraper.ts` (added ~60 lines: CachedDataProvider type, methods, parseDecisions fallback, health check)
+  - `mcp-server/src/indexer.ts` (added ~40 lines: createCachedDataProvider method, initialize integration)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added `cached_data` to `SelectorStrategyType` union (line 26)
+  - Added `CachedDataProvider` callback type: `(database, page, pageSize) => ParsedDecision[]`
+  - Added to GovIlScraper class:
+    - `cachedDataProvider: CachedDataProvider | null` property
+    - `currentPage` and `currentDatabase` context tracking
+    - `setCachedDataProvider()` and `getCachedDataProvider()` methods
+    - Strategy 5 block in `parseDecisions()` (lines 396-408)
+  - Updated `fetchAndParse()` to set context before parsing (lines 1011-1013)
+  - Updated `SelectorHealthResult.strategies` to include `cached_data`
+  - Updated `checkSelectorHealth()`:
+    - Tests cached data availability (lines 1116-1122)
+    - Reports cached_data as NOT healthy (since live data unavailable)
+    - Adds warning messages about stale data
+  - Indexer integration:
+    - Imports `CachedDataProvider` and `ParsedDecision` from modules
+    - `initialize()` calls `setCachedDataProvider()` with provider
+    - `createCachedDataProvider()` retrieves decisions via `db.search()`
+- **Learnings for next cycles**:
+  - Patterns: Cached data fallback uses callback pattern to decouple scraper from database
+  - Patterns: Context tracking (currentPage, currentDatabase) needed because parseDecisions doesn't take page param
+  - Patterns: Health check should NOT mark system as healthy when using cached data (stale data warning)
+  - Patterns: Convert Decision objects to ParsedDecision format when returning cached data
+  - Traps: Don't forget to initialize strategyStats for new strategy in constructor
+  - Helpful context: US-010 Task 4 complete, remaining tasks: Log strategy (Task 5), Alert mechanism (Task 6), Typecheck (Task 7)
+
+---
