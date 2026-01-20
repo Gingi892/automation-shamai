@@ -726,6 +726,59 @@ When decisions array is empty:
       },
       required: ['question', 'decisions']
     }
+  },
+  {
+    name: 'health_check',
+    description: `בדיקת תקינות השרת והתקנה / Verify MCP server setup and health status.
+
+## מתי להשתמש / When to Use
+- After first installation to verify setup is complete
+- When troubleshooting connection issues
+- When Claude appears unable to access decisions
+- To check if database is populated
+- To verify SCRAPER_API_KEY is configured for live updates
+
+## מה נבדק / What Is Checked
+| Component | Check | Description |
+|-----------|-------|-------------|
+| Database | Connection | Can connect to SQLite database |
+| Database | Populated | Has decisions indexed |
+| Database | FTS5 | Full-text search working |
+| API Key | Configured | SCRAPER_API_KEY set for updates |
+| Embeddings | Available | ChromaDB/semantic search ready |
+
+## פלט / Output Format
+{
+  "healthy": true,
+  "status": {
+    "database": { "connected": true, "decisionCount": 10500, "fts5Working": true },
+    "scraperApi": { "configured": true },
+    "embeddings": { "available": true },
+    "server": { "version": "2.0.0", "uptime": "5m" }
+  },
+  "issues": [],
+  "suggestions": []
+}
+
+## פלט עם בעיות / Output with Issues
+{
+  "healthy": false,
+  "status": { ... },
+  "issues": ["Database is empty - run npm run index-all"],
+  "issuesHe": ["מסד הנתונים ריק - הרץ npm run index-all"],
+  "suggestions": ["Set SCRAPER_API_KEY for live updates"],
+  "suggestionsHe": ["הגדר SCRAPER_API_KEY לעדכונים חיים"]
+}`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        verbose: {
+          type: 'boolean',
+          description: 'פירוט מלא כולל סטטיסטיקות לפי מאגר / Include detailed statistics per database',
+          default: false
+        }
+      }
+    }
   }
 ];
 
@@ -1156,6 +1209,142 @@ async function handleTriggerUpdate(params: { pagesToCheck?: number }): Promise<M
       isError: true
     };
   }
+}
+
+async function handleHealthCheck(params: { verbose?: boolean }): Promise<MCPToolResult> {
+  const startTime = Date.now();
+  const issues: string[] = [];
+  const issuesHe: string[] = [];
+  const suggestions: string[] = [];
+  const suggestionsHe: string[] = [];
+
+  // Check database status
+  let databaseStatus: {
+    connected: boolean;
+    decisionCount: number;
+    fts5Working: boolean;
+    path?: string;
+    error?: string;
+  } = {
+    connected: false,
+    decisionCount: 0,
+    fts5Working: false
+  };
+
+  if (db) {
+    try {
+      // Test database connection
+      const stats = db.getStats();
+      databaseStatus.connected = true;
+      databaseStatus.decisionCount = stats.totalDecisions;
+      databaseStatus.path = db.getDbPath();
+
+      // Test FTS5 by running a simple search
+      try {
+        db.search({ query: 'test', limit: 1 });
+        databaseStatus.fts5Working = true;
+      } catch {
+        databaseStatus.fts5Working = false;
+        issues.push('FTS5 full-text search is not working properly');
+        issuesHe.push('חיפוש טקסט מלא FTS5 אינו עובד כראוי');
+      }
+
+      if (stats.totalDecisions === 0) {
+        issues.push('Database is empty - run "npm run index-all" to populate');
+        issuesHe.push('מסד הנתונים ריק - הרץ "npm run index-all" לאכלוס');
+        suggestions.push('Run: SCRAPER_API_KEY=your_key npm run index-all');
+        suggestionsHe.push('הרץ: SCRAPER_API_KEY=your_key npm run index-all');
+      }
+    } catch (error) {
+      databaseStatus.connected = false;
+      databaseStatus.error = error instanceof Error ? error.message : String(error);
+      issues.push(`Database connection failed: ${databaseStatus.error}`);
+      issuesHe.push(`חיבור למסד הנתונים נכשל: ${databaseStatus.error}`);
+    }
+  } else {
+    issues.push('Database not initialized');
+    issuesHe.push('מסד הנתונים לא אותחל');
+    suggestions.push('Restart the MCP server. Check ~/.gov-il-mcp/decisions.db exists.');
+    suggestionsHe.push('הפעל מחדש את שרת ה-MCP. בדוק ש-~/.gov-il-mcp/decisions.db קיים.');
+  }
+
+  // Check ScraperAPI status
+  const scraperApiStatus: {
+    configured: boolean;
+    keyPresent: boolean;
+  } = {
+    configured: !!SCRAPER_API_KEY,
+    keyPresent: !!SCRAPER_API_KEY
+  };
+
+  if (!SCRAPER_API_KEY) {
+    suggestions.push('Set SCRAPER_API_KEY environment variable for live updates from gov.il');
+    suggestionsHe.push('הגדר משתנה סביבה SCRAPER_API_KEY לעדכונים חיים מ-gov.il');
+  }
+
+  // Check embeddings status
+  const embeddingsStatus: {
+    available: boolean;
+    error?: string;
+  } = {
+    available: !!embeddings
+  };
+
+  if (!embeddings) {
+    suggestions.push('Embeddings/semantic search not available. This is optional but enhances search.');
+    suggestionsHe.push('חיפוש סמנטי/embeddings לא זמין. זה אופציונלי אך משפר את החיפוש.');
+  }
+
+  // Server info
+  const serverStatus = {
+    version: '2.0.0',
+    uptimeMs: Date.now() - startTime,
+    nodeVersion: process.version
+  };
+
+  // Build detailed stats if verbose
+  let detailedStats: Record<string, unknown> | undefined;
+  if (params.verbose && db) {
+    try {
+      const stats = db.getStats();
+      detailedStats = {
+        byDatabase: stats.byDatabase,
+        recentDecisions: stats.recentDecisions,
+        lastUpdateAt: stats.lastUpdateAt,
+        oldestDecision: stats.oldestDecision
+      };
+    } catch {
+      // Ignore errors for verbose stats
+    }
+  }
+
+  const healthy = databaseStatus.connected && databaseStatus.decisionCount > 0;
+
+  const result: Record<string, unknown> = {
+    healthy,
+    status: {
+      database: databaseStatus,
+      scraperApi: scraperApiStatus,
+      embeddings: embeddingsStatus,
+      server: serverStatus
+    },
+    issues,
+    issuesHe,
+    suggestions,
+    suggestionsHe
+  };
+
+  if (detailedStats) {
+    result.detailedStats = detailedStats;
+  }
+
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify(result, null, 2)
+    }],
+    isError: !healthy
+  };
 }
 
 // Clarification prompts for different ambiguity types
@@ -1851,14 +2040,17 @@ async function main() {
         case 'construct_answer':
           return await handleConstructAnswer(args as unknown as ConstructAnswerInput);
 
+        case 'health_check':
+          return await handleHealthCheck(args as { verbose?: boolean });
+
         default:
           return {
             content: [{
               type: 'text',
               text: JSON.stringify({
                 error: `Unknown tool: ${name}`,
-                suggestion: 'Available tools: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer',
-                suggestionHe: 'כלים זמינים: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer'
+                suggestion: 'Available tools: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check',
+                suggestionHe: 'כלים זמינים: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check'
               })
             }],
             isError: true

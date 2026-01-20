@@ -145,7 +145,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [ ] Claude Desktop config snippet for `claude_desktop_config.json`
 - [ ] Environment variable: `SCRAPER_API_KEY` for live fetching
 - [ ] First-run initialization creates database
-- [ ] Health check tool to verify setup
+- [x] Health check tool to verify setup
 - [ ] Typecheck passes
 
 ### US-010: Implement fallback for selector failures
