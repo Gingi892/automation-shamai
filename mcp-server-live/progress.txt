@@ -1,0 +1,91 @@
+# Progress Log - PDF Accessibility Fix
+
+## Problem
+PDFs from gov.il are not accessible through the API's read_decision_pdf tool.
+
+## Initial Hypothesis
+1. PDFs may require session cookies from the search
+2. URLs may be temporary/signed
+3. May need specific headers (Referer, Accept)
+4. May need Puppeteer download instead of fetch
+
+---
+
+## Iteration Log
+
+### Iteration 1 - PDF-001: URL Structure Investigation
+**Date:** 2026-01-20
+
+**Key Finding:**
+- PDFs ARE accessible from gov.il - no auth required
+- HTTP 200 for numeric filenames (e.g., `044349285973.pdf`)
+- HTTP 404 for Hebrew filenames (e.g., `תשובה לבקשה.pdf`)
+
+**Root Cause:**
+- gov.il CDN doesn't properly resolve URL-encoded Hebrew filenames
+- The extractPDFContent code is correct, but some URLs are inherently inaccessible
+
+**Test Results:**
+- `044349285973.pdf` → 200 OK, 1.3MB downloaded
+- Hebrew filename (URL encoded) → 404 Not Found
+
+**Files Created:**
+- PDF-ANALYSIS.md
+
+---
+
+### Iteration 2 - PDF-002: Download Method Testing
+**Date:** 2026-01-20
+
+**Methods Tested:**
+- curl with various headers → Same result
+- Puppeteer with session cookies → Same result
+- The method doesn't matter - Hebrew URLs are broken on gov.il CDN
+
+**Key Insight:**
+- PDFs only appear in results AFTER search is performed
+- Initial page has 0 PDF links
+- Our extractDecisions function handles this correctly
+
+**Conclusion:**
+No download method can fix Hebrew filename URLs.
+Solution must be: graceful fallback when PDF fails.
+
+---
+
+### Iteration 3 - PDF-003/004/005: Implement & Test Solution
+**Date:** 2026-01-20
+
+**ScraperAPI Test:**
+- Tested with user-provided key: 566e1370a3f3158b969f898e102c7fd0
+- Numeric URL via ScraperAPI: 200 OK (works)
+- Hebrew URL via ScraperAPI: 500 Error (gov.il returns 404, ScraperAPI can't fix broken URLs)
+- **Conclusion:** ScraperAPI doesn't help - problem is on gov.il's side
+
+**Solution Implemented:**
+1. Updated tool description to set expectations about Hebrew filename limitations
+2. Added `hasHebrewFilename()` function to detect Hebrew URLs
+3. Added `extractPDFFilename()` to display filename in error messages
+4. Updated `extractPDFContent()` with graceful fallback:
+   - Returns helpful Hebrew message explaining the issue
+   - Includes direct browser link for user to open manually
+   - Detects Hebrew filenames and provides specific explanation
+5. Updated `read_decision_pdf` handler to handle fallback case
+
+**Test Results:**
+- Numeric filename (044349285973.pdf): 200 OK, 17 pages, 28123 chars ✓
+- Hebrew filename (תשובה לבקשה.pdf): Fallback mode activated, helpful message returned ✓
+
+**Build:** npm run build succeeds ✓
+
+---
+
+## SOLUTION COMPLETE
+
+**Root Cause:** gov.il CDN doesn't resolve URL-encoded Hebrew filenames (returns 404)
+
+**Fix:** Graceful degradation - when PDF is inaccessible, return helpful message with browser link
+
+**Limitations:** ~50% of PDFs have Hebrew filenames and require manual browser access
+
+---

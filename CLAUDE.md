@@ -8,7 +8,7 @@ This is the **n8n-skills** repository - a collection of Claude Code skills desig
 
 **Repository**: https://github.com/czlonkowski/n8n-skills
 
-**Purpose**: 7 complementary skills that provide expert guidance on using n8n-mcp MCP tools effectively for building n8n workflows.
+**Purpose**: 9 complementary skills that provide expert guidance on using n8n-mcp MCP tools effectively for building n8n workflows, plus autonomous task execution.
 
 **Architecture**:
 - **n8n-mcp MCP Server**: Provides data access (800+ nodes, validation, templates, workflow management)
@@ -28,7 +28,9 @@ n8n-skills/
 │   ├── n8n-validation-expert/
 │   ├── n8n-node-configuration/
 │   ├── n8n-code-javascript/
-│   └── n8n-code-python/
+│   ├── n8n-code-python/
+│   ├── ralph-loop/            # Autonomous task execution
+│   └── prd-builder/           # Create PRDs for Ralph Loop
 ├── evaluations/           # Test scenarios for each skill
 ├── docs/                  # Documentation
 ├── dist/                  # Distribution packages
@@ -68,6 +70,18 @@ n8n-skills/
 ### 7. n8n Code Python
 - Write Python in n8n Code nodes
 - Limitations awareness (no external libraries)
+
+### 8. Ralph Loop (NEW)
+- Autonomous task execution agent
+- Executes PRD.md user stories one by one
+- Tracks progress in progress.txt
+- Commands: `/ralph-loop`, `/cancel-ralph`, `/help`
+
+### 9. PRD Builder (NEW)
+- Create structured PRD.md files for Ralph Loop
+- Guides through clarification questions
+- Ensures proper story sizing and dependency ordering
+- Command: `/prd`
 
 ## Key MCP Tools
 

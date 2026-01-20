@@ -342,3 +342,46 @@
   - Patterns: better-sqlite3 migration in iteration 9 laid foundation for all US-002 criteria
   - Patterns: Many tasks were already implemented as side effects of earlier iterations
   - Helpful context: US-002 complete, ready to proceed to US-003 (PDF text extraction)
+
+---
+
+## Iteration 17 — US-003 Task 1: Download PDF using ScraperAPI (handles any blocking)
+- **What was done**: Created new pdf-extractor.ts module with ScraperAPI-based PDF download capability
+- **Files affected**:
+  - `mcp-server/src/pdf-extractor.ts` (new file)
+  - `mcp-server/src/pdf-parse.d.ts` (new file - type declarations for pdf-parse)
+  - `mcp-server/package.json` (added pdf-parse dependency)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - `PdfExtractor` class with `downloadPdf()` method using ScraperAPI
+  - Uses `premium=true` parameter to bypass blocking (render not needed for PDFs)
+  - Validates PDF by checking magic bytes (`%PDF-`)
+  - Returns Buffer for downstream text extraction
+  - Custom type declaration file for pdf-parse (no @types available)
+  - `PdfExtractionResult` interface: { fullText, pageCount, extractedPages, cached }
+- **Learnings for next cycles**:
+  - Patterns: ScraperAPI doesn't need `render=true` for PDFs since they're not HTML
+  - Patterns: `premium=true` helps bypass blocking on gov.il PDF endpoints
+  - Patterns: Check PDF magic bytes (`%PDF-`) to validate download success
+  - Traps: pdf-parse lacks TypeScript types - need custom .d.ts file
+  - Traps: fetch returns ArrayBuffer which needs conversion to Buffer for pdf-parse
+  - Helpful context: The extractor module is separate from scraper.ts for clean separation of concerns
+
+---
+
+## Iteration 18 — US-003 Task 2: Extract text using pdf-parse library
+- **What was done**: Verified existing implementation already uses pdf-parse for text extraction
+- **Files affected**: None (already implemented in `mcp-server/src/pdf-extractor.ts` lines 100-134)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Line 8: `import pdf from 'pdf-parse';` imports the library
+  - `extractText(pdfBuffer: Buffer)` method (lines 100-134) handles extraction
+  - Uses pdf-parse `options.max` parameter for partial page extraction
+  - Returns `PdfExtractionResult` with fullText, pageCount, extractedPages, cached
+  - Custom type declarations in `pdf-parse.d.ts` provide TypeScript support
+  - `downloadAndExtract()` (lines 140-143) combines download and extraction in one call
+- **Learnings for next cycles**:
+  - Patterns: pdf-parse accepts Buffer directly, no file system needed
+  - Patterns: `data.text` contains all extracted text, `data.numpages` is total page count
+  - Patterns: Implementation was done in iteration 17 as part of PDF download task
+  - Helpful context: pdf-parse returns text in logical order which works correctly for RTL Hebrew

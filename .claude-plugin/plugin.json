@@ -16,7 +16,10 @@
     "expressions",
     "code",
     "javascript",
-    "python"
+    "python",
+    "ralph-loop",
+    "prd",
+    "autonomous"
   ],
   "repository": "https://github.com/czlonkowski/n8n-skills",
   "homepage": "https://github.com/czlonkowski/n8n-skills"

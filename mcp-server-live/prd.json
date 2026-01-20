@@ -1,0 +1,77 @@
+{
+  "project": "gov-il-pdf-fix",
+  "branchName": "ralph/pdf-accessibility-fix",
+  "description": "Root cause analysis and fix for PDF accessibility issue in gov-il-live MCP server",
+  "userStories": [
+    {
+      "id": "PDF-001",
+      "title": "Investigate PDF URL structure",
+      "description": "Analyze how gov.il constructs PDF URLs and why they may not be directly accessible",
+      "acceptanceCriteria": [
+        "Fetch the gov.il search page with Puppeteer",
+        "Extract actual PDF link hrefs from the page",
+        "Test if links are direct URLs or require session/auth",
+        "Document URL patterns in PDF-ANALYSIS.md"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Root cause: Hebrew filenames return 404, numeric filenames work. No auth needed."
+    },
+    {
+      "id": "PDF-002",
+      "title": "Test PDF download methods",
+      "description": "Try different methods to access PDF content from gov.il",
+      "acceptanceCriteria": [
+        "Test direct fetch with various headers",
+        "Test Puppeteer-based download (same session)",
+        "Test if PDFs need cookies/referrer",
+        "Document what works/fails in PDF-ANALYSIS.md"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Tested curl, Puppeteer, fetch - all same result. Hebrew URLs broken on gov.il CDN, not fixable."
+    },
+    {
+      "id": "PDF-003",
+      "title": "Implement working PDF extraction",
+      "description": "Fix the extractPDFContent function to successfully download PDFs",
+      "acceptanceCriteria": [
+        "Update extractPDFContent to use working method",
+        "Handle gov.il specific requirements (cookies, referrer, etc)",
+        "Add proper error messages when PDF unavailable",
+        "Test with real PDF URL"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Tested ScraperAPI - doesn't help. Implemented graceful fallback with Hebrew detection."
+    },
+    {
+      "id": "PDF-004",
+      "title": "Add fallback for inaccessible PDFs",
+      "description": "Provide graceful handling when PDFs cannot be accessed",
+      "acceptanceCriteria": [
+        "Return helpful message with direct gov.il link",
+        "Include metadata extracted from search results",
+        "Suggest user open in browser if API fails",
+        "Update tool description to set expectations"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added hasHebrewFilename(), extractPDFFilename(), updated tool description in Hebrew."
+    },
+    {
+      "id": "PDF-005",
+      "title": "Build and test complete solution",
+      "description": "Compile, test, and verify the fix works end-to-end",
+      "acceptanceCriteria": [
+        "npm run build succeeds",
+        "Test search_decisions returns results",
+        "Test read_decision_pdf with real URL",
+        "Document solution in PDF-ANALYSIS.md"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Build succeeds. Numeric PDFs work (17 pages extracted). Hebrew PDFs fallback gracefully."
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+# This directory stores:
+# - decisions.db: SQLite database with all indexed decisions
+# - chroma/: ChromaDB vector embeddings for semantic search
+#
+# These files are large and should not be committed to git.
+# Run `npm run index-all` to populate the database.
