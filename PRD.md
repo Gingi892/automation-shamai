@@ -130,7 +130,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Description:** As a developer, I want the MCP server to expose all tools via stdio transport, so that Claude Desktop can use them.
 
 **Acceptance Criteria:**
-- [ ] Tools exposed: search_decisions, get_decision, read_pdf, get_statistics, list_committees, list_appraisers, trigger_update, clarify_query
+- [x] Tools exposed: search_decisions, get_decision, read_pdf, get_statistics, list_committees, list_appraisers, trigger_update, clarify_query
 - [ ] Each tool has comprehensive Hebrew+English description
 - [ ] Error responses include actionable suggestions
 - [ ] Graceful handling of database unavailable

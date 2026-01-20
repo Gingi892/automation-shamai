@@ -15,6 +15,7 @@ import {
 import { getDatabase, closeDatabase, DecisionDatabase } from './database.js';
 import { getEmbeddings, EmbeddingsManager } from './embeddings.js';
 import { createIndexer } from './indexer.js';
+import { createPdfExtractor, PdfExtractor, PdfExtractionResult } from './pdf-extractor.js';
 import {
   DatabaseType,
   SearchParams,
@@ -175,6 +176,46 @@ Returns results in <100ms from pre-indexed local database.`,
         id: {
           type: 'string',
           description: 'מזהה ההחלטה (ID) / The decision ID'
+        }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'read_pdf',
+    description: `קריאת תוכן PDF של החלטה / Read and extract text content from a decision's PDF document.
+
+Use this tool when you need to:
+- Get the full text of a specific decision for detailed analysis
+- Quote specific passages from the decision document
+- Answer questions that require reading the actual decision content
+
+## שימוש / Usage
+1. First get decision ID from search_decisions or get_decision
+2. Call read_pdf with the decision ID
+3. Optionally limit pages for faster extraction
+
+## פלט / Output
+Returns:
+- fullText: The complete extracted text (Hebrew with RTL handling)
+- pageCount: Total pages in the PDF
+- extractedPages: Number of pages actually extracted
+- cached: Whether the text was retrieved from cache
+
+## Performance Notes
+- First extraction requires download via ScraperAPI (SCRAPER_API_KEY required)
+- Subsequent reads are cached locally (instant)
+- Use maxPages for faster extraction of large documents`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'מזהה ההחלטה (ID) / The decision ID to read PDF from'
+        },
+        maxPages: {
+          type: 'number',
+          description: 'מספר עמודים מקסימלי לחילוץ (0 = הכל, ברירת מחדל: 0) / Maximum pages to extract (0 = all, default: 0)'
         }
       },
       required: ['id']
@@ -508,6 +549,86 @@ async function handleGetDecisionPdf(params: { id: string }): Promise<MCPToolResu
       }, null, 2)
     }]
   };
+}
+
+async function handleReadPdf(params: { id: string; maxPages?: number }): Promise<MCPToolResult> {
+  // Check for SCRAPER_API_KEY first
+  if (!SCRAPER_API_KEY) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          error: 'SCRAPER_API_KEY environment variable not set',
+          suggestion: 'Set SCRAPER_API_KEY to enable PDF reading'
+        })
+      }],
+      isError: true
+    };
+  }
+
+  const decision = db.getDecision(params.id);
+
+  if (!decision) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({ error: 'Decision not found', id: params.id })
+      }],
+      isError: true
+    };
+  }
+
+  if (!decision.url) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          error: 'No PDF URL available for this decision',
+          id: params.id,
+          title: decision.title
+        })
+      }],
+      isError: true
+    };
+  }
+
+  try {
+    // Create PDF extractor with database for caching
+    const pdfExtractor = createPdfExtractor(SCRAPER_API_KEY, {
+      maxPages: params.maxPages || 0,
+      database: db
+    });
+
+    // Extract with caching support
+    const result = await pdfExtractor.extractWithCache(decision.id, decision.url);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          id: decision.id,
+          title: decision.title,
+          fullText: result.fullText,
+          pageCount: result.pageCount,
+          extractedPages: result.extractedPages,
+          cached: result.cached,
+          textLength: result.fullText.length
+        }, null, 2)
+      }]
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          error: 'Failed to read PDF',
+          id: params.id,
+          message: error instanceof Error ? error.message : String(error)
+        })
+      }],
+      isError: true
+    };
+  }
 }
 
 async function handleGetStatistics(): Promise<MCPToolResult> {
@@ -1338,6 +1459,9 @@ async function main() {
 
         case 'get_decision_pdf':
           return await handleGetDecisionPdf(args as { id: string });
+
+        case 'read_pdf':
+          return await handleReadPdf(args as { id: string; maxPages?: number });
 
         case 'get_statistics':
           return await handleGetStatistics();

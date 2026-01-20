@@ -1005,3 +1005,29 @@
 
 ---
 
+## Iteration 45 — US-008 Task 1: Tools exposed - search_decisions, get_decision, read_pdf, get_statistics, list_committees, list_appraisers, trigger_update, clarify_query
+- **What was done**: Added `read_pdf` tool to complete the required tool set. The PRD required 8 tools; 7 were already implemented, only `read_pdf` was missing.
+- **Files affected**: `mcp-server/src/index.ts` (added import for PdfExtractor, added tool definition at lines 185-222, added handleReadPdf handler at lines 554-631, added case in switch at line 1463)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Verified existing tools: search_decisions, get_decision, get_decision_pdf, get_statistics, list_committees, list_appraisers, trigger_update, clarify_query, construct_answer, compare_decisions, semantic_search
+  - PRD required `read_pdf` (not `get_decision_pdf`) - they serve different purposes:
+    - `get_decision_pdf`: Returns PDF URL only (for downloading or linking)
+    - `read_pdf`: Actually extracts and returns the PDF text content (using PdfExtractor)
+  - `handleReadPdf()` implementation:
+    - Validates SCRAPER_API_KEY (required for PDF download)
+    - Gets decision from database, validates URL exists
+    - Uses `createPdfExtractor()` with caching support
+    - Calls `extractWithCache()` for cache-first extraction
+    - Returns: id, title, fullText, pageCount, extractedPages, cached, textLength
+    - Supports optional `maxPages` parameter for partial extraction
+  - Tool description includes Hebrew+English bilingual documentation
+- **Learnings for next cycles**:
+  - Patterns: PRD may use different tool names than implemented - `read_pdf` vs `get_decision_pdf`
+  - Patterns: PDF reading requires SCRAPER_API_KEY for download capability
+  - Patterns: PdfExtractor integrates with database for caching via `extractWithCache(decisionId, url)`
+  - Patterns: Error handling includes actionable suggestions (e.g., "Set SCRAPER_API_KEY")
+  - Helpful context: US-008 Task 1 complete, remaining tasks (2-6): comprehensive descriptions, error suggestions, database unavailable handling, stderr logging, typecheck
+
+---
+
