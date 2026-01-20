@@ -1180,3 +1180,47 @@
 
 ---
 
+## Iteration 52 — US-009 Task 1: README with installation steps
+- **What was done**: Enhanced README.md with comprehensive "Quick Start (Claude Desktop)" section
+- **Files affected**: `mcp-server/README.md` (added ~75 lines of installation documentation)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added "Quick Start (Claude Desktop)" section with 5 numbered steps:
+    1. Install Dependencies (`npm install && npm run build`)
+    2. Add to Claude Desktop Config - with Windows/macOS paths, full JSON snippet
+    3. First Run - explains automatic database initialization at `~/.gov-il-mcp/`
+    4. Verify Setup - documents `health_check` tool usage
+    5. Populate Database - with Windows PowerShell and Unix syntax
+  - Added Windows-specific PowerShell syntax: `$env:SCRAPER_API_KEY="key"`
+  - Added note about using forward slashes on Windows for JSON paths
+  - Updated Available Tools table with 3 new tools: `read_pdf`, `clarify_query`, `health_check`
+- **Learnings for next cycles**:
+  - Patterns: Claude Desktop config paths differ by OS: `%APPDATA%\Claude\` (Windows) vs `~/Library/Application Support/Claude/` (macOS)
+  - Patterns: Windows PowerShell uses `$env:VAR="value"` syntax (different from Unix `export VAR=value`)
+  - Patterns: JSON paths on Windows should use forward slashes for cross-platform compatibility
+  - Patterns: Quick Start sections should lead with the most common use case (Claude Desktop)
+  - Helpful context: US-009 Task 1 complete, remaining tasks: config snippet (partially done in README), env var (partially done), first-run init (partially done), typecheck
+
+---
+
+## Iteration 53 — US-009 Task 2: Claude Desktop config snippet for `claude_desktop_config.json`
+- **What was done**: Verified existing implementation - config snippet already present in README.md
+- **Files affected**: None (already implemented in `mcp-server/README.md` lines 20-32 and 141-153)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Config snippet in Quick Start section (lines 20-32):
+    - Server name: `gov-il-land-appraisal`
+    - Command: `node`
+    - Args: `["C:/path/to/mcp-server/dist/index.js"]`
+    - Environment variable: `SCRAPER_API_KEY`
+  - Config snippet duplicated in Usage section (lines 141-153)
+  - Includes OS-specific config file paths (Windows/macOS)
+  - Includes note about forward slashes on Windows
+- **Learnings for next cycles**:
+  - Patterns: Task was already implemented as part of US-009 Task 1 (README with installation steps)
+  - Patterns: Check README.md for config snippets before implementing - they're often bundled with installation docs
+  - Patterns: Multiple related PRD tasks often get implemented together in earlier iterations
+  - Helpful context: US-009 Task 2 complete, remaining tasks: env var doc (Task 3), first-run init (Task 4), typecheck (Task 6)
+
+---
+
