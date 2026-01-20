@@ -161,6 +161,97 @@ Conceived by Romuald Członkowski - [www.aiadvisors.pl/en](https://www.aiadvisor
 
 Part of the n8n-mcp project.
 
+---
+
+## GovIL RAG Chatbot - Hallucination Detection
+
+### Overview
+The RAG chatbot (`workflows/3-rag-chatbot.json`) includes Strawberry/Pythea-style hallucination detection to verify that AI responses are grounded in retrieved documents.
+
+### Workflow Architecture
+```
+User Query → Embed → Pinecone (top 5) → Build RAG Context → GPT-4o
+    ↓
+Extract Claims & Citations → Build Verification Prompts
+    ↓
+┌─────────────────────────────────────┐
+│  Verify Posterior (Full Context)    │  ← gpt-4o-mini with logprobs
+│  Verify Prior (Scrubbed Context)    │  ← cited docs → [REDACTED]
+└─────────────────────────────────────┘
+    ↓
+Merge Results → Compute KL Divergence → Format Response with Flags
+```
+
+### Core Algorithm (Strawberry)
+```javascript
+// For each claim:
+// p1 = P(entailed | full context)     ← verifier sees evidence
+// p0 = P(entailed | scrubbed context) ← verifier sees [REDACTED]
+// If p1 ≈ p0 → model didn't use evidence → FLAG as hallucination
+
+function klBernoulli(p, q) {
+  const eps = 1e-12;
+  p = Math.max(eps, Math.min(1 - eps, p));
+  q = Math.max(eps, Math.min(1 - eps, q));
+  return p * Math.log(p / q) + (1 - p) * Math.log((1 - p) / (1 - q));
+}
+```
+
+### API Response Format
+```json
+{
+  "success": true,
+  "response": "לפי ההחלטה [S0], השמאי קבע...",
+  "sources": [{"title": "...", "url": "...", "score": 0.92}],
+  "hallucination_check": {
+    "overall_grounded": true,
+    "grounded_claims": 3,
+    "total_claims": 4,
+    "grounding_ratio": 0.75,
+    "claims": [
+      {"text": "השמאי קבע פיצוי", "grounded": true, "confidence": 0.88, "citing": ["S0"]},
+      {"text": "זה נפוץ במקרים דומים", "grounded": false, "confidence": 0.15, "citing": []}
+    ]
+  },
+  "warning": "שים לב: 1 טענות לא נתמכות במלואן"
+}
+```
+
+### Chatbot Frontend Features (`workflows/chatbot-frontend.html`)
+
+#### Interactive Citation Tags
+- `[S0]`, `[S1]` converted to clickable blue badges with numbers
+- Hover → tooltip with source details and relevance bar
+- Click → highlights source in list below
+
+#### Sources Section
+- Collapsible with toggle icon
+- Numbered badges matching inline citations
+- Color-coded relevance: green (≥80%), yellow (50-79%), red (<50%)
+- Click citation → source glows yellow, scrolls into view
+
+#### Grounding Indicator
+- Green badge: `✓ מבוסס (92%)`
+- Yellow badge: `⚠ מבוסס חלקית (75%)`
+- Red badge: `✗ דורש בדיקה (45%)`
+- Expandable per-claim breakdown with confidence %
+
+### Files
+| File | Description |
+|------|-------------|
+| `workflows/3-rag-chatbot.json` | Main workflow with hallucination detection |
+| `workflows/chatbot-frontend.html` | Interactive UI with citations |
+| `workflows/tests/hallucination-detection-tests.json` | Test suite |
+| `docs/HALLUCINATION_DETECTION.md` | Detailed documentation |
+
+### Configuration
+- **Verifier model**: gpt-4o-mini (fast, cheap)
+- **Evidence threshold**: p1 - p0 > 0.15 for cited claims
+- **Confidence threshold**: > 0.45 to be considered grounded
+- **Overall grounding**: ≥70% of claims must be grounded
+
+---
+
 ## License
 
 MIT License - See LICENSE file for details.

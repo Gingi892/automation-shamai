@@ -1,0 +1,165 @@
+{
+  "name": "Hallucination Detection - Test Suite",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "test-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Test cases for hallucination detection\n// Each test case has:\n//   - response: simulated AI response\n//   - context: simulated retrieved documents\n//   - expectedResults: expected grounding status per claim\n\nconst testCases = [\n  {\n    name: 'Test 1: Claim fully supported by context',\n    response: 'לפי ההחלטה [S0], השמאי קבע פיצוי של 50,000 ש\"ח.',\n    context: [\n      {\n        id: 'S0',\n        title: 'החלטת שמאי מכריע - תיק 123',\n        text: 'השמאי המכריע קבע כי סכום הפיצוי יעמוד על 50,000 ש\"ח.',\n        url: 'https://example.com/decision-123.pdf'\n      }\n    ],\n    expectedResults: [\n      { claim: 'השמאי קבע פיצוי של 50,000 ש\"ח', grounded: true }\n    ]\n  },\n  {\n    name: 'Test 2: Claim contradicts context',\n    response: 'לפי ההחלטה [S0], השמאי קבע פיצוי של 100,000 ש\"ח.',\n    context: [\n      {\n        id: 'S0',\n        title: 'החלטת שמאי מכריע - תיק 456',\n        text: 'השמאי המכריע קבע כי סכום הפיצוי יעמוד על 50,000 ש\"ח.',\n        url: 'https://example.com/decision-456.pdf'\n      }\n    ],\n    expectedResults: [\n      { claim: 'השמאי קבע פיצוי של 100,000 ש\"ח', grounded: false }\n    ]\n  },\n  {\n    name: 'Test 3: Confabulated claim (not in context)',\n    response: 'לפי ההחלטה [S0], השמאי קבע פיצוי של 50,000 ש\"ח. זה נפוץ במקרים דומים.',\n    context: [\n      {\n        id: 'S0',\n        title: 'החלטת שמאי מכריע - תיק 789',\n        text: 'השמאי המכריע קבע כי סכום הפיצוי יעמוד על 50,000 ש\"ח.',\n        url: 'https://example.com/decision-789.pdf'\n      }\n    ],\n    expectedResults: [\n      { claim: 'השמאי קבע פיצוי של 50,000 ש\"ח', grounded: true },\n      { claim: 'זה נפוץ במקרים דומים', grounded: false }\n    ]\n  },\n  {\n    name: 'Test 4: Multiple claims with mixed support',\n    response: 'לפי ההחלטה [S0], השמאי המכריע דן בתיק מיום 15.03.2023 [S1]. סכום הפיצוי שנקבע הוא 75,000 ש\"ח [S0]. הערעור נדחה כי לא היו ראיות מספקות.',\n    context: [\n      {\n        id: 'S0',\n        title: 'החלטת שמאי מכריע - תיק 999',\n        text: 'סכום הפיצוי שנקבע על ידי השמאי המכריע הוא 75,000 ש\"ח.',\n        url: 'https://example.com/decision-999.pdf'\n      },\n      {\n        id: 'S1',\n        title: 'מידע על התיק',\n        text: 'תאריך הדיון: 15.03.2023. התיק נדון בפני השמאי המכריע.',\n        url: 'https://example.com/case-info.pdf'\n      }\n    ],\n    expectedResults: [\n      { claim: 'השמאי המכריע דן בתיק מיום 15.03.2023', grounded: true },\n      { claim: 'סכום הפיצוי שנקבע הוא 75,000 ש\"ח', grounded: true },\n      { claim: 'הערעור נדחה כי לא היו ראיות מספקות', grounded: false }\n    ]\n  }\n];\n\nreturn testCases.map(tc => ({ json: tc }));"
+      },
+      "id": "test-cases",
+      "name": "Define Test Cases",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract claims from response - same algorithm as main workflow\n// Claims are extracted by splitting on sentences and identifying citations\n\nconst testCase = $input.first().json;\nconst response = testCase.response;\nconst context = testCase.context;\n\n// Split response into sentences (Hebrew-aware)\nconst sentencePattern = /[^.!?\\n]+[.!?]?/g;\nconst rawSentences = response.match(sentencePattern) || [response];\n\n// Extract citations [S0], [S1] etc. from each sentence\nconst citationPattern = /\\[S(\\d+)\\]/g;\n\nconst claims = rawSentences\n  .map(sentence => sentence.trim())\n  .filter(sentence => sentence.length > 5) // Filter out very short fragments\n  .map(sentence => {\n    // Find all citations in this sentence\n    const citations = [];\n    let match;\n    while ((match = citationPattern.exec(sentence)) !== null) {\n      citations.push('S' + match[1]);\n    }\n    citationPattern.lastIndex = 0; // Reset regex\n    \n    // Remove citation markers for clean claim text\n    const cleanClaim = sentence.replace(/\\[S\\d+\\]/g, '').trim();\n    \n    return {\n      originalText: sentence,\n      cleanClaim: cleanClaim,\n      citations: citations\n    };\n  });\n\nreturn {\n  testName: testCase.name,\n  response: response,\n  context: context,\n  claims: claims,\n  expectedResults: testCase.expectedResults\n};"
+      },
+      "id": "extract-claims",
+      "name": "Extract Claims",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build verification prompts for each claim\n// For each claim we create:\n//   - Posterior prompt: full context visible\n//   - Prior prompt: cited spans redacted\n\nconst data = $input.first().json;\nconst claims = data.claims;\nconst context = data.context;\n\n// Build full context string\nconst fullContext = context.map(doc => \n  `[${doc.id}]:\\n${doc.text}`\n).join('\\n\\n');\n\n// For each claim, build verification prompts\nconst verificationPrompts = claims.map(claim => {\n  // Build posterior prompt (full context)\n  const posteriorPrompt = {\n    role: 'user',\n    content: `Context:\\n${fullContext}\\n\\nClaim: \"${claim.cleanClaim}\"\\n\\nIs this claim entailed by the context? Reply with only YES, NO, or UNSURE.`\n  };\n  \n  // Build prior prompt (cited sources redacted)\n  let scrubbedContext = fullContext;\n  claim.citations.forEach(citationId => {\n    // Redact the content of cited sources\n    const docIndex = context.findIndex(d => d.id === citationId);\n    if (docIndex !== -1) {\n      const doc = context[docIndex];\n      scrubbedContext = scrubbedContext.replace(\n        `[${doc.id}]:\\n${doc.text}`,\n        `[${doc.id}]:\\n[REDACTED]`\n      );\n    }\n  });\n  \n  const priorPrompt = {\n    role: 'user',\n    content: `Context:\\n${scrubbedContext}\\n\\nClaim: \"${claim.cleanClaim}\"\\n\\nIs this claim entailed by the context? Reply with only YES, NO, or UNSURE.`\n  };\n  \n  return {\n    claim: claim,\n    posteriorPrompt: posteriorPrompt,\n    priorPrompt: priorPrompt,\n    hasCitations: claim.citations.length > 0\n  };\n});\n\nreturn {\n  testName: data.testName,\n  verificationPrompts: verificationPrompts,\n  expectedResults: data.expectedResults\n};"
+      },
+      "id": "build-prompts",
+      "name": "Build Verification Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Simulate verification results for testing\n// In production, this would call OpenAI with logprobs\n\nconst data = $input.first().json;\nconst verificationPrompts = data.verificationPrompts;\nconst expectedResults = data.expectedResults;\n\n// Simulate verification based on expected results\n// This simulates what we'd get from OpenAI logprobs\nconst verificationResults = verificationPrompts.map((prompt, idx) => {\n  // Try to match with expected result\n  const expected = expectedResults.find(e => \n    prompt.claim.cleanClaim.includes(e.claim) || \n    e.claim.includes(prompt.claim.cleanClaim.substring(0, 20))\n  );\n  \n  // Simulate probabilities based on expected grounding\n  let p1, p0;\n  if (expected) {\n    if (expected.grounded) {\n      // Grounded claim: high posterior, low prior\n      p1 = 0.85 + Math.random() * 0.1; // 0.85-0.95\n      p0 = 0.15 + Math.random() * 0.15; // 0.15-0.30\n    } else {\n      // Ungrounded claim: similar posterior and prior (model didn't use evidence)\n      const base = 0.3 + Math.random() * 0.4; // 0.3-0.7\n      p1 = base + Math.random() * 0.1;\n      p0 = base + Math.random() * 0.1;\n    }\n  } else {\n    // Default: uncertain\n    p1 = 0.5;\n    p0 = 0.5;\n  }\n  \n  return {\n    claim: prompt.claim.cleanClaim,\n    citations: prompt.claim.citations,\n    p1: p1,  // P(entailed | full context)\n    p0: p0,  // P(entailed | scrubbed context)\n    hasCitations: prompt.hasCitations\n  };\n});\n\nreturn {\n  testName: data.testName,\n  verificationResults: verificationResults,\n  expectedResults: expectedResults\n};"
+      },
+      "id": "simulate-verify",
+      "name": "Simulate Verification (Mock)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute budget gaps using KL divergence\n// Core Strawberry algorithm implementation\n\nfunction klBernoulli(p, q) {\n  const eps = 1e-12;\n  p = Math.max(eps, Math.min(1 - eps, p));\n  q = Math.max(eps, Math.min(1 - eps, q));\n  return p * Math.log(p / q) + (1 - p) * Math.log((1 - p) / (1 - q));\n}\n\nfunction computeGroundingScore(p1, p0, hasCitations) {\n  // Budget gap calculation\n  // observed_bits = KL(Ber(p1) || Ber(0.5)) - information from context\n  // required_bits = KL(Ber(p1) || Ber(p0)) - information needed from evidence\n  \n  const observed = klBernoulli(p1, 0.5);\n  const required = klBernoulli(p1, p0);\n  \n  // If claim has citations but didn't use them (required ≈ 0), it's hallucinated\n  // Threshold: if observed_bits < required_bits * factor, flag as hallucination\n  const budgetGap = observed - required;\n  \n  // Calculate confidence score (0-1)\n  // Higher score = more grounded\n  let confidence;\n  if (!hasCitations) {\n    // No citations: base confidence on posterior probability alone\n    confidence = p1 > 0.7 ? p1 * 0.8 : p1 * 0.5; // Penalize uncited claims\n  } else {\n    // With citations: confidence based on budget gap\n    // If p1 >> p0, the model used the evidence → grounded\n    const evidenceUse = Math.max(0, p1 - p0);\n    confidence = Math.min(1, evidenceUse + (p1 > 0.7 ? 0.3 : 0));\n  }\n  \n  // Determine if grounded\n  // Grounded if: high confidence AND (no citations OR evidence was used)\n  const evidenceUsed = hasCitations ? (p1 - p0) > 0.2 : true;\n  const isGrounded = confidence > 0.5 && evidenceUsed;\n  \n  return {\n    observed_bits: observed,\n    required_bits: required,\n    budget_gap: budgetGap,\n    confidence: confidence,\n    evidence_used: evidenceUsed,\n    grounded: isGrounded\n  };\n}\n\nconst data = $input.first().json;\nconst verificationResults = data.verificationResults;\n\nconst groundingResults = verificationResults.map(result => {\n  const scores = computeGroundingScore(result.p1, result.p0, result.hasCitations);\n  \n  return {\n    claim: result.claim,\n    citations: result.citations,\n    p1: result.p1,\n    p0: result.p0,\n    ...scores,\n    warning: scores.grounded ? null : 'לא נמצא מקור מספק'\n  };\n});\n\nreturn {\n  testName: data.testName,\n  groundingResults: groundingResults,\n  expectedResults: data.expectedResults\n};"
+      },
+      "id": "compute-kl",
+      "name": "Compute KL Divergence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Evaluate test results\n\nconst data = $input.first().json;\nconst groundingResults = data.groundingResults;\nconst expectedResults = data.expectedResults;\n\n// Compare actual vs expected\nconst evaluations = groundingResults.map((actual, idx) => {\n  // Find matching expected result\n  const expected = expectedResults.find(e => \n    actual.claim.includes(e.claim) || \n    e.claim.includes(actual.claim.substring(0, Math.min(20, actual.claim.length)))\n  );\n  \n  const passed = expected ? (actual.grounded === expected.grounded) : null;\n  \n  return {\n    claim: actual.claim,\n    expected_grounded: expected ? expected.grounded : 'N/A',\n    actual_grounded: actual.grounded,\n    confidence: actual.confidence,\n    passed: passed,\n    details: {\n      p1: actual.p1,\n      p0: actual.p0,\n      evidence_used: actual.evidence_used,\n      citations: actual.citations\n    }\n  };\n});\n\nconst passedCount = evaluations.filter(e => e.passed === true).length;\nconst failedCount = evaluations.filter(e => e.passed === false).length;\nconst totalTests = evaluations.filter(e => e.passed !== null).length;\n\nreturn {\n  testName: data.testName,\n  summary: {\n    passed: passedCount,\n    failed: failedCount,\n    total: totalTests,\n    success_rate: totalTests > 0 ? (passedCount / totalTests * 100).toFixed(1) + '%' : 'N/A'\n  },\n  evaluations: evaluations\n};"
+      },
+      "id": "evaluate-tests",
+      "name": "Evaluate Test Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all test results\n\nconst allResults = $input.all().map(item => item.json);\n\nlet totalPassed = 0;\nlet totalFailed = 0;\nlet totalTests = 0;\n\nconst testSummaries = allResults.map(result => {\n  totalPassed += result.summary.passed;\n  totalFailed += result.summary.failed;\n  totalTests += result.summary.total;\n  \n  return {\n    testName: result.testName,\n    passed: result.summary.passed,\n    failed: result.summary.failed,\n    total: result.summary.total,\n    success_rate: result.summary.success_rate\n  };\n});\n\nreturn {\n  overall: {\n    total_tests: totalTests,\n    passed: totalPassed,\n    failed: totalFailed,\n    success_rate: totalTests > 0 ? (totalPassed / totalTests * 100).toFixed(1) + '%' : 'N/A'\n  },\n  test_summaries: testSummaries,\n  detailed_results: allResults\n};"
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate All Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Define Test Cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Test Cases": {
+      "main": [
+        [
+          {
+            "node": "Extract Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Claims": {
+      "main": [
+        [
+          {
+            "node": "Build Verification Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Verification Prompts": {
+      "main": [
+        [
+          {
+            "node": "Simulate Verification (Mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate Verification (Mock)": {
+      "main": [
+        [
+          {
+            "node": "Compute KL Divergence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute KL Divergence": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Test Results": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

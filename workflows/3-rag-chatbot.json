@@ -1,0 +1,410 @@
+{
+  "name": "RAG Chatbot - Decisive Appraisal (with Hallucination Detection)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "chat-webhook",
+      "name": "Chat Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "chat-endpoint"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract user message\nconst body = $input.first().json.body || {};\nconst userMessage = body.message || body.query || '';\nconst conversationHistory = body.history || [];\n\nif (!userMessage) {\n  throw new Error('No message provided');\n}\n\nreturn {\n  userMessage,\n  conversationHistory,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "extract-message",
+      "name": "Extract User Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: $json.userMessage, dimensions: 1024 }) }}",
+        "options": {}
+      },
+      "id": "embed-query",
+      "name": "Embed User Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "credentials": {
+        "openAiApi": {
+          "id": "wns058vzzluAujLU",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gov-il-decisions-k1iqa9s.svc.aped-4627-b74a.pinecone.io/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vector: $json.data[0].embedding, topK: 5, includeMetadata: true, namespace: 'gov-il-decisions' }) }}",
+        "options": {}
+      },
+      "id": "query-pinecone",
+      "name": "Query Pinecone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "credentials": {
+        "pineconeApi": {
+          "id": "ntP3SHjrsGLZjyKz",
+          "name": "PineconeApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build context from Pinecone results\n// Enhanced to store raw documents for hallucination detection\nconst queryResult = $input.first().json;\nconst userMessage = $('Extract User Message').first().json.userMessage;\nconst conversationHistory = $('Extract User Message').first().json.conversationHistory;\n\nconst matches = queryResult.matches || [];\n\n// Store raw documents for verification (with source IDs)\nconst rawDocuments = matches.map((match, index) => {\n  const meta = match.metadata || {};\n  return {\n    id: `S${index}`,\n    title: meta.title || 'לא ידוע',\n    text: meta.description || meta.text || meta.content || 'אין תיאור',\n    url: meta.url || '',\n    publishDate: meta.publishDate || '',\n    score: match.score\n  };\n});\n\n// Build context string with source markers for citation tracking\nconst context = rawDocuments.map((doc, index) => {\n  return `[מסמך ${index + 1} - ${doc.id}]\\nכותרת: ${doc.title}\\nתיאור: ${doc.text}\\nקישור: ${doc.url}\\nתאריך: ${doc.publishDate}\\n---`;\n}).join('\\n\\n');\n\n// Build conversation messages with citation instructions\nconst messages = [\n  {\n    role: 'system',\n    content: `אתה עוזר מומחה בנושא שמאות מכריעה בישראל. תפקידך לעזור למשתמשים להבין החלטות שמאי מכריע ולספק מידע רלוונטי מהמאגר.\n\nהנחיות:\n- ענה בעברית\n- התבסס על המסמכים שסופקו לך בהקשר\n- חשוב: ציין את מקור המידע בסוגריים מרובעים, לדוגמה [S0] או [S1]\n- אם אין לך מידע מספיק, אמור זאת בכנות\n- ספק קישורים למסמכים רלוונטיים כשאפשר\n- היה מקצועי ומדויק\n- אל תמציא מידע שלא מופיע במסמכים\n\nהקשר מהמאגר:\\n${context || 'לא נמצאו מסמכים רלוונטיים'}`\n  }\n];\n\n// Add conversation history\nif (conversationHistory && conversationHistory.length > 0) {\n  conversationHistory.forEach(msg => {\n    messages.push({\n      role: msg.role,\n      content: msg.content\n    });\n  });\n}\n\n// Add current user message\nmessages.push({\n  role: 'user',\n  content: userMessage\n});\n\nreturn {\n  messages,\n  context,\n  rawDocuments,\n  matchCount: matches.length,\n  relevantDocs: matches.map(m => ({\n    title: m.metadata?.title,\n    url: m.metadata?.url,\n    score: m.score\n  }))\n};"
+      },
+      "id": "build-context",
+      "name": "Build RAG Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o', messages: $json.messages, temperature: 0.7, max_tokens: 1000 }) }}",
+        "options": {}
+      },
+      "id": "generate-response",
+      "name": "Generate AI Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 0],
+      "credentials": {
+        "openAiApi": {
+          "id": "wns058vzzluAujLU",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract Claims & Citations from AI response\n// Split response into sentences and identify citations [S0], [S1], etc.\n\nconst aiResponse = $input.first().json;\nconst contextData = $('Build RAG Context').first().json;\n\nconst assistantMessage = aiResponse.choices?.[0]?.message?.content || '';\nconst rawDocuments = contextData.rawDocuments || [];\n\n// Split response into sentences (Hebrew-aware)\nconst sentencePattern = /[^.!?\\n]+[.!?]?/g;\nconst rawSentences = assistantMessage.match(sentencePattern) || [assistantMessage];\n\n// Extract citations [S0], [S1] etc. from each sentence\nconst citationPattern = /\\[S(\\d+)\\]/g;\n\nconst claims = rawSentences\n  .map(sentence => sentence.trim())\n  .filter(sentence => sentence.length > 10)\n  .map((sentence, idx) => {\n    const citations = [];\n    let match;\n    while ((match = citationPattern.exec(sentence)) !== null) {\n      citations.push('S' + match[1]);\n    }\n    citationPattern.lastIndex = 0;\n    \n    const cleanClaim = sentence.replace(/\\[S\\d+\\]/g, '').replace(/\\s+/g, ' ').trim();\n    \n    return {\n      id: `claim-${idx}`,\n      originalText: sentence,\n      cleanClaim: cleanClaim,\n      citations: citations\n    };\n  });\n\nreturn {\n  aiResponse: aiResponse,\n  assistantMessage: assistantMessage,\n  claims: claims,\n  rawDocuments: rawDocuments,\n  contextData: contextData\n};"
+      },
+      "id": "extract-claims",
+      "name": "Extract Claims & Citations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Verification Prompts and make parallel verification calls\n// Using gpt-4o-mini with logprobs for efficient verification\n\nconst data = $input.first().json;\nconst claims = data.claims;\nconst rawDocuments = data.rawDocuments;\n\n// Build full context string\nconst fullContext = rawDocuments.map(doc => \n  `[${doc.id}]: ${doc.text}`\n).join('\\n\\n');\n\n// Build verification requests (only for significant claims)\nconst verificationRequests = claims\n  .filter(claim => claim.cleanClaim.length >= 15)\n  .slice(0, 10) // Limit to 10 claims max for performance\n  .map(claim => {\n    // Build scrubbed context (cited sources redacted)\n    let scrubbedContext = fullContext;\n    claim.citations.forEach(citationId => {\n      const doc = rawDocuments.find(d => d.id === citationId);\n      if (doc) {\n        scrubbedContext = scrubbedContext.replace(\n          `[${doc.id}]: ${doc.text}`,\n          `[${doc.id}]: [REDACTED]`\n        );\n      }\n    });\n    \n    return {\n      claimId: claim.id,\n      claim: claim.cleanClaim,\n      citations: claim.citations,\n      hasCitations: claim.citations.length > 0,\n      fullContext: fullContext,\n      scrubbedContext: scrubbedContext\n    };\n  });\n\n// Return items for batch HTTP processing\nreturn verificationRequests.map(req => ({ json: req }));"
+      },
+      "id": "build-verification-prompts",
+      "name": "Build Verification Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: 'You are a fact-checking assistant. Determine if the claim is entailed (supported) by the provided context. Reply with ONLY one word: YES, NO, or UNSURE.' }, { role: 'user', content: 'Context:\\n' + $json.fullContext + '\\n\\nClaim: \"' + $json.claim + '\"\\n\\nIs this claim entailed by the context?' }], max_tokens: 5, logprobs: true, top_logprobs: 5 }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 10,
+              "batchInterval": 100
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "verify-posterior",
+      "name": "Verify Posterior (Full Context)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, -100],
+      "credentials": {
+        "openAiApi": {
+          "id": "wns058vzzluAujLU",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: 'You are a fact-checking assistant. Determine if the claim is entailed (supported) by the provided context. Reply with ONLY one word: YES, NO, or UNSURE.' }, { role: 'user', content: 'Context:\\n' + $json.scrubbedContext + '\\n\\nClaim: \"' + $json.claim + '\"\\n\\nIs this claim entailed by the context?' }], max_tokens: 5, logprobs: true, top_logprobs: 5 }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 10,
+              "batchInterval": 100
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "verify-prior",
+      "name": "Verify Prior (Scrubbed Context)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 100],
+      "credentials": {
+        "openAiApi": {
+          "id": "wns058vzzluAujLU",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-verification",
+      "name": "Merge Verification Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1980, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute Budget Gaps using KL Divergence\n// Core Strawberry/Pythea algorithm implementation\n\nfunction extractPYes(response) {\n  try {\n    const logprobs = response?.choices?.[0]?.logprobs;\n    if (!logprobs || !logprobs.content || logprobs.content.length === 0) {\n      const text = response?.choices?.[0]?.message?.content?.toUpperCase() || '';\n      if (text.includes('YES')) return 0.85;\n      if (text.includes('NO')) return 0.15;\n      return 0.5;\n    }\n    \n    const firstToken = logprobs.content[0];\n    const topLogprobs = firstToken.top_logprobs || [];\n    const yesEntry = topLogprobs.find(t => \n      t.token.toUpperCase().trim() === 'YES' || t.token.toUpperCase().trim() === 'Y'\n    );\n    \n    if (yesEntry) return Math.exp(yesEntry.logprob);\n    \n    const actualToken = firstToken.token.toUpperCase().trim();\n    if (actualToken === 'YES' || actualToken === 'Y') return Math.exp(firstToken.logprob);\n    if (actualToken === 'NO' || actualToken === 'N') return 1 - Math.exp(firstToken.logprob);\n    return 0.5;\n  } catch (e) {\n    return 0.5;\n  }\n}\n\nfunction klBernoulli(p, q) {\n  const eps = 1e-12;\n  p = Math.max(eps, Math.min(1 - eps, p));\n  q = Math.max(eps, Math.min(1 - eps, q));\n  return p * Math.log(p / q) + (1 - p) * Math.log((1 - p) / (1 - q));\n}\n\nfunction computeGroundingScore(p1, p0, hasCitations) {\n  p1 = p1 ?? 0.5;\n  p0 = p0 ?? 0.5;\n  \n  const observed = klBernoulli(p1, 0.5);\n  const required = klBernoulli(p1, p0);\n  const budgetGap = observed - required;\n  \n  const evidenceUse = Math.max(0, p1 - p0);\n  const evidenceUsed = hasCitations ? evidenceUse > 0.15 : true;\n  \n  let confidence;\n  if (!hasCitations) {\n    confidence = p1 > 0.7 ? p1 * 0.7 : p1 * 0.4;\n  } else {\n    confidence = Math.min(1, evidenceUse * 1.5 + (p1 > 0.7 ? 0.3 : 0));\n  }\n  \n  const isGrounded = confidence > 0.45 && evidenceUsed;\n  \n  return {\n    observed_bits: Math.round(observed * 1000) / 1000,\n    required_bits: Math.round(required * 1000) / 1000,\n    budget_gap: Math.round(budgetGap * 1000) / 1000,\n    evidence_use: Math.round(evidenceUse * 100) / 100,\n    confidence: Math.round(confidence * 100) / 100,\n    evidence_used: evidenceUsed,\n    grounded: isGrounded\n  };\n}\n\n// Get all verification results\nconst allItems = $input.all();\nconst verificationData = $('Build Verification Prompts').all();\nconst extractClaimsData = $('Extract Claims & Citations').first().json;\n\n// Process results - items come in pairs (posterior, prior)\nconst groundingResults = [];\n\nfor (let i = 0; i < allItems.length; i++) {\n  const item = allItems[i].json;\n  const verifyItem = verificationData[i]?.json;\n  \n  if (!verifyItem) continue;\n  \n  // Extract posterior and prior from the paired responses\n  const posteriorResponse = item[0] || item;\n  const priorResponse = item[1];\n  \n  const p1 = extractPYes(posteriorResponse);\n  const p0 = priorResponse ? extractPYes(priorResponse) : p1 * 0.9; // Fallback if no prior\n  \n  const scores = computeGroundingScore(p1, p0, verifyItem.hasCitations);\n  \n  groundingResults.push({\n    text: verifyItem.claim,\n    citing: verifyItem.citations,\n    p1: Math.round(p1 * 100) / 100,\n    p0: Math.round(p0 * 100) / 100,\n    ...scores,\n    warning: scores.grounded ? null : 'לא נמצא מקור מספק'\n  });\n}\n\n// Calculate overall grounding status\nconst groundedClaims = groundingResults.filter(r => r.grounded).length;\nconst totalClaims = groundingResults.length;\nconst overallGrounded = totalClaims === 0 || (groundedClaims / totalClaims) >= 0.7;\n\nreturn {\n  hallucination_check: {\n    overall_grounded: overallGrounded,\n    grounded_claims: groundedClaims,\n    total_claims: totalClaims,\n    grounding_ratio: totalClaims > 0 ? Math.round((groundedClaims / totalClaims) * 100) / 100 : 1,\n    claims: groundingResults\n  },\n  originalData: extractClaimsData\n};"
+      },
+      "id": "compute-budget-gaps",
+      "name": "Compute Budget Gaps (KL Divergence)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format final response with hallucination flags\nconst data = $input.first().json;\nconst hallucinationCheck = data.hallucination_check;\nconst originalData = data.originalData;\n\nconst aiResponse = originalData.aiResponse;\nconst contextData = originalData.contextData;\n\nconst assistantMessage = aiResponse?.choices?.[0]?.message?.content || originalData.assistantMessage || 'מצטער, לא הצלחתי לייצר תשובה.';\n\n// Build warning message if needed\nlet warningMessage = null;\nif (!hallucinationCheck.overall_grounded) {\n  const unfoundedClaims = hallucinationCheck.claims.filter(c => !c.grounded);\n  if (unfoundedClaims.length > 0) {\n    warningMessage = `שים לב: ${unfoundedClaims.length} טענות בתשובה לא נתמכות במלואן על ידי המקורות.`;\n  }\n}\n\nreturn {\n  success: true,\n  response: assistantMessage,\n  sources: contextData?.relevantDocs || [],\n  matchCount: contextData?.matchCount || 0,\n  model: aiResponse?.model || 'gpt-4o',\n  usage: aiResponse?.usage || {},\n  hallucination_check: hallucinationCheck,\n  warning: warningMessage\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response with Flags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-chat",
+      "name": "Respond with Chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2640, 0]
+    }
+  ],
+  "connections": {
+    "Chat Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract User Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Message": {
+      "main": [
+        [
+          {
+            "node": "Embed User Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed User Query": {
+      "main": [
+        [
+          {
+            "node": "Query Pinecone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Pinecone": {
+      "main": [
+        [
+          {
+            "node": "Build RAG Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build RAG Context": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Response": {
+      "main": [
+        [
+          {
+            "node": "Extract Claims & Citations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Claims & Citations": {
+      "main": [
+        [
+          {
+            "node": "Build Verification Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Verification Prompts": {
+      "main": [
+        [
+          {
+            "node": "Verify Posterior (Full Context)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Verify Prior (Scrubbed Context)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Posterior (Full Context)": {
+      "main": [
+        [
+          {
+            "node": "Merge Verification Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Prior (Scrubbed Context)": {
+      "main": [
+        [
+          {
+            "node": "Merge Verification Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Verification Results": {
+      "main": [
+        [
+          {
+            "node": "Compute Budget Gaps (KL Divergence)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Budget Gaps (KL Divergence)": {
+      "main": [
+        [
+          {
+            "node": "Format Response with Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response with Flags": {
+      "main": [
+        [
+          {
+            "node": "Respond with Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}

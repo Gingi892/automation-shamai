@@ -1,0 +1,218 @@
+{
+  "name": "Document Processor - Embeddings & Pinecone",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-documents",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "process-documents"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process incoming documents\nconst documents = $input.first().json.body?.documents || $input.first().json.documents || [];\n\nif (!documents.length) {\n  throw new Error('No documents provided');\n}\n\nreturn documents.map(doc => ({\n  json: {\n    id: doc.id,\n    title: doc.title,\n    description: doc.description,\n    url: doc.url,\n    publishDate: doc.publishDate,\n    content: `${doc.title}\\n\\n${doc.description}`,\n    metadata: {\n      source: 'gov.il',\n      type: 'decisive_appraisal',\n      offices: doc.offices?.join(', ') || '',\n      topics: doc.topics?.join(', ') || '',\n      publishDate: doc.publishDate\n    }\n  }\n}));"
+      },
+      "id": "prepare-documents",
+      "name": "Prepare Documents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "id": "batch-documents",
+      "name": "Batch Documents",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: $json.content }) }}",
+        "options": {}
+      },
+      "id": "create-embedding",
+      "name": "Create OpenAI Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine document with its embedding\nconst doc = $('Batch Documents').first().json;\nconst embeddingResponse = $input.first().json;\n\nconst embedding = embeddingResponse.data?.[0]?.embedding || [];\n\nif (!embedding.length) {\n  throw new Error('Failed to create embedding');\n}\n\nreturn {\n  id: doc.id || `doc_${Date.now()}`,\n  values: embedding,\n  metadata: {\n    title: doc.title,\n    description: doc.description?.substring(0, 500) || '',\n    url: doc.url,\n    source: doc.metadata?.source || 'gov.il',\n    type: doc.metadata?.type || 'decisive_appraisal',\n    offices: doc.metadata?.offices || '',\n    topics: doc.metadata?.topics || '',\n    publishDate: doc.metadata?.publishDate || '',\n    content: doc.content?.substring(0, 1000) || ''\n  }\n};"
+      },
+      "id": "combine-embedding",
+      "name": "Combine Doc & Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "collect-vectors",
+      "name": "Collect All Vectors",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://{{ $env.PINECONE_HOST }}/vectors/upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vectors: $json.data, namespace: 'gov-il-decisions' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "upsert-pinecone",
+      "name": "Upsert to Pinecone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Return summary of processing\nconst upsertResult = $input.first().json;\nconst vectorCount = $('Collect All Vectors').first().json.data?.length || 0;\n\nreturn {\n  success: true,\n  message: `Successfully processed and stored ${vectorCount} documents`,\n  upsertedCount: upsertResult.upsertedCount || vectorCount,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "return-result",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1760, 0]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Documents": {
+      "main": [
+        [
+          {
+            "node": "Batch Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Documents": {
+      "main": [
+        [
+          {
+            "node": "Create OpenAI Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create OpenAI Embedding": {
+      "main": [
+        [
+          {
+            "node": "Combine Doc & Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Doc & Embedding": {
+      "main": [
+        [
+          {
+            "node": "Collect All Vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect All Vectors": {
+      "main": [
+        [
+          {
+            "node": "Upsert to Pinecone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert to Pinecone": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}

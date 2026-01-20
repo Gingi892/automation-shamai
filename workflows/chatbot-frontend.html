@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>צ'אטבוט שמאות מכריעה</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .chat-header h1 {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f5f7fb;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message.user {
+            align-items: flex-start;
+        }
+
+        .message.assistant {
+            align-items: flex-end;
+        }
+
+        .message-bubble {
+            max-width: 80%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+        }
+
+        .message.user .message-bubble {
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.assistant .message-bubble {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        /* Interactive Citation Tags */
+        .citation-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 8px;
+            margin: 0 2px;
+            background: #e3f2fd;
+            border: 1px solid #2196F3;
+            border-radius: 12px;
+            color: #1565C0;
+            font-size: 0.85em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            vertical-align: middle;
+            text-decoration: none;
+        }
+
+        .citation-tag:hover {
+            background: #bbdefb;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3);
+        }
+
+        .citation-tag.active {
+            background: #2196F3;
+            color: white;
+        }
+
+        .citation-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 16px;
+            height: 16px;
+            background: #2196F3;
+            color: white;
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .citation-tag.active .citation-number {
+            background: white;
+            color: #2196F3;
+        }
+
+        /* Sources Section */
+        .sources {
+            margin-top: 12px;
+            max-width: 80%;
+            background: #fafafa;
+            border-radius: 12px;
+            border: 1px solid #e0e0e0;
+            overflow: hidden;
+        }
+
+        .sources-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: #f5f5f5;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .sources-header:hover {
+            background: #eeeeee;
+        }
+
+        .sources-title {
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sources-toggle-icon {
+            transition: transform 0.2s;
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .sources-header.collapsed .sources-toggle-icon {
+            transform: rotate(-90deg);
+        }
+
+        .sources-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sources-list.collapsed {
+            display: none;
+        }
+
+        .source-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-top: 1px solid #eee;
+            transition: background 0.2s;
+        }
+
+        .source-item:hover {
+            background: #f5f5f5;
+        }
+
+        .source-item.highlighted {
+            background: #fff3cd;
+            border-color: #ffc107;
+            animation: highlight-pulse 1.5s ease;
+        }
+
+        @keyframes highlight-pulse {
+            0%, 100% { box-shadow: none; }
+            50% { box-shadow: inset 0 0 0 2px #ffc107; }
+        }
+
+        .source-index {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+            background: #2196F3;
+            color: white;
+            border-radius: 50%;
+            font-size: 12px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .source-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .source-link {
+            display: block;
+            color: #1565C0;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .source-link:hover {
+            text-decoration: underline;
+        }
+
+        .source-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 2px;
+        }
+
+        .relevance-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .relevance-badge.high {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .relevance-badge.medium {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+
+        .relevance-badge.low {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        /* Citation Tooltip */
+        .citation-tooltip {
+            position: fixed;
+            z-index: 1000;
+            width: 300px;
+            max-width: 90vw;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+            border: 1px solid #e0e0e0;
+            padding: 14px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(8px);
+            transition: all 0.2s ease;
+        }
+
+        .citation-tooltip.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .tooltip-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .tooltip-index {
+            background: #2196F3;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .tooltip-title {
+            font-weight: 600;
+            font-size: 13px;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tooltip-relevance {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .tooltip-relevance-label {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .tooltip-relevance-bar {
+            flex: 1;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .tooltip-relevance-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        .tooltip-relevance-fill.high { background: #4CAF50; }
+        .tooltip-relevance-fill.medium { background: #FF9800; }
+        .tooltip-relevance-fill.low { background: #f44336; }
+
+        .tooltip-relevance-percent {
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 32px;
+        }
+
+        .tooltip-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .tooltip-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            text-decoration: none;
+        }
+
+        .tooltip-btn.primary {
+            background: #2196F3;
+            color: white;
+        }
+
+        .tooltip-btn.primary:hover {
+            background: #1976D2;
+        }
+
+        .tooltip-btn.secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .tooltip-btn.secondary:hover {
+            background: #e0e0e0;
+        }
+
+        /* Grounding Indicator */
+        .grounding-container {
+            margin-top: 10px;
+            max-width: 80%;
+        }
+
+        .grounding-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .grounding-indicator:hover {
+            transform: scale(1.02);
+        }
+
+        .grounding-indicator.grounded {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #a5d6a7;
+        }
+
+        .grounding-indicator.partial {
+            background: #fff3e0;
+            color: #e65100;
+            border: 1px solid #ffcc80;
+        }
+
+        .grounding-indicator.ungrounded {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ef9a9a;
+        }
+
+        .grounding-icon {
+            font-size: 1rem;
+        }
+
+        .grounding-details {
+            display: none;
+            margin-top: 8px;
+            padding: 10px;
+            background: #fafafa;
+            border-radius: 10px;
+            border: 1px solid #e0e0e0;
+            font-size: 0.8rem;
+        }
+
+        .grounding-details.show {
+            display: block;
+        }
+
+        .grounding-details-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        .claim-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .claim-item:last-child {
+            border-bottom: none;
+        }
+
+        .claim-status {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+        }
+
+        .claim-status.grounded {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+
+        .claim-status.ungrounded {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+
+        .claim-text {
+            flex: 1;
+            color: #555;
+            line-height: 1.4;
+        }
+
+        .claim-confidence {
+            flex-shrink: 0;
+            font-size: 0.75rem;
+            color: #888;
+            min-width: 40px;
+            text-align: left;
+        }
+
+        .warning-banner {
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+            color: #e65100;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-top: 8px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            max-width: 80%;
+        }
+
+        .warning-icon {
+            font-size: 1.1rem;
+        }
+
+        .toggle-details {
+            font-size: 0.75rem;
+            color: #888;
+            margin-right: 5px;
+        }
+
+        /* Other styles */
+        .chat-input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input:focus {
+            border-color: #667eea;
+        }
+
+        .send-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .send-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 15px;
+            background: white;
+            border-radius: 18px;
+            margin-bottom: 15px;
+            width: fit-content;
+        }
+
+        .typing-indicator.show {
+            display: block;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 5px;
+        }
+
+        .typing-dots span {
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        .config-panel {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .config-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .config-label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 10px 20px;
+            font-size: 0.9rem;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 600px) {
+            .citation-tooltip {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                top: auto;
+                width: 100%;
+                max-width: 100%;
+                border-radius: 16px 16px 0 0;
+                transform: translateY(100%);
+            }
+
+            .citation-tooltip.visible {
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>צ'אטבוט שמאות מכריעה</h1>
+            <p>שאל שאלות על החלטות שמאי מכריע בישראל</p>
+        </div>
+
+        <div class="config-panel">
+            <label class="config-label">כתובת ה-Webhook של n8n:</label>
+            <input type="text" id="webhookUrl" class="config-input"
+                   placeholder="https://your-n8n-instance.com/webhook/chat"
+                   value="">
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant">
+                <div class="message-bubble">
+                    שלום! אני העוזר שלך בנושא שמאות מכריעה.
+                    אני יכול לעזור לך למצוא מידע על החלטות שמאי מכריע, להסביר מושגים, ולספק מידע רלוונטי מהמאגר.
+
+איך אוכל לעזור לך היום?
+                </div>
+            </div>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <div class="chat-input-container">
+            <input type="text" id="userInput" class="chat-input"
+                   placeholder="הקלד את השאלה שלך כאן..."
+                   onkeypress="handleKeyPress(event)">
+            <button class="send-button" id="sendButton" onclick="sendMessage()">שלח</button>
+        </div>
+    </div>
+
+    <!-- Tooltip container (reused for all citations) -->
+    <div id="citationTooltip" class="citation-tooltip"></div>
+
+    <script>
+        let conversationHistory = [];
+        let currentSources = [];
+        let activeTooltipTimeout = null;
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Parse response text and convert [S0], [S1] etc. to clickable citation tags
+        function parseCitations(text, sources) {
+            if (!sources || sources.length === 0) return escapeHtml(text);
+
+            // Pattern matches [S0], [S1], etc.
+            const citationPattern = /\[S(\d+)\]/g;
+
+            let result = escapeHtml(text);
+
+            // Replace citations with interactive tags
+            result = result.replace(/\[S(\d+)\]/g, (match, index) => {
+                const idx = parseInt(index);
+                if (idx < sources.length) {
+                    const source = sources[idx];
+                    return `<span class="citation-tag" data-source-index="${idx}" onclick="handleCitationClick(event, ${idx})" onmouseenter="showTooltip(event, ${idx})" onmouseleave="scheduleHideTooltip()">` +
+                           `<span class="citation-number">${idx + 1}</span>` +
+                           `</span>`;
+                }
+                return match;
+            });
+
+            return result;
+        }
+
+        function getRelevanceClass(score) {
+            if (score >= 0.8) return 'high';
+            if (score >= 0.5) return 'medium';
+            return 'low';
+        }
+
+        function addMessage(content, role, sources = [], hallucinationCheck = null, warning = null) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            const messageId = 'msg-' + Date.now();
+
+            // Store sources for tooltip access
+            if (role === 'assistant' && sources.length > 0) {
+                currentSources = sources;
+            }
+
+            // Parse citations in the response
+            const parsedContent = role === 'assistant' ? parseCitations(content, sources) : escapeHtml(content);
+            let messageHTML = `<div class="message-bubble">${parsedContent}</div>`;
+
+            // Add sources section with numbered items
+            if (sources && sources.length > 0) {
+                messageHTML += `
+                    <div class="sources" id="sources-${messageId}">
+                        <div class="sources-header" onclick="toggleSources('${messageId}')">
+                            <span class="sources-title">
+                                <span>📚</span>
+                                <span>מקורות (${sources.length})</span>
+                            </span>
+                            <span class="sources-toggle-icon">▼</span>
+                        </div>
+                        <ul class="sources-list" id="sources-list-${messageId}">
+                            ${sources.map((s, idx) => {
+                                const relevanceClass = getRelevanceClass(s.score);
+                                const scorePercent = Math.round(s.score * 100);
+                                return `
+                                    <li class="source-item" data-source-index="${idx}" id="source-${messageId}-${idx}">
+                                        <span class="source-index">${idx + 1}</span>
+                                        <div class="source-info">
+                                            <a href="${s.url || '#'}" target="_blank" class="source-link" title="${escapeHtml(s.title || 'מסמך')}">
+                                                ${escapeHtml(s.title || 'מסמך')}
+                                            </a>
+                                            <div class="source-meta">
+                                                <span class="relevance-badge ${relevanceClass}">${scorePercent}% רלוונטי</span>
+                                            </div>
+                                        </div>
+                                    </li>
+                                `;
+                            }).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            // Add hallucination check indicator
+            if (hallucinationCheck && role === 'assistant') {
+                const ratio = hallucinationCheck.grounding_ratio || 1;
+                const percentage = Math.round(ratio * 100);
+                const totalClaims = hallucinationCheck.total_claims || 0;
+                const groundedClaims = hallucinationCheck.grounded_claims || 0;
+
+                let statusClass, icon, statusText;
+                if (ratio >= 0.9) {
+                    statusClass = 'grounded';
+                    icon = '✓';
+                    statusText = 'מבוסס';
+                } else if (ratio >= 0.7) {
+                    statusClass = 'partial';
+                    icon = '⚠';
+                    statusText = 'מבוסס חלקית';
+                } else {
+                    statusClass = 'ungrounded';
+                    icon = '✗';
+                    statusText = 'דורש בדיקה';
+                }
+
+                messageHTML += `
+                    <div class="grounding-container">
+                        <div class="grounding-indicator ${statusClass}" onclick="toggleGroundingDetails('${messageId}')">
+                            <span class="grounding-icon">${icon}</span>
+                            <span>${statusText} (${percentage}%)</span>
+                            <span class="toggle-details">▼</span>
+                        </div>
+                `;
+
+                if (hallucinationCheck.claims && hallucinationCheck.claims.length > 0) {
+                    messageHTML += `
+                        <div class="grounding-details" id="details-${messageId}">
+                            <div class="grounding-details-title">פירוט טענות (${groundedClaims}/${totalClaims} מבוססות):</div>
+                    `;
+
+                    hallucinationCheck.claims.forEach(claim => {
+                        const claimStatus = claim.grounded ? 'grounded' : 'ungrounded';
+                        const claimIcon = claim.grounded ? '✓' : '✗';
+                        const confidence = Math.round((claim.confidence || 0) * 100);
+                        const claimText = claim.text || '';
+                        const displayText = claimText.length > 80 ? claimText.substring(0, 80) + '...' : claimText;
+
+                        messageHTML += `
+                            <div class="claim-item">
+                                <div class="claim-status ${claimStatus}">${claimIcon}</div>
+                                <div class="claim-text">${escapeHtml(displayText)}</div>
+                                <div class="claim-confidence">${confidence}%</div>
+                            </div>
+                        `;
+                    });
+
+                    messageHTML += `</div>`;
+                }
+
+                messageHTML += `</div>`;
+            }
+
+            // Add warning banner if present
+            if (warning && role === 'assistant') {
+                messageHTML += `
+                    <div class="warning-banner">
+                        <span class="warning-icon">⚠️</span>
+                        <span>${escapeHtml(warning)}</span>
+                    </div>
+                `;
+            }
+
+            messageDiv.innerHTML = messageHTML;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Show tooltip for a citation
+        function showTooltip(event, sourceIndex) {
+            clearTimeout(activeTooltipTimeout);
+
+            const source = currentSources[sourceIndex];
+            if (!source) return;
+
+            const tooltip = document.getElementById('citationTooltip');
+            const relevanceClass = getRelevanceClass(source.score);
+            const scorePercent = Math.round(source.score * 100);
+
+            tooltip.innerHTML = `
+                <div class="tooltip-header">
+                    <span class="tooltip-index">מקור ${sourceIndex + 1}</span>
+                    <span class="tooltip-title">${escapeHtml(source.title || 'מסמך')}</span>
+                </div>
+                <div class="tooltip-relevance">
+                    <span class="tooltip-relevance-label">רלוונטיות:</span>
+                    <div class="tooltip-relevance-bar">
+                        <div class="tooltip-relevance-fill ${relevanceClass}" style="width: ${scorePercent}%"></div>
+                    </div>
+                    <span class="tooltip-relevance-percent">${scorePercent}%</span>
+                </div>
+                <div class="tooltip-actions">
+                    <a href="${source.url || '#'}" target="_blank" class="tooltip-btn primary">
+                        פתח מסמך ↗
+                    </a>
+                    <button class="tooltip-btn secondary" onclick="highlightSource(${sourceIndex})">
+                        הצג ברשימה
+                    </button>
+                </div>
+            `;
+
+            // Position tooltip
+            const rect = event.target.getBoundingClientRect();
+            const isMobile = window.innerWidth <= 600;
+
+            if (isMobile) {
+                // Mobile: show at bottom
+                tooltip.style.top = 'auto';
+                tooltip.style.bottom = '0';
+                tooltip.style.left = '0';
+                tooltip.style.right = '0';
+            } else {
+                // Desktop: position near citation
+                tooltip.style.bottom = 'auto';
+                tooltip.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+                tooltip.style.right = (window.innerWidth - rect.right) + 'px';
+                tooltip.style.left = 'auto';
+            }
+
+            tooltip.classList.add('visible');
+
+            // Keep tooltip open when hovering over it
+            tooltip.onmouseenter = () => clearTimeout(activeTooltipTimeout);
+            tooltip.onmouseleave = () => scheduleHideTooltip();
+        }
+
+        function scheduleHideTooltip() {
+            activeTooltipTimeout = setTimeout(() => {
+                document.getElementById('citationTooltip').classList.remove('visible');
+            }, 300);
+        }
+
+        function hideTooltip() {
+            clearTimeout(activeTooltipTimeout);
+            document.getElementById('citationTooltip').classList.remove('visible');
+        }
+
+        // Handle citation click - highlight source and scroll to it
+        function handleCitationClick(event, sourceIndex) {
+            event.stopPropagation();
+            highlightSource(sourceIndex);
+            hideTooltip();
+        }
+
+        // Highlight a source in the sources list
+        function highlightSource(sourceIndex) {
+            // Remove previous highlights
+            document.querySelectorAll('.source-item.highlighted').forEach(el => {
+                el.classList.remove('highlighted');
+            });
+
+            // Find and highlight the source
+            const sourceItems = document.querySelectorAll(`.source-item[data-source-index="${sourceIndex}"]`);
+            sourceItems.forEach(item => {
+                item.classList.add('highlighted');
+                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+                // Remove highlight after animation
+                setTimeout(() => {
+                    item.classList.remove('highlighted');
+                }, 2000);
+            });
+        }
+
+        function toggleSources(messageId) {
+            const header = document.querySelector(`#sources-${messageId} .sources-header`);
+            const list = document.getElementById(`sources-list-${messageId}`);
+
+            header.classList.toggle('collapsed');
+            list.classList.toggle('collapsed');
+        }
+
+        function toggleGroundingDetails(messageId) {
+            const details = document.getElementById('details-' + messageId);
+            if (details) {
+                details.classList.toggle('show');
+            }
+        }
+
+        function showTyping() {
+            const messagesContainer = document.getElementById('chatMessages');
+            const typingDiv = document.createElement('div');
+            typingDiv.id = 'typingIndicator';
+            typingDiv.className = 'typing-indicator show';
+            typingDiv.innerHTML = `
+                <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            `;
+            messagesContainer.appendChild(typingDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function hideTyping() {
+            const typingIndicator = document.getElementById('typingIndicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.innerHTML = `<div class="error-message">${escapeHtml(message)}</div>`;
+            setTimeout(() => {
+                errorContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const sendButton = document.getElementById('sendButton');
+            const webhookUrl = document.getElementById('webhookUrl').value;
+
+            const message = input.value.trim();
+            if (!message) return;
+
+            if (!webhookUrl) {
+                showError('נא להזין את כתובת ה-Webhook של n8n');
+                return;
+            }
+
+            addMessage(message, 'user');
+            conversationHistory.push({ role: 'user', content: message });
+
+            input.value = '';
+            sendButton.disabled = true;
+            showTyping();
+
+            try {
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        history: conversationHistory.slice(-10)
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                hideTyping();
+
+                if (data.success && data.response) {
+                    addMessage(
+                        data.response,
+                        'assistant',
+                        data.sources,
+                        data.hallucination_check || null,
+                        data.warning || null
+                    );
+                    conversationHistory.push({ role: 'assistant', content: data.response });
+                } else {
+                    throw new Error(data.error || 'Unknown error occurred');
+                }
+
+            } catch (error) {
+                hideTyping();
+                showError(`שגיאה: ${error.message}`);
+                console.error('Error:', error);
+            } finally {
+                sendButton.disabled = false;
+                input.focus();
+            }
+        }
+
+        // Close tooltip when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.citation-tag') && !e.target.closest('.citation-tooltip')) {
+                hideTooltip();
+            }
+        });
+
+        // Focus on input when page loads
+        document.getElementById('userInput').focus();
+    </script>
+</body>
+</html>

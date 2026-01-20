@@ -1,0 +1,322 @@
+{
+  "name": "Gov.il Decisive Appraisal Scraper (API-based)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "base-url",
+              "name": "baseUrl",
+              "value": "https://www.gov.il/he/api/PublicationApi/Index",
+              "type": "string"
+            },
+            {
+              "id": "page-size",
+              "name": "pageSize",
+              "value": 50,
+              "type": "number"
+            },
+            {
+              "id": "current-skip",
+              "name": "currentSkip",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "search-term",
+              "name": "searchTerm",
+              "value": "שמאי מכריע",
+              "type": "string"
+            },
+            {
+              "id": "all-documents",
+              "name": "allDocuments",
+              "value": [],
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-config",
+      "name": "Set Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.baseUrl }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "={{ $json.pageSize }}"
+            },
+            {
+              "name": "skip",
+              "value": "={{ $json.currentSkip }}"
+            },
+            {
+              "name": "keyword",
+              "value": "={{ $json.searchTerm }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "http-request",
+      "name": "Fetch Gov.il API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract documents from Gov.il API response\nconst response = $input.first().json;\nconst results = response.results || [];\nconst total = response.total || 0;\nconst config = $('Set Config').first().json;\nconst existingDocs = config.allDocuments || [];\n\nconsole.log('=== Gov.il API Response ===');\nconsole.log('Results count:', results.length);\nconsole.log('Total available:', total);\nconsole.log('Current skip:', config.currentSkip);\n\n// Process each document from API\nconst newDocuments = results.map(item => ({\n  id: item.ItemUniqueId || item.ItemId,\n  title: item.Title,\n  description: item.Description,\n  url: `https://www.gov.il${item.BaseUrl}/${item.UrlName}`,\n  publishDate: item.DocPublishedDate,\n  updateDate: item.DocUpdateDate,\n  offices: item.OfficeDesc || [],\n  topics: item.TopicDesc || [],\n  contentType: item.ContentType,\n  metadata: item.Metadata || []\n}));\n\nconst allDocuments = [...existingDocs, ...newDocuments];\nconst hasMore = (config.currentSkip + config.pageSize) < total && (config.currentSkip / config.pageSize) < 2; // Max 2 pages\n\nconsole.log('New documents:', newDocuments.length);\nconsole.log('Total accumulated:', allDocuments.length);\nconsole.log('Has more pages:', hasMore);\nconsole.log('===========================');\n\nreturn {\n  documents: allDocuments,\n  newCount: newDocuments.length,\n  hasMore,\n  currentSkip: config.currentSkip,\n  nextSkip: config.currentSkip + config.pageSize,\n  baseUrl: config.baseUrl,\n  searchTerm: config.searchTerm,\n  pageSize: config.pageSize,\n  total,\n  debug: {\n    apiResponseSize: JSON.stringify(response).length,\n    documentsFound: newDocuments.length,\n    totalAvailable: total\n  }\n};"
+      },
+      "id": "process-response",
+      "name": "Process API Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-more",
+              "leftValue": "={{ $json.hasMore }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-pagination",
+      "name": "Has More Pages?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "update-skip",
+              "name": "currentSkip",
+              "value": "={{ $json.nextSkip }}",
+              "type": "number"
+            },
+            {
+              "id": "base-url",
+              "name": "baseUrl",
+              "value": "={{ $json.baseUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "page-size",
+              "name": "pageSize",
+              "value": "={{ $json.pageSize }}",
+              "type": "number"
+            },
+            {
+              "id": "search-term",
+              "name": "searchTerm",
+              "value": "={{ $json.searchTerm }}",
+              "type": "string"
+            },
+            {
+              "id": "all-documents",
+              "name": "allDocuments",
+              "value": "={{ $json.documents }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-pagination",
+      "name": "Update Skip Value",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "documents",
+        "options": {}
+      },
+      "id": "split-documents",
+      "name": "Split Documents",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "aggregate-all",
+      "name": "Aggregate All Documents",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1320, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://a-i-do.app.n8n.cloud/webhook/process-documents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ documents: $json.data }) }}",
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "send-to-processor",
+      "name": "Send to Document Processor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 400]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Config": {
+      "main": [
+        [
+          {
+            "node": "Fetch Gov.il API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Gov.il API": {
+      "main": [
+        [
+          {
+            "node": "Process API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process API Response": {
+      "main": [
+        [
+          {
+            "node": "Has More Pages?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has More Pages?": {
+      "main": [
+        [
+          {
+            "node": "Update Skip Value",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Skip Value": {
+      "main": [
+        [
+          {
+            "node": "Fetch Gov.il API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Documents": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Documents": {
+      "main": [
+        [
+          {
+            "node": "Send to Document Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}
