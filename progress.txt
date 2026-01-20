@@ -1031,3 +1031,27 @@
 
 ---
 
+## Iteration 46 — US-008 Task 2: Each tool has comprehensive Hebrew+English description
+- **What was done**: Enhanced 8 MCP tools with comprehensive bilingual documentation including usage guidance, examples, and tables
+- **Files affected**: `mcp-server/src/index.ts` (added ~260 lines of documentation to tool descriptions)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Enhanced `get_decision`: Added fields table with Hebrew/English, when to use, examples, notes
+  - Enhanced `get_decision_pdf`: Added comparison table vs read_pdf, output format, error scenarios
+  - Enhanced `get_statistics`: Added returned information table, database breakdown, example output
+  - Enhanced `list_committees`: Added common cities table (10 cities), usage examples, output format
+  - Enhanced `list_appraisers`: Added usage tips, important notes about database-specific availability
+  - Enhanced `compare_decisions`: Added usage examples (block comparison, appraiser comparison), tips
+  - Enhanced `semantic_search`: Added when-to-use vs search_decisions comparison table
+  - Enhanced `trigger_update`: Added how-it-works section, parameters table, auto-update notes
+  - Tools that already had comprehensive descriptions: search_decisions, read_pdf, clarify_query, construct_answer
+- **Learnings for next cycles**:
+  - Patterns: Consistent structure for tool descriptions: When to Use → Parameters → Output → Examples → Errors
+  - Patterns: Markdown tables work well in MCP tool descriptions for structured information
+  - Patterns: Bilingual format "עברית / English" maintains accessibility
+  - Patterns: Comparison tables (vs other tools) help Claude choose the right tool
+  - Traps: Very long descriptions may impact LLM context - keep examples concise
+  - Helpful context: US-008 Task 2 complete, remaining tasks (3-6): error suggestions, database unavailable, stderr logging, typecheck
+
+---
+

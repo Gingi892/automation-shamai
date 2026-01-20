@@ -759,7 +759,12 @@ async function handleGetDecision(params: { id: string }): Promise<MCPToolResult>
     return {
       content: [{
         type: 'text',
-        text: JSON.stringify({ error: 'Decision not found', id: params.id })
+        text: JSON.stringify({
+          error: 'Decision not found',
+          id: params.id,
+          suggestion: 'Use search_decisions tool first to find valid decision IDs. Try searching by committee, block/plot, or case type.',
+          suggestionHe: 'השתמש בכלי search_decisions כדי למצוא מזהי החלטות תקינים. נסה לחפש לפי ועדה, גוש/חלקה, או סוג תיק.'
+        })
       }],
       isError: true
     };
@@ -780,7 +785,12 @@ async function handleGetDecisionPdf(params: { id: string }): Promise<MCPToolResu
     return {
       content: [{
         type: 'text',
-        text: JSON.stringify({ error: 'Decision not found', id: params.id })
+        text: JSON.stringify({
+          error: 'Decision not found',
+          id: params.id,
+          suggestion: 'Use search_decisions tool first to find valid decision IDs. Try searching by committee, block/plot, or case type.',
+          suggestionHe: 'השתמש בכלי search_decisions כדי למצוא מזהי החלטות תקינים. נסה לחפש לפי ועדה, גוש/חלקה, או סוג תיק.'
+        })
       }],
       isError: true
     };
@@ -793,7 +803,9 @@ async function handleGetDecisionPdf(params: { id: string }): Promise<MCPToolResu
         text: JSON.stringify({
           error: 'No PDF URL available for this decision',
           id: params.id,
-          title: decision.title
+          title: decision.title,
+          suggestion: 'This decision was indexed without a PDF link. Try get_decision to see available metadata, or search for similar decisions that may have PDFs.',
+          suggestionHe: 'החלטה זו נוספה למאגר ללא קישור ל-PDF. נסה get_decision לראות מידע זמין, או חפש החלטות דומות שיש להן PDF.'
         })
       }],
       isError: true
@@ -834,7 +846,12 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
     return {
       content: [{
         type: 'text',
-        text: JSON.stringify({ error: 'Decision not found', id: params.id })
+        text: JSON.stringify({
+          error: 'Decision not found',
+          id: params.id,
+          suggestion: 'Use search_decisions tool first to find valid decision IDs. Try searching by committee, block/plot, or case type.',
+          suggestionHe: 'השתמש בכלי search_decisions כדי למצוא מזהי החלטות תקינים. נסה לחפש לפי ועדה, גוש/חלקה, או סוג תיק.'
+        })
       }],
       isError: true
     };
@@ -847,7 +864,9 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
         text: JSON.stringify({
           error: 'No PDF URL available for this decision',
           id: params.id,
-          title: decision.title
+          title: decision.title,
+          suggestion: 'This decision was indexed without a PDF link. Try get_decision to see available metadata, or search for similar decisions that may have PDFs.',
+          suggestionHe: 'החלטה זו נוספה למאגר ללא קישור ל-PDF. נסה get_decision לראות מידע זמין, או חפש החלטות דומות שיש להן PDF.'
         })
       }],
       isError: true
@@ -885,7 +904,9 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
         text: JSON.stringify({
           error: 'Failed to read PDF',
           id: params.id,
-          message: error instanceof Error ? error.message : String(error)
+          message: error instanceof Error ? error.message : String(error),
+          suggestion: 'PDF extraction failed. Possible causes: (1) PDF is corrupted or password-protected, (2) Network timeout - try again, (3) gov.il server temporarily unavailable. Try get_decision_pdf to verify the URL is valid.',
+          suggestionHe: 'חילוץ ה-PDF נכשל. סיבות אפשריות: (1) PDF פגום או מוגן בסיסמה, (2) פסק זמן ברשת - נסה שוב, (3) שרת gov.il אינו זמין זמנית. נסה get_decision_pdf לוודא שהכתובת תקינה.'
         })
       }],
       isError: true
@@ -954,7 +975,12 @@ async function handleCompareDecisions(params: { ids: string[] }): Promise<MCPToo
     return {
       content: [{
         type: 'text',
-        text: JSON.stringify({ error: 'No valid decisions found for the provided IDs' })
+        text: JSON.stringify({
+          error: 'No valid decisions found for the provided IDs',
+          providedIds: params.ids,
+          suggestion: 'None of the provided IDs exist in the database. Use search_decisions to find valid decision IDs first. Minimum 2 IDs required for comparison.',
+          suggestionHe: 'אף אחד מהמזהים שסופקו לא קיים במאגר. השתמש ב-search_decisions כדי למצוא מזהי החלטות תקינים. נדרשים לפחות 2 מזהים להשוואה.'
+        })
       }],
       isError: true
     };
@@ -1055,7 +1081,9 @@ async function handleTriggerUpdate(params: { pagesToCheck?: number }): Promise<M
         type: 'text',
         text: JSON.stringify({
           error: 'Failed to update',
-          message: error instanceof Error ? error.message : String(error)
+          message: error instanceof Error ? error.message : String(error),
+          suggestion: 'Update failed. Possible causes: (1) gov.il is temporarily unavailable, (2) Network connectivity issues, (3) ScraperAPI rate limit reached. Try again later or reduce pagesToCheck parameter.',
+          suggestionHe: 'העדכון נכשל. סיבות אפשריות: (1) gov.il אינו זמין זמנית, (2) בעיות קישוריות, (3) הגעה למגבלת ScraperAPI. נסה שוב מאוחר יותר או הקטן את פרמטר pagesToCheck.'
         })
       }],
       isError: true
@@ -1753,7 +1781,11 @@ async function main() {
           return {
             content: [{
               type: 'text',
-              text: JSON.stringify({ error: `Unknown tool: ${name}` })
+              text: JSON.stringify({
+                error: `Unknown tool: ${name}`,
+                suggestion: 'Available tools: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer',
+                suggestionHe: 'כלים זמינים: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer'
+              })
             }],
             isError: true
           };
@@ -1764,7 +1796,10 @@ async function main() {
           type: 'text',
           text: JSON.stringify({
             error: 'Tool execution failed',
-            message: error instanceof Error ? error.message : String(error)
+            tool: name,
+            message: error instanceof Error ? error.message : String(error),
+            suggestion: 'An unexpected error occurred. Check that all required parameters are provided and in the correct format. For search_decisions, ensure dates are in YYYY-MM-DD format.',
+            suggestionHe: 'אירעה שגיאה בלתי צפויה. ודא שכל הפרמטרים הנדרשים סופקו ובפורמט הנכון. עבור search_decisions, ודא שתאריכים בפורמט YYYY-MM-DD.'
           })
         }],
         isError: true

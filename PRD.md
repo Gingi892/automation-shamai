@@ -132,7 +132,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Acceptance Criteria:**
 - [x] Tools exposed: search_decisions, get_decision, read_pdf, get_statistics, list_committees, list_appraisers, trigger_update, clarify_query
 - [x] Each tool has comprehensive Hebrew+English description
-- [ ] Error responses include actionable suggestions
+- [x] Error responses include actionable suggestions
 - [ ] Graceful handling of database unavailable
 - [ ] Console logging to stderr (not stdout)
 - [ ] Typecheck passes
