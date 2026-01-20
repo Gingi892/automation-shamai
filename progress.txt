@@ -790,3 +790,27 @@
   - Traps: QuotedExcerpt must be added to both imports in index.ts and types.ts exports
   - Helpful context: US-006 Task 4 complete, remaining tasks (5-6): confidence indicators, no-results warning
 
+---
+
+## Iteration 35 — US-006 Task 5: Add confidence indicator "בטוח" (confident) vs "ייתכן" (uncertain)
+- **What was done**: Added prominent confidence indicator to `ConstructAnswerResult` and formatted answer output
+- **Files affected**:
+  - `mcp-server/src/types.ts` (added `confidenceIndicator: string` field to ConstructAnswerResult interface)
+  - `mcp-server/src/index.ts` (added confidence indicator section to formattedAnswer, Hebrew label to result object, fixed type casting issues)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Added new `confidenceIndicator` field to ConstructAnswerResult interface - holds "בטוח" or "ייתכן"
+  - Created prominent "רמת ביטחון / Confidence Level" section at top of formattedAnswer
+  - Confidence display includes colored emoji indicator (🟢 for confident, 🟡 for uncertain)
+  - Added bilingual explanation of confidence based on number of sources and relevance scores
+  - Updated no-results case to include `confidenceIndicator: 'ייתכן'`
+  - Updated guideline #4 to instruct Claude to use confidence indicator in responses
+  - Fixed pre-existing type casting issues (args as unknown as Type pattern)
+- **Learnings for next cycles**:
+  - Patterns: Hebrew "בטוח" = confident, "ייתכן" = uncertain (maybe/possibly)
+  - Patterns: Place confidence section at TOP of formatted answer for visibility
+  - Patterns: Use colored emoji (🟢/🟡) for visual confidence indicator in markdown
+  - Patterns: Include both Hebrew and English explanation for bilingual support
+  - Patterns: When TypeScript complains about `Record<string, unknown>` to specific type, use `as unknown as Type` pattern
+  - Helpful context: US-006 Task 5 complete, remaining tasks (6-7): no-results warning, typecheck passes
+

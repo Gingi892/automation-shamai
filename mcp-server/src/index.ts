@@ -1098,6 +1098,7 @@ async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPT
       claims: [],
       quotedExcerpts: [],
       overallConfidence: 'uncertain',
+      confidenceIndicator: 'ייתכן',  // Uncertain when no results found
       noResultsWarning: 'לא נמצאו החלטות רלוונטיות לשאילתה זו. נסה לחדד את החיפוש, לבחור מאגר אחר, או להבהיר את השאילתה.'
     };
 
@@ -1204,7 +1205,22 @@ ${excerptItems}
 - ציטוט / Excerpt: ${formatPdfExcerpt(s.excerpt, 200)}` : ''}`;
   }).join('\n');
 
+  // Build confidence indicator with explanation
+  const confidenceIndicator = overallConfidence === 'confident'
+    ? `**🟢 בטוח / Confident**
+התשובה מבוססת על ${decisions.length} מקורות עם ציוני רלוונטיות גבוהים.
+This answer is based on ${decisions.length} sources with high relevance scores.`
+    : `**🟡 ייתכן / Uncertain**
+התשובה מבוססת על ${decisions.length} מקור(ות) עם ציוני רלוונטיות בינוניים. מומלץ לבדוק את המקורות ישירות.
+This answer is based on ${decisions.length} source(s) with moderate relevance. Recommend verifying sources directly.`;
+
   const formattedAnswer = `
+## רמת ביטחון / Confidence Level
+
+${confidenceIndicator}
+
+---
+
 ## מבנה התשובה / Answer Structure
 
 השתמש בציטוטים הבאים בתשובתך / Use these citations in your answer:
@@ -1222,7 +1238,7 @@ ${sourcesSection}
 1. הצב ציטוט [S#] מיד אחרי כל טענה / Place [S#] citation immediately after each claim
 2. **ציטוט ישיר מ-PDF**: ״...טקסט...״ [S#] / Direct quote from PDF: "...text..." [S#]
 3. מספר מקורות לאותה טענה: [S0][S1] / Multiple sources for same claim: [S0][S1]
-4. ציין רמת ביטחון: ${overallConfidence === 'confident' ? 'בטוח' : 'ייתכן'} / Confidence: ${overallConfidence === 'confident' ? 'confident' : 'uncertain'}
+4. **ציין רמת ביטחון בתשובה**: פתח ב-"${overallConfidence === 'confident' ? 'בטוח' : 'ייתכן'}:" אם נדרש / **Indicate confidence in answer**: Start with "${overallConfidence === 'confident' ? 'Confident' : 'Uncertain'}:" if needed
 5. ${quotedExcerpts.length > 0 ? `**חשוב**: השתמש בציטוטים מה-PDF לעיל כדי לבסס תשובות / **Important**: Use the PDF quotes above to support answers` : 'אם יש תוכן PDF, צטט את הטקסט הרלוונטי / If PDF content available, quote the relevant text'}
 `.trim();
 
@@ -1230,12 +1246,16 @@ ${sourcesSection}
   // Each claim links to the specific decision(s) that support it
   const claims: CitedClaim[] = generateClaimsFromSources(question, decisions, sources, pdfExcerpts);
 
+  // Hebrew confidence label for direct use in responses
+  const hebrewConfidenceLabel = overallConfidence === 'confident' ? 'בטוח' : 'ייתכן';
+
   const result: ConstructAnswerResult = {
     formattedAnswer,
     sources,
     claims,
     quotedExcerpts,
-    overallConfidence
+    overallConfidence,
+    confidenceIndicator: hebrewConfidenceLabel
   };
 
   return {
@@ -1312,10 +1332,10 @@ async function main() {
           return await handleTriggerUpdate(args as { pagesToCheck?: number });
 
         case 'clarify_query':
-          return await handleClarifyQuery(args as ClarifyQueryInput);
+          return await handleClarifyQuery(args as unknown as ClarifyQueryInput);
 
         case 'construct_answer':
-          return await handleConstructAnswer(args as ConstructAnswerInput);
+          return await handleConstructAnswer(args as unknown as ConstructAnswerInput);
 
         default:
           return {

@@ -191,6 +191,7 @@ export interface ConstructAnswerResult {
   claims: CitedClaim[];           // Individual claims with their citations
   quotedExcerpts: QuotedExcerpt[]; // Direct quotes from PDF content for answer construction
   overallConfidence: ConfidenceLevel;
+  confidenceIndicator: string;    // "בטוח" (confident) or "ייתכן" (uncertain) - Hebrew confidence label
   noResultsWarning?: string;      // "לא נמצאו החלטות רלוונטיות" when applicable
 }
 

@@ -110,7 +110,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Include sources section with: decision ID, title, PDF URL, relevance score
 - [x] For each claim, cite the specific decision(s) supporting it
 - [x] When answering from PDF content, quote relevant excerpts
-- [ ] Add confidence indicator: "בטוח" (confident) vs "ייתכן" (uncertain)
+- [x] Add confidence indicator: "בטוח" (confident) vs "ייתכן" (uncertain)
 - [ ] Warn when no relevant decisions found: "לא נמצאו החלטות רלוונטיות"
 - [ ] Typecheck passes
 
