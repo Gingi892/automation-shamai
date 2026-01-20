@@ -89,7 +89,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Include Hebrew descriptions for all parameters
 - [x] Add negative guidance: "Don't invent parameters user didn't mention"
 - [x] Document common case types: היטל השבחה, פיצויים, ירידת ערך
-- [ ] Typecheck passes
+- [x] Typecheck passes
 
 ### US-005: Implement query clarification tool
 **Description:** As a developer, I want a tool that Claude can use to ask clarifying questions, so that ambiguous queries get resolved before searching.

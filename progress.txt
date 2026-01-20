@@ -607,3 +607,22 @@
   - Patterns: "Mapping tip" at end reinforces how to use the information
   - Helpful context: PRD asked for 3 examples but documenting all 10 provides comprehensive coverage
 
+---
+
+## Iteration 28 — US-004 Task 7: Verify TypeScript type check passes
+- **What was done**: Ran TypeScript type check to validate US-004 completion
+- **Files affected**: None (validation only)
+- **Validation**: `npx tsc --noEmit` succeeds with no errors
+- **US-004 COMPLETE**: All acceptance criteria met:
+  - [x] Include 6+ diverse Hebrew query examples with expected parameter extraction
+  - [x] Add database selection table mapping Hebrew keywords to databases
+  - [x] Specify default database (decisive_appraiser) when unclear
+  - [x] Include Hebrew descriptions for all parameters
+  - [x] Add negative guidance: "Don't invent parameters user didn't mention"
+  - [x] Document common case types: היטל השבחה, פיצויים, ירידת ערך
+  - [x] Typecheck passes
+- **Learnings for next cycles**:
+  - Patterns: US-004 Tasks 1-6 were implemented across iterations 22-27
+  - Patterns: Task 7 (typecheck) serves as final validation gate for user story completion
+  - Helpful context: US-004 complete, ready to proceed to US-005 (query clarification tool)
+
