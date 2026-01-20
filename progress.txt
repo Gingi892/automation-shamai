@@ -73,6 +73,23 @@
 
 ---
 
+## Iteration 4 — US-001 Task 4: Parse HTML with Cheerio using adaptive patterns
+- **What was done**: Verified existing implementation of adaptive Cheerio parsing with three extraction strategies
+- **Files affected**: `mcp-server/src/scraper.ts` (already implemented in iteration 2, marking as complete)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - `parseWithCssPrimary()` (lines 299-350): Uses class-based selectors like `.dynamic-card`, `.result-item`
+  - `parseWithCssStructural()` (lines 355-375): Uses tag/attribute-based selectors like `div[ng-repeat]`, `article`
+  - `parseWithRegex()` (lines 380-442): Uses regex patterns for raw HTML extraction
+  - `parseDecisions()` (lines 260-294): Orchestrates all three strategies with automatic fallback
+  - Warning logs when primary selectors fail but fallback succeeds (line 275, 285)
+- **Learnings for next cycles**:
+  - Patterns: Code implemented in iteration 2 covered multiple acceptance criteria
+  - Patterns: Check existing implementation before assuming work is needed
+  - Helpful context: DEFAULT_SELECTORS constant (lines 79-160) contains all selector configurations
+
+---
+
 ## Iteration 3 — US-001 Task 3: Selector health check before full crawl
 - **What was done**: Implemented `checkSelectorHealth()` and `checkAllSelectorHealth()` methods to validate selectors against live pages before starting a full crawl
 - **Files affected**: `mcp-server/src/scraper.ts`
