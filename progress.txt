@@ -266,3 +266,20 @@
   - Patterns: LIKE with `%value%` provides partial Hebrew name matching
   - Patterns: Exact match for block/plot since these are numeric identifiers
   - Helpful context: Implementation was done in iteration 9 as part of better-sqlite3 migration
+
+---
+
+## Iteration 13 — US-002 Task 5: Support date range queries (fromDate, toDate)
+- **What was done**: Verified existing implementation already supports date range queries with fromDate and toDate parameters
+- **Files affected**: None (already implemented in `mcp-server/src/database.ts` lines 334-341)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - `fromDate` filter: `conditions.push('d.decision_date >= ?')` (lines 334-336)
+  - `toDate` filter: `conditions.push('d.decision_date <= ?')` (lines 338-341)
+  - Both work with ISO date format strings (YYYY-MM-DD)
+  - Can be used together or independently with other filters
+  - `SearchParams` interface in types.ts:49-50 defines both optional string parameters
+- **Learnings for next cycles**:
+  - Patterns: Date comparisons work correctly with SQLite string comparison when using ISO format (YYYY-MM-DD)
+  - Patterns: Date range was implemented in iteration 9 as part of better-sqlite3 migration
+  - Helpful context: Check existing code for already-implemented features before starting work

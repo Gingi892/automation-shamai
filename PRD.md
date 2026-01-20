@@ -59,7 +59,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 - [x] Table schema: id, database, title, url, block, plot, committee, appraiser, caseType, decisionDate, publishDate, contentHash, indexedAt
 - [x] FTS5 virtual table indexing: title, committee, appraiser, caseType
 - [x] Support filtering by any combination of fields
-- [ ] Support date range queries (fromDate, toDate)
+- [x] Support date range queries (fromDate, toDate)
 - [ ] Return results with relevance ranking
 - [ ] Index location: `~/.gov-il-mcp/decisions.db`
 - [ ] Typecheck passes
