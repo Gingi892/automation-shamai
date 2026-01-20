@@ -531,3 +531,53 @@
   - Patterns: PRD checkboxes must be updated when side-effect work completes tasks
   - Helpful context: US-004 Tasks 3, 4, 5, 6 were all done in iteration 22 but checkboxes lagged
 
+---
+
+## Iteration 25 — US-004 Task 4: Include Hebrew descriptions for all parameters
+- **What was done**: Added bilingual Hebrew/English descriptions to all MCP tool parameters
+- **Files affected**: `mcp-server/src/index.ts` (lines 71-243, all tool parameter descriptions)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Format: "עברית / English" for all parameter descriptions
+  - Updated 9 tools with Hebrew descriptions:
+    - `search_decisions`: 12 parameters (query, database, committee, block, plot, appraiser, caseType, fromDate, toDate, limit, offset, semanticSearch)
+    - `get_decision`: 1 parameter (id)
+    - `get_decision_pdf`: 1 parameter (id)
+    - `get_statistics`: no parameters (but tool description updated)
+    - `list_committees`: 1 parameter (limit)
+    - `list_appraisers`: 1 parameter (limit)
+    - `compare_decisions`: 1 parameter (ids)
+    - `semantic_search`: 3 parameters (query, limit, database)
+    - `trigger_update`: 1 parameter (pagesToCheck)
+  - Added examples in Hebrew where helpful (e.g., "לדוגמה: תל אביב, ירושלים")
+  - Included database ID mapping in database parameter descriptions
+- **Learnings for next cycles**:
+  - Patterns: Bilingual format "עברית / English" works well for MCP tools that may be used by Hebrew speakers
+  - Patterns: Examples in Hebrew ("לדוגמה:") help Claude understand expected values
+  - Patterns: Including database name mappings in description avoids need for separate lookup
+  - Helpful context: Tool descriptions and parameter descriptions are shown to Claude when using MCP tools
+
+---
+
+## Iteration 26 — US-004 Task 5: Add negative guidance "Don't invent parameters user didn't mention"
+- **What was done**: Enhanced the "Important Guidelines" section in search_decisions tool with explicit negative guidance matching PRD wording
+- **Files affected**: `mcp-server/src/index.ts` (lines 62-70, enhanced Important Guidelines section)
+- **Validation**: TypeScript type check passes (`npx tsc --noEmit` succeeds)
+- **Implementation details**:
+  - Renamed section header: "## הנחיות חשובות / Important Guidelines (CRITICAL)"
+  - Added bold Hebrew+English negative guidance: "**אל תמציא פרמטרים שהמשתמש לא ציין / Don't invent parameters user didn't mention:**"
+  - Expanded guidance from 4 to 7 bullet points:
+    1. Extract ONLY parameters the user explicitly mentioned in their query
+    2. Don't invent block/plot numbers if not stated - leave them empty
+    3. Don't assume database if no keywords match the table above - use default
+    4. Don't add caseType unless user mentioned a specific case type
+    5. Don't guess committee/city names - only use what user wrote
+    6. For date ranges, convert Hebrew years (תשפ"ד = 2024) to Gregorian
+    7. When in doubt, use FEWER parameters rather than guessing
+- **Learnings for next cycles**:
+  - Patterns: Negative guidance in MCP tool descriptions helps prevent LLM parameter hallucination
+  - Patterns: Making guidance section "CRITICAL" with bold formatting draws attention
+  - Patterns: Hebrew+English bilingual format maintains consistency with rest of tool description
+  - Patterns: "When in doubt, use FEWER parameters" is a good heuristic for search tools
+  - Helpful context: Iteration 22 had partial negative guidance, this iteration made it more explicit and comprehensive
+

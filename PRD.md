@@ -87,7 +87,7 @@ The existing `gov-il-live` MCP server is non-functional because:
   - "ערעור", "ועדת ערעורים" → appeals_board
 - [x] Specify default database (decisive_appraiser) when unclear
 - [x] Include Hebrew descriptions for all parameters
-- [ ] Add negative guidance: "Don't invent parameters user didn't mention"
+- [x] Add negative guidance: "Don't invent parameters user didn't mention"
 - [ ] Document common case types: היטל השבחה, פיצויים, ירידת ערך
 - [ ] Typecheck passes
 

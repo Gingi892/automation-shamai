@@ -59,11 +59,15 @@ const TOOLS: Tool[] = [
 ## סוגי תיקים נפוצים / Common Case Types
 היטל השבחה, פיצויים, ירידת ערך, הפקעה, תכנית מתאר, שינוי ייעוד, היתר בניה, תמ"א 38, פינוי בינוי, תב"ע
 
-## חשוב / Important Guidelines
-- Extract ONLY parameters the user explicitly mentioned
-- Don't invent block/plot numbers if not stated
-- Don't assume database if no keywords match the table above
+## הנחיות חשובות / Important Guidelines (CRITICAL)
+**אל תמציא פרמטרים שהמשתמש לא ציין / Don't invent parameters user didn't mention:**
+- Extract ONLY parameters the user explicitly mentioned in their query
+- Don't invent block/plot numbers if not stated - leave them empty
+- Don't assume database if no keywords match the table above - use default
+- Don't add caseType unless user mentioned a specific case type
+- Don't guess committee/city names - only use what user wrote
 - For date ranges, convert Hebrew years (תשפ"ד = 2024) to Gregorian
+- When in doubt, use FEWER parameters rather than guessing
 
 Returns results in <100ms from pre-indexed local database.`,
     inputSchema: {
