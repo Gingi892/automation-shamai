@@ -150,6 +150,42 @@ export interface ClarifyQueryResult {
   originalQuery: string;
 }
 
+// Answer construction types (US-006)
+export type ConfidenceLevel = 'confident' | 'uncertain';
+
+export interface CitedSource {
+  index: number;          // S0, S1, etc.
+  decisionId: string;
+  title: string;
+  pdfUrl: string | null;
+  database: DatabaseType;
+  relevanceScore?: number;
+  excerpt?: string;       // Relevant quote from decision (if from PDF content)
+}
+
+export interface CitedClaim {
+  text: string;           // The claim text
+  citations: number[];    // Indices of sources supporting this claim [0, 1] means [S0], [S1]
+  confidence: ConfidenceLevel;
+}
+
+export interface ConstructAnswerInput {
+  question: string;           // The user's original question
+  decisions: Decision[];      // Search results to cite from
+  pdfExcerpts?: Array<{       // Optional excerpts from PDF content
+    decisionId: string;
+    excerpt: string;
+  }>;
+}
+
+export interface ConstructAnswerResult {
+  formattedAnswer: string;        // Answer with inline citations [S0], [S1], etc.
+  sources: CitedSource[];         // Sources section
+  claims: CitedClaim[];           // Individual claims with their citations
+  overallConfidence: ConfidenceLevel;
+  noResultsWarning?: string;      // "לא נמצאו החלטות רלוונטיות" when applicable
+}
+
 // Database configuration
 export const DATABASE_CONFIG: Record<DatabaseType, { name: string; url: string }> = {
   decisive_appraiser: {

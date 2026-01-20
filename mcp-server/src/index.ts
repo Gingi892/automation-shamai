@@ -23,7 +23,13 @@ import {
   AmbiguityType,
   ClarificationPrompt,
   ClarifyQueryInput,
-  ClarifyQueryResult
+  ClarifyQueryResult,
+  Decision,
+  ConfidenceLevel,
+  CitedSource,
+  CitedClaim,
+  ConstructAnswerInput,
+  ConstructAnswerResult
 } from './types.js';
 
 // Configuration
@@ -304,6 +310,82 @@ Pass previousClarifications array with ambiguity types already resolved to avoid
         }
       },
       required: ['originalQuery']
+    }
+  },
+  {
+    name: 'construct_answer',
+    description: `בניית תשובה מובנית עם ציטוטים למקורות / Construct a structured answer with inline citations to source documents.
+
+Use this tool AFTER searching to format your response with proper citations.
+
+## Citation Format
+- Inline citations: [S0], [S1], [S2], etc. (S = Source)
+- Each citation refers to a source in the sources array by index
+- Place citation immediately after the claim it supports
+
+## Output Structure
+Returns a structured response with:
+1. **formattedAnswer**: The answer text with inline [S0], [S1] citations
+2. **sources**: Array of cited sources with decision ID, title, PDF URL, relevance score
+3. **claims**: Individual claims with their supporting citations
+4. **overallConfidence**: "confident" (בטוח) or "uncertain" (ייתכן)
+5. **noResultsWarning**: Hebrew warning when no relevant results found
+
+## Usage Examples
+
+### Example 1: Simple answer with citations
+Input decisions from search → construct_answer formats as:
+"לפי הכרעת השמאי המכריע [S0], נקבע כי היטל ההשבחה..."
+
+### Example 2: Multiple sources
+"ישנן מספר החלטות בנושא [S0][S1]. בהחלטה הראשונה [S0] נקבע..."
+
+### Example 3: Quoting PDF content
+When pdfExcerpts provided:
+"השמאי קבע: \"...הפיצוי יעמוד על 50,000 ש\"ח...\" [S0]"
+
+## Confidence Indicators
+- "בטוח" (confident): Multiple matching decisions, clear consensus
+- "ייתכן" (uncertain): Few results, conflicting decisions, or extrapolation
+
+## No Results
+When decisions array is empty:
+- noResultsWarning: "לא נמצאו החלטות רלוונטיות לשאילתה זו"
+- Suggest: refining search, trying different database, or clarifying query`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        question: {
+          type: 'string',
+          description: 'השאלה המקורית של המשתמש / The user\'s original question'
+        },
+        decisions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              url: { type: 'string' },
+              database: { type: 'string' },
+              relevanceScore: { type: 'number' }
+            }
+          },
+          description: 'תוצאות החיפוש לציטוט / Search results to cite from'
+        },
+        pdfExcerpts: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              decisionId: { type: 'string' },
+              excerpt: { type: 'string' }
+            }
+          },
+          description: 'ציטוטים מתוך תוכן ה-PDF (אופציונלי) / Excerpts from PDF content (optional)'
+        }
+      },
+      required: ['question', 'decisions']
     }
   }
 ];
@@ -792,6 +874,102 @@ async function handleClarifyQuery(params: ClarifyQueryInput): Promise<MCPToolRes
   };
 }
 
+// Handler for constructing answers with citations (US-006)
+async function handleConstructAnswer(params: ConstructAnswerInput): Promise<MCPToolResult> {
+  const { question, decisions, pdfExcerpts = [] } = params;
+
+  // Handle no results case
+  if (!decisions || decisions.length === 0) {
+    const result: ConstructAnswerResult = {
+      formattedAnswer: '',
+      sources: [],
+      claims: [],
+      overallConfidence: 'uncertain',
+      noResultsWarning: 'לא נמצאו החלטות רלוונטיות לשאילתה זו. נסה לחדד את החיפוש, לבחור מאגר אחר, או להבהיר את השאילתה.'
+    };
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(result, null, 2)
+      }]
+    };
+  }
+
+  // Build sources array with inline citation indices [S0], [S1], etc.
+  const sources: CitedSource[] = decisions.map((decision, index) => {
+    // Find matching PDF excerpt if available
+    const excerptMatch = pdfExcerpts.find(e => e.decisionId === decision.id);
+
+    return {
+      index,
+      decisionId: decision.id,
+      title: decision.title,
+      pdfUrl: decision.url,
+      database: decision.database,
+      relevanceScore: decision.relevanceScore,
+      excerpt: excerptMatch?.excerpt
+    };
+  });
+
+  // Determine overall confidence based on:
+  // - Number of results (more = more confident)
+  // - Relevance scores (higher = more confident)
+  // - Consistency of results (same database = more confident)
+  let overallConfidence: ConfidenceLevel = 'uncertain';
+
+  if (decisions.length >= 3) {
+    // Multiple decisions support confidence
+    const avgRelevance = decisions.reduce((sum, d) => sum + (d.relevanceScore || 0), 0) / decisions.length;
+    if (avgRelevance > 0.5 || decisions.length >= 5) {
+      overallConfidence = 'confident';
+    }
+  } else if (decisions.length >= 1) {
+    // Single decision with high relevance
+    const topRelevance = decisions[0].relevanceScore || 0;
+    if (topRelevance > 0.8) {
+      overallConfidence = 'confident';
+    }
+  }
+
+  // Build formatted answer template with citation placeholders
+  // Claude will use this structure to build actual answers
+  const citationGuide = sources.map(s => `[S${s.index}]`).join(', ');
+
+  const formattedAnswer = `
+## מבנה התשובה / Answer Structure
+
+השתמש בציטוטים הבאים בתשובתך / Use these citations in your answer:
+${citationGuide}
+
+### מקורות זמינים / Available Sources:
+${sources.map(s => `- [S${s.index}]: ${s.title}${s.excerpt ? ` (ציטוט: "${s.excerpt.substring(0, 100)}...")` : ''}`).join('\n')}
+
+### הנחיות לבניית תשובה / Answer Construction Guidelines:
+1. הצב ציטוט [S#] מיד אחרי כל טענה / Place [S#] citation immediately after each claim
+2. ציטוט ישיר מ-PDF: "...טקסט..." [S#] / Direct quote from PDF: "...text..." [S#]
+3. מספר מקורות לאותה טענה: [S0][S1] / Multiple sources for same claim: [S0][S1]
+4. ציין רמת ביטחון: ${overallConfidence === 'confident' ? 'בטוח' : 'ייתכן'} / Confidence: ${overallConfidence === 'confident' ? 'confident' : 'uncertain'}
+`.trim();
+
+  // Initialize empty claims array - Claude will populate this when constructing actual answer
+  const claims: CitedClaim[] = [];
+
+  const result: ConstructAnswerResult = {
+    formattedAnswer,
+    sources,
+    claims,
+    overallConfidence
+  };
+
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify(result, null, 2)
+    }]
+  };
+}
+
 // Main server setup
 async function main() {
   // Initialize database
@@ -859,6 +1037,9 @@ async function main() {
 
         case 'clarify_query':
           return await handleClarifyQuery(args as ClarifyQueryInput);
+
+        case 'construct_answer':
+          return await handleConstructAnswer(args as ConstructAnswerInput);
 
         default:
           return {

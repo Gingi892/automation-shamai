@@ -106,7 +106,7 @@ The existing `gov-il-live` MCP server is non-functional because:
 **Description:** As a developer, I want answers to include proper citations to source documents, so that users can verify the information and access original PDFs.
 
 **Acceptance Criteria:**
-- [ ] Format answers with inline citations: "[S0]", "[S1]", etc.
+- [x] Format answers with inline citations: "[S0]", "[S1]", etc.
 - [ ] Include sources section with: decision ID, title, PDF URL, relevance score
 - [ ] For each claim, cite the specific decision(s) supporting it
 - [ ] When answering from PDF content, quote relevant excerpts
