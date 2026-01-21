@@ -359,7 +359,7 @@ interface DecisionMetadata {
 - [x] `test_extract_block_plot()` - גוש/חלקה extraction
 - [x] `test_extract_committee()` - ועדה name extraction
 - [x] `test_handle_pagination()` - Multiple pages
-- [ ] `test_scraper_api_settings()` - ultra_premium, wait_for
+- [x] `test_scraper_api_settings()` - ultra_premium, wait_for
 
 ---
 

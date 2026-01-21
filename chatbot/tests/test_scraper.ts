@@ -942,6 +942,484 @@ function test_handle_pagination(): void {
   }
 }
 
+// ============================================================
+// ScraperAPI Settings Tests
+// ============================================================
+
+interface ScraperApiConfig {
+  apiKey: string;
+  targetUrl: string;
+  ultraPremium?: boolean;
+  premium?: boolean;
+  render?: boolean;
+  waitFor?: number;
+}
+
+interface ScraperApiUrl {
+  url: string;
+  params: Record<string, string>;
+}
+
+/**
+ * Build ScraperAPI URL with proper settings for gov.il
+ * Implements the same logic as n8n "Build ScraperAPI URL" node in workflow 1zYlIK6VnynTHiHl
+ *
+ * CRITICAL: Gov.il requires ultra_premium=true (not just premium)
+ * - premium=true returns 500 errors on gov.il
+ * - wait_for=5000 required for Angular rendering
+ * - render=true required for JavaScript execution
+ */
+function buildScraperApiUrl(config: ScraperApiConfig): ScraperApiUrl {
+  const { apiKey, targetUrl, ultraPremium = true, premium = false, render = true, waitFor = 5000 } = config;
+
+  const params: Record<string, string> = {
+    api_key: apiKey,
+    url: targetUrl,
+    render: String(render)
+  };
+
+  // CRITICAL: ultra_premium takes precedence over premium for gov.il
+  if (ultraPremium) {
+    params.ultra_premium = 'true';
+  } else if (premium) {
+    params.premium = 'true';
+  }
+
+  if (waitFor > 0) {
+    params.wait_for = String(waitFor);
+  }
+
+  const searchParams = new URLSearchParams(params);
+  return {
+    url: `https://api.scraperapi.com?${searchParams}`,
+    params
+  };
+}
+
+/**
+ * Validate ScraperAPI configuration for gov.il scraping
+ * Returns validation result with errors and warnings
+ */
+function validateScraperApiConfig(config: Partial<ScraperApiConfig>): { valid: boolean; errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Required fields
+  if (!config.apiKey) {
+    errors.push('apiKey is required');
+  }
+
+  if (!config.targetUrl) {
+    errors.push('targetUrl is required');
+  }
+
+  // Gov.il specific requirements
+  const isGovIl = config.targetUrl?.includes('gov.il');
+
+  if (isGovIl) {
+    // CRITICAL: Gov.il requires ultra_premium
+    if (config.ultraPremium !== true && config.premium === true) {
+      errors.push('Gov.il requires ultra_premium=true (premium=true returns 500 errors)');
+    }
+
+    if (config.ultraPremium !== true && config.premium !== true) {
+      warnings.push('Gov.il typically requires ultra_premium=true for reliable scraping');
+    }
+
+    // Angular rendering requirements
+    if (config.render !== true) {
+      errors.push('Gov.il requires render=true for Angular content');
+    }
+
+    if (!config.waitFor || config.waitFor < 5000) {
+      warnings.push('Gov.il Angular pages typically need wait_for=5000 or higher');
+    }
+  }
+
+  // General validation
+  if (config.waitFor !== undefined && config.waitFor < 0) {
+    errors.push('wait_for cannot be negative');
+  }
+
+  if (config.waitFor !== undefined && config.waitFor > 60000) {
+    warnings.push('wait_for > 60000ms may cause timeouts');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+// Test data for ScraperAPI URL building
+const SCRAPER_API_URL_TEST_CASES = [
+  {
+    name: 'Gov.il with correct settings (ultra_premium + wait_for)',
+    config: {
+      apiKey: '566e1370a3f3158b969f898e102c7fd0',
+      targetUrl: 'https://www.gov.il/he/departments/dynamiccollectors/decisive_appraisal_decisions?skip=0',
+      ultraPremium: true,
+      render: true,
+      waitFor: 5000
+    },
+    expectedParams: {
+      api_key: '566e1370a3f3158b969f898e102c7fd0',
+      url: 'https://www.gov.il/he/departments/dynamiccollectors/decisive_appraisal_decisions?skip=0',
+      ultra_premium: 'true',
+      render: 'true',
+      wait_for: '5000'
+    }
+  },
+  {
+    name: 'Gov.il appeals committee page',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://www.gov.il/he/departments/dynamiccollectors/committee?skip=100',
+      ultraPremium: true,
+      render: true,
+      waitFor: 5000
+    },
+    expectedParams: {
+      api_key: 'test_key',
+      url: 'https://www.gov.il/he/departments/dynamiccollectors/committee?skip=100',
+      ultra_premium: 'true',
+      render: 'true',
+      wait_for: '5000'
+    }
+  },
+  {
+    name: 'Gov.il appeals board page',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://www.gov.il/he/departments/dynamiccollectors/decisions_appeals_board?skip=50',
+      ultraPremium: true,
+      render: true,
+      waitFor: 5000
+    },
+    expectedParams: {
+      api_key: 'test_key',
+      url: 'https://www.gov.il/he/departments/dynamiccollectors/decisions_appeals_board?skip=50',
+      ultra_premium: 'true',
+      render: 'true',
+      wait_for: '5000'
+    }
+  },
+  {
+    name: 'Default settings (should use ultra_premium by default)',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://www.gov.il/he/test'
+    },
+    expectedParams: {
+      api_key: 'test_key',
+      url: 'https://www.gov.il/he/test',
+      ultra_premium: 'true',
+      render: 'true',
+      wait_for: '5000'
+    }
+  },
+  {
+    name: 'Non-gov.il site with premium only',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://example.com/page',
+      ultraPremium: false,
+      premium: true,
+      render: true,
+      waitFor: 3000
+    },
+    expectedParams: {
+      api_key: 'test_key',
+      url: 'https://example.com/page',
+      premium: 'true',
+      render: 'true',
+      wait_for: '3000'
+    }
+  },
+  {
+    name: 'No wait_for (waitFor=0)',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://static-site.com/page',
+      ultraPremium: false,
+      premium: false,
+      render: false,
+      waitFor: 0
+    },
+    expectedParams: {
+      api_key: 'test_key',
+      url: 'https://static-site.com/page',
+      render: 'false'
+    }
+  },
+  {
+    name: 'Custom long wait time',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://slow-site.com/page',
+      ultraPremium: true,
+      render: true,
+      waitFor: 10000
+    },
+    expectedParams: {
+      api_key: 'test_key',
+      url: 'https://slow-site.com/page',
+      ultra_premium: 'true',
+      render: 'true',
+      wait_for: '10000'
+    }
+  }
+];
+
+// Validation test cases
+const SCRAPER_API_VALIDATION_TEST_CASES = [
+  {
+    name: 'Valid gov.il config with ultra_premium',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://www.gov.il/he/test',
+      ultraPremium: true,
+      render: true,
+      waitFor: 5000
+    },
+    expectedValid: true,
+    expectedErrorCount: 0,
+    expectedWarningCount: 0
+  },
+  {
+    name: 'Gov.il with premium=true (wrong setting)',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://www.gov.il/he/test',
+      ultraPremium: false,
+      premium: true,
+      render: true,
+      waitFor: 5000
+    },
+    expectedValid: false,
+    expectedErrorCount: 1,
+    expectedWarningCount: 0,
+    expectedErrorSubstring: 'ultra_premium=true'
+  },
+  {
+    name: 'Gov.il without render=true',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://www.gov.il/he/test',
+      ultraPremium: true,
+      render: false,
+      waitFor: 5000
+    },
+    expectedValid: false,
+    expectedErrorCount: 1,
+    expectedWarningCount: 0,
+    expectedErrorSubstring: 'render=true'
+  },
+  {
+    name: 'Gov.il with low wait_for',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://www.gov.il/he/test',
+      ultraPremium: true,
+      render: true,
+      waitFor: 1000
+    },
+    expectedValid: true,
+    expectedErrorCount: 0,
+    expectedWarningCount: 1,
+    expectedWarningSubstring: 'wait_for=5000'
+  },
+  {
+    name: 'Missing apiKey',
+    config: {
+      targetUrl: 'https://example.com'
+    },
+    expectedValid: false,
+    expectedErrorCount: 1,
+    expectedWarningCount: 0,
+    expectedErrorSubstring: 'apiKey'
+  },
+  {
+    name: 'Missing targetUrl',
+    config: {
+      apiKey: 'test_key'
+    },
+    expectedValid: false,
+    expectedErrorCount: 1,
+    expectedWarningCount: 0,
+    expectedErrorSubstring: 'targetUrl'
+  },
+  {
+    name: 'Negative wait_for',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://example.com',
+      waitFor: -1000
+    },
+    expectedValid: false,
+    expectedErrorCount: 1,
+    expectedWarningCount: 0,
+    expectedErrorSubstring: 'negative'
+  },
+  {
+    name: 'Very high wait_for (warning)',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://example.com',
+      ultraPremium: true,
+      render: true,
+      waitFor: 120000
+    },
+    expectedValid: true,
+    expectedErrorCount: 0,
+    expectedWarningCount: 1,
+    expectedWarningSubstring: 'timeout'
+  },
+  {
+    name: 'Non-gov.il site without ultra_premium (valid)',
+    config: {
+      apiKey: 'test_key',
+      targetUrl: 'https://example.com',
+      ultraPremium: false,
+      premium: true,
+      render: true,
+      waitFor: 3000
+    },
+    expectedValid: true,
+    expectedErrorCount: 0,
+    expectedWarningCount: 0
+  }
+];
+
+/**
+ * Test: test_scraper_api_settings
+ * Verifies that ScraperAPI URL building and configuration validation work correctly
+ *
+ * CRITICAL LEARNINGS:
+ * - Gov.il requires ultra_premium=true (premium alone returns 500 errors)
+ * - wait_for=5000 is needed for Angular to render
+ * - render=true is required for JavaScript execution
+ */
+function test_scraper_api_settings(): void {
+  console.log('Running: test_scraper_api_settings()');
+  let passed = 0;
+  let failed = 0;
+
+  // Test URL building
+  console.log('\n  -- ScraperAPI URL Building Tests --');
+  for (const testCase of SCRAPER_API_URL_TEST_CASES) {
+    try {
+      const result = buildScraperApiUrl(testCase.config);
+
+      // Check each expected parameter exists in result
+      for (const [key, expectedValue] of Object.entries(testCase.expectedParams)) {
+        assert.strictEqual(result.params[key], expectedValue,
+          `${testCase.name}: param "${key}" - expected "${expectedValue}", got "${result.params[key]}"`);
+      }
+
+      // Check no unexpected params (ultra_premium vs premium)
+      if (testCase.expectedParams.ultra_premium) {
+        assert.strictEqual(result.params.premium, undefined,
+          `${testCase.name}: should not have premium when ultra_premium is set`);
+      }
+      if (testCase.expectedParams.premium) {
+        assert.strictEqual(result.params.ultra_premium, undefined,
+          `${testCase.name}: should not have ultra_premium when only premium is set`);
+      }
+
+      // Verify URL starts with ScraperAPI endpoint
+      assert.ok(result.url.startsWith('https://api.scraperapi.com?'),
+        `${testCase.name}: URL should start with ScraperAPI endpoint`);
+
+      console.log(`  ✓ ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  // Test configuration validation
+  console.log('\n  -- ScraperAPI Config Validation Tests --');
+  for (const testCase of SCRAPER_API_VALIDATION_TEST_CASES) {
+    try {
+      const result = validateScraperApiConfig(testCase.config);
+
+      assert.strictEqual(result.valid, testCase.expectedValid,
+        `${testCase.name}: valid - expected ${testCase.expectedValid}, got ${result.valid}`);
+
+      assert.strictEqual(result.errors.length, testCase.expectedErrorCount,
+        `${testCase.name}: error count - expected ${testCase.expectedErrorCount}, got ${result.errors.length}`);
+
+      assert.strictEqual(result.warnings.length, testCase.expectedWarningCount,
+        `${testCase.name}: warning count - expected ${testCase.expectedWarningCount}, got ${result.warnings.length}`);
+
+      // Check error substring if expected
+      if (testCase.expectedErrorSubstring && result.errors.length > 0) {
+        const hasExpectedError = result.errors.some(e => e.toLowerCase().includes(testCase.expectedErrorSubstring!.toLowerCase()));
+        assert.ok(hasExpectedError,
+          `${testCase.name}: expected error containing "${testCase.expectedErrorSubstring}", got: ${result.errors.join(', ')}`);
+      }
+
+      // Check warning substring if expected
+      if (testCase.expectedWarningSubstring && result.warnings.length > 0) {
+        const hasExpectedWarning = result.warnings.some(w => w.toLowerCase().includes(testCase.expectedWarningSubstring!.toLowerCase()));
+        assert.ok(hasExpectedWarning,
+          `${testCase.name}: expected warning containing "${testCase.expectedWarningSubstring}", got: ${result.warnings.join(', ')}`);
+      }
+
+      console.log(`  ✓ ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  // Critical gov.il settings verification test
+  console.log('\n  -- Critical Gov.il Settings Verification --');
+  try {
+    const govIlConfig: ScraperApiConfig = {
+      apiKey: '566e1370a3f3158b969f898e102c7fd0',
+      targetUrl: 'https://www.gov.il/he/departments/dynamiccollectors/decisive_appraisal_decisions',
+      ultraPremium: true,
+      render: true,
+      waitFor: 5000
+    };
+
+    const result = buildScraperApiUrl(govIlConfig);
+    const validation = validateScraperApiConfig(govIlConfig);
+
+    // These are the CRITICAL requirements from progress.txt Learnings
+    assert.strictEqual(result.params.ultra_premium, 'true',
+      'Gov.il MUST use ultra_premium=true');
+    assert.strictEqual(result.params.render, 'true',
+      'Gov.il MUST use render=true for Angular');
+    assert.strictEqual(result.params.wait_for, '5000',
+      'Gov.il MUST use wait_for=5000 for Angular rendering');
+    assert.strictEqual(validation.valid, true,
+      'Correct gov.il config should be valid');
+    assert.strictEqual(validation.errors.length, 0,
+      'Correct gov.il config should have no errors');
+
+    console.log('  ✓ Critical gov.il settings verified:');
+    console.log('    - ultra_premium=true (NOT just premium)');
+    console.log('    - render=true (for JavaScript/Angular)');
+    console.log('    - wait_for=5000 (Angular needs time to render)');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Critical gov.il settings: ${(error as Error).message}`);
+    failed++;
+  }
+
+  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+}
+
 // Run tests
 console.log('===== Scraper Unit Tests =====\n');
 test_parse_decisive_appraiser_title();
@@ -953,4 +1431,6 @@ console.log('');
 test_extract_committee();
 console.log('');
 test_handle_pagination();
+console.log('');
+test_scraper_api_settings();
 console.log('\n✓ All tests passed!');

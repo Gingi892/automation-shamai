@@ -2189,3 +2189,74 @@ Key rules:
 5. **Test case accuracy**: Test expectations must match the actual algorithm - the initial test had wrong expectation for "page near end" case
 
 ---
+
+## Iteration 29 — US-P5-001 test_scraper_api_settings()
+- **Date**: 2026-01-21
+- **Task**: US-P5-001 - Unit Tests - Scraper: test_scraper_api_settings()
+
+### What Was Done
+
+Created unit tests for ScraperAPI URL building and configuration validation, with special focus on gov.il-specific requirements.
+
+### Files Modified
+
+1. **chatbot/tests/test_scraper.ts**
+   - Added `ScraperApiConfig` and `ScraperApiUrl` interfaces
+   - Added `buildScraperApiUrl()` function that builds ScraperAPI URLs with proper settings
+   - Added `validateScraperApiConfig()` function that validates configuration for gov.il scraping
+   - Added 7 URL building test cases:
+     - Gov.il with correct settings (ultra_premium + wait_for)
+     - Gov.il appeals committee page
+     - Gov.il appeals board page
+     - Default settings (should use ultra_premium by default)
+     - Non-gov.il site with premium only
+     - No wait_for (waitFor=0)
+     - Custom long wait time
+   - Added 9 validation test cases:
+     - Valid gov.il config with ultra_premium
+     - Gov.il with premium=true (wrong setting - should error)
+     - Gov.il without render=true (should error)
+     - Gov.il with low wait_for (should warn)
+     - Missing apiKey/targetUrl (should error)
+     - Negative wait_for (should error)
+     - Very high wait_for (should warn)
+     - Non-gov.il site without ultra_premium (valid)
+   - Added critical gov.il settings verification test
+
+### CRITICAL Learnings (from progress.txt)
+
+The test validates these critical settings that were learned through painful debugging:
+
+| Setting | Required Value | Why |
+|---------|---------------|-----|
+| ultra_premium | true | Gov.il returns 500 errors with just premium=true |
+| render | true | Gov.il uses Angular, needs JavaScript execution |
+| wait_for | 5000 | Angular content needs time to render |
+
+### Test Coverage
+
+| Test Category | Count | Description |
+|---------------|-------|-------------|
+| URL Building | 7 | Correct URL parameter construction |
+| Config Validation | 9 | Error/warning detection for misconfigurations |
+| Critical Verification | 1 | Explicitly verifies gov.il-required settings |
+| **TOTAL** | 17 | All passed |
+
+### Learnings for Next Cycles
+
+1. **ultra_premium vs premium**: This is the most critical setting - using `premium=true` on gov.il consistently returns HTTP 500 errors. Always default to `ultra_premium=true` for gov.il URLs.
+
+2. **Validation levels**: The validator distinguishes between errors (invalid config) and warnings (suboptimal config):
+   - Missing required fields → error
+   - Wrong premium setting for gov.il → error
+   - Missing render=true for gov.il → error
+   - Low wait_for for gov.il → warning
+   - Very high wait_for → warning
+
+3. **Default values are critical**: The function defaults to `ultraPremium: true, render: true, waitFor: 5000` to ensure gov.il works correctly even if caller forgets to specify these.
+
+4. **Test structure**: Separating URL building tests from validation tests makes it easier to identify which aspect is failing.
+
+5. **Running the tests**: Use `cd mcp-server && node --import tsx ../chatbot/tests/test_scraper.ts`
+
+---
