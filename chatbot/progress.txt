@@ -909,3 +909,101 @@ POST /full-indexer
 - Workflow validation reports "cycle" as error but pagination loops are intentional
 
 ---
+
+## Iteration 10 — US-P2-002 Fetch PDF via ScraperAPI
+- **Date**: 2026-01-21
+- **Task**: US-P2-002 - PDF Content Extraction (first acceptance criterion)
+
+### What Was Done
+
+Added PDF fetching and text extraction to the Full Indexer workflow (`1zYlIK6VnynTHiHl`).
+
+### New Nodes Added (6 nodes)
+
+1. **Check PDF URL** (check-pdf-url)
+   - Position: [1300, 600]
+   - Type: If node
+   - Purpose: Routes documents based on whether they have a PDF URL
+   - Condition: `$json.url` isNotEmpty
+
+2. **Fetch PDF Content** (fetch-pdf-content)
+   - Position: [1500, 600]
+   - Type: HTTP Request
+   - URL: `https://api.scraperapi.com?api_key=...&url={{ encodeURIComponent($json.url) }}&premium=true`
+   - Timeout: 60 seconds
+   - Response: File format (binary)
+   - continueOnFail: true
+
+3. **Extract PDF Text** (extract-pdf-text)
+   - Position: [1700, 600]
+   - Type: extractFromFile
+   - Operation: pdf
+   - Binary property: data
+   - continueOnFail: true
+
+4. **Prepare PDF Text** (prepare-pdf-text)
+   - Position: [1900, 600]
+   - Type: Code node
+   - Purpose: Clean Hebrew RTL text and truncate to 35KB
+   - Features:
+     - Removes directional control characters
+     - Removes zero-width characters
+     - Normalizes whitespace
+     - Truncates to MAX_DESCRIPTION_LENGTH (35000 chars)
+
+5. **Skip PDF - No URL** (skip-pdf-no-url)
+   - Position: [1500, 750]
+   - Type: Code node
+   - Purpose: Fallback for documents without PDF URLs
+   - Sets description to title
+
+6. **Merge PDF Results** (merge-pdf-results)
+   - Position: [2100, 600]
+   - Type: Merge node
+   - Mode: append
+   - Combines results from both PDF extraction and skip paths
+
+### Connection Flow
+
+```
+Process Batch for Embedding
+    → Check PDF URL
+        → (has URL) → Fetch PDF Content → Extract PDF Text → Prepare PDF Text → Merge PDF Results → Create Embedding
+        → (no URL) → Skip PDF - No URL → Merge PDF Results → Create Embedding
+```
+
+### ScraperAPI Settings for PDF
+
+- Uses `premium=true` (not ultra_premium) for PDF downloads
+- PDFs don't require JavaScript rendering, so premium is sufficient
+- Timeout: 60 seconds per PDF
+- continueOnFail on all nodes to handle extraction failures gracefully
+
+### Hebrew RTL Text Processing
+
+The Prepare PDF Text node includes comprehensive Hebrew text cleaning:
+```javascript
+function cleanHebrewText(text) {
+  // Remove directional control characters
+  text = text.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '');
+  // Remove zero-width characters
+  text = text.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  // Normalize excessive whitespace
+  text = text.replace(/\n{3,}/g, '\n\n');
+  text = text.replace(/[ \t]+/g, ' ');
+  // Trim each line
+  text = text.split('\n').map(line => line.trim()).join('\n');
+  return text.trim();
+}
+```
+
+### Learnings for Next Cycles
+
+- n8n `extractFromFile` node with `operation: pdf` handles PDF text extraction
+- ScraperAPI `premium=true` is sufficient for PDFs (no JS rendering needed)
+- For If node connections, use `sourceOutput: "0"` for true branch, `sourceOutput: "1"` for false branch (as strings)
+- For Merge node, use `targetInput: "0"` and `targetInput: "1"` for the two input ports (as strings)
+- All PDF extraction nodes should have `continueOnFail: true` to handle failures gracefully
+- The workflow already embeds `title + description` so PDF text is automatically included
+
+---

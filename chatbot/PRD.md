@@ -149,7 +149,7 @@ const TITLE_REGEX = /הכרעת שמאי מכריע מיום (\d{2}-\d{2}-\d{4})
 **So that** RAG has complete content for answers
 
 **Acceptance Criteria:**
-- [ ] Fetch PDF via ScraperAPI (same settings)
+- [x] Fetch PDF via ScraperAPI (same settings)
 - [ ] Extract text using pdf-parse
 - [ ] Handle Hebrew RTL text properly
 - [ ] Store full text as Pinecone metadata (max 40KB per vector)
