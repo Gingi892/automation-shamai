@@ -1,0 +1,46 @@
+# Ralph Loop Progress - Gov.il MCP Server
+
+## Learnings (Read This First)
+
+### ScraperAPI Settings (CRITICAL)
+- Gov.il requires `ultra_premium=true` - premium alone returns 500 errors
+- Must use `wait_for=5000` for Angular to render
+- Always use `render=true`
+
+### Decision Title Regex
+```javascript
+/הכרעת שמאי מכריע מיום (\d{2}-\d{2}-\d{4}) בעניין ([^נ]+)נ ([^ג]+)ג (\d+) ח (\d+)\s*-?\s*(.+)?/
+```
+
+### PDF URLs
+- Format: `https://free-justice.openapi.gov.il/free/moj/portal/rest/searchpredefinedapi/v1/SearchPredefinedApi/Documents/DecisiveAppraiser/{docId}`
+- NO .pdf extension needed
+
+### Database
+- Use sql.js (pure JS) - NOT better-sqlite3 (native bindings fail on Node 24+)
+- Database already has schema created in database.ts
+- Methods added: getDecision(), getDbPath(), getDistinctValues()
+
+### Existing Code Status
+- scraper.ts: Has ScraperAPI with ultra_premium and wait_for settings
+- database.ts: Working with sql.js, has all required methods
+- index.ts: Full MCP server with all tools defined
+- types.ts: Complete type definitions
+
+---
+
+## Iteration Log
+
+## Iteration 1 — US-001: Index All Decisions (VERIFIED COMPLETE)
+- **What was done:** Verified all 8 acceptance criteria for US-001 are already fully implemented
+- **Files verified:**
+  - `src/scraper.ts` - Pagination via `?skip=N` (lines 424-427, 433), ScraperAPI settings (lines 415-416), Hebrew regex (lines 238-239, 923)
+  - `src/database.ts` - content_hash deduplication (lines 176, 219)
+  - `src/indexer.ts` - Progress saving/resume (lines 119-124, 277), pagination handling (lines 136-157)
+  - `package.json` - `npm run index-all` script (line 11)
+  - `scripts/index-all.ts` - Full indexing orchestration
+- **Learnings for next cycles:**
+  - US-001 was already implemented before this iteration began
+  - The codebase has a robust multi-strategy fallback system for scraping
+  - TypeScript type check passes cleanly
+---
