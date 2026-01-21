@@ -2387,3 +2387,69 @@ Created comprehensive unit tests to verify ALL metadata fields are properly incl
 6. **Test isolation**: Each test case creates fresh vectors to avoid state pollution
 
 ---
+
+## Iteration 32 — US-P5-002 test_query_by_filter()
+- **Date**: 2026-01-21
+- **Task**: US-P5-002 - Integration Tests - Pinecone: test_query_by_filter()
+
+### What Was Done
+
+Created comprehensive unit tests for Pinecone query filter operations, verifying committee filter and other metadata filters work correctly.
+
+### Files Modified
+
+1. **chatbot/tests/test_pinecone.ts**
+   - Added `buildPineconeFilter()` function - converts field conditions to Pinecone `{ $eq: value }` syntax
+   - Added `buildQueryRequest()` function - constructs query API request with optional filters
+   - Added `simulateQueryWithFilter()` function - simulates Pinecone filter behavior for testing
+   - Added `test_query_by_filter()` function with 10 test cases:
+     1. Filter by committee - single value (תל אביב)
+     2. Filter by year (2024)
+     3. Filter by caseType - Hebrew (היטל השבחה)
+     4. Filter by block number
+     5. Combine multiple filters (committee AND year)
+     6. Filter with no matching results
+     7. Empty filter returns all results (up to topK)
+     8. Filter ignores null values
+     9. Query request structure matches Pinecone API
+     10. Response includes metadata when includeMetadata=true
+
+### Test Coverage
+
+| Test Case | Description |
+|-----------|-------------|
+| Committee filter | Single `{ committee: { $eq: 'תל אביב' } }` filter |
+| Year filter | Filter for specific year |
+| Hebrew caseType | Filter with Hebrew value preserved |
+| Block filter | Numeric field as string filter |
+| Multiple filters | Combined AND conditions |
+| No matches | Empty result set handling |
+| Empty filter | Returns up to topK without filtering |
+| Null handling | Null values excluded from filter |
+| API structure | Request matches Pinecone format |
+| Metadata inclusion | Response contains full metadata |
+
+### Pinecone Filter Syntax
+
+```typescript
+// Single filter
+{ committee: { $eq: 'תל אביב' } }
+
+// Multiple filters (AND)
+{
+  committee: { $eq: 'תל אביב' },
+  year: { $eq: '2024' }
+}
+```
+
+### Learnings for Next Cycles
+
+1. **Pinecone filter syntax**: Uses `{ field: { $eq: value } }` not `{ field: value }`
+2. **Multiple filters are AND**: Pinecone applies all filter conditions as AND
+3. **Null values excluded**: Filter builder should ignore null/undefined values to prevent matching issues
+4. **Empty filter handling**: When filter is empty object, don't include filter in request at all
+5. **Hebrew values preserved**: Hebrew strings work correctly in filter values
+6. **Running tests**: `cd mcp-server && node --import tsx ../chatbot/tests/test_pinecone.ts` - all 3 test functions run
+7. **Test data design**: Use diverse data (5 vectors) with overlapping/non-overlapping values to test filter combinations
+
+---

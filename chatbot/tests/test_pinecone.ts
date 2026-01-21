@@ -811,8 +811,399 @@ function test_upsert_with_metadata(): void {
   }
 }
 
+// ============================================================
+// Test: test_query_by_filter
+// ============================================================
+
+/**
+ * Build a Pinecone filter object from field conditions
+ * Uses Pinecone's filter syntax: { field: { $eq: value } }
+ */
+function buildPineconeFilter(conditions: Record<string, string | null>): Record<string, unknown> {
+  const filter: Record<string, unknown> = {};
+
+  for (const [field, value] of Object.entries(conditions)) {
+    if (value !== null && value !== undefined) {
+      filter[field] = { $eq: value };
+    }
+  }
+
+  return filter;
+}
+
+/**
+ * Build a query request with filters
+ */
+function buildQueryRequest(
+  embedding: number[],
+  topK: number,
+  filter?: Record<string, unknown>
+): QueryRequest {
+  const request: QueryRequest = {
+    vector: embedding,
+    topK,
+    namespace: PINECONE_CONFIG.namespace,
+    includeMetadata: true
+  };
+
+  if (filter && Object.keys(filter).length > 0) {
+    request.filter = filter;
+  }
+
+  return request;
+}
+
+/**
+ * Simulate query response with filtering
+ * This simulates how Pinecone would filter vectors based on metadata
+ */
+function simulateQueryWithFilter(
+  vectors: PineconeVector[],
+  request: QueryRequest
+): QueryResponse {
+  let matches = vectors;
+
+  // Apply filters if present
+  if (request.filter) {
+    matches = vectors.filter(v => {
+      for (const [field, condition] of Object.entries(request.filter!)) {
+        const cond = condition as { $eq?: string };
+        if (cond.$eq !== undefined) {
+          const metaValue = (v.metadata as Record<string, unknown>)[field];
+          if (metaValue !== cond.$eq) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+  }
+
+  // Sort by a simulated score (in real Pinecone, this would be vector similarity)
+  // Here we just assign random scores for testing purposes
+  const scoredMatches: QueryMatch[] = matches.slice(0, request.topK).map(v => ({
+    id: v.id,
+    score: Math.random() * 0.5 + 0.5, // Score between 0.5 and 1.0
+    metadata: request.includeMetadata ? v.metadata : undefined
+  }));
+
+  // Sort by score descending
+  scoredMatches.sort((a, b) => b.score - a.score);
+
+  return {
+    matches: scoredMatches,
+    namespace: request.namespace
+  };
+}
+
+/**
+ * Test Pinecone query with committee filter
+ * Verifies that filter queries are correctly built and applied
+ */
+function test_query_by_filter(): void {
+  console.log('\nRunning: test_query_by_filter()');
+  let passed = 0;
+  let failed = 0;
+
+  // Create test vectors with various committee values
+  const testVectors: PineconeVector[] = [];
+
+  const committees = ['תל אביב', 'תל אביב', 'ירושלים', 'חיפה', 'באר שבע'];
+  const years = ['2024', '2023', '2024', '2024', '2023'];
+  const caseTypes = ['היטל השבחה', 'פיצויים', 'היטל השבחה', 'ירידת ערך', 'פיצויים'];
+  const blocks = ['6158', '6159', '30000', '11111', '5000'];
+
+  for (let i = 0; i < 5; i++) {
+    const embedding = generateMockEmbedding();
+    testVectors.push(buildPineconeVector(
+      'decisive_appraiser',
+      `הכרעת שמאי מכריע מס' ${i + 1}`,
+      `https://example.com/doc${i}.pdf`,
+      `תוכן החלטה ${i + 1}`,
+      embedding,
+      {
+        committee: committees[i],
+        year: years[i],
+        caseType: caseTypes[i],
+        block: blocks[i],
+        plot: String(i + 1)
+      }
+    ));
+  }
+
+  // Test case 1: Filter by committee - single value
+  try {
+    const filter = buildPineconeFilter({ committee: 'תל אביב' });
+    const queryEmbedding = generateMockEmbedding();
+    const request = buildQueryRequest(queryEmbedding, 10, filter);
+
+    // Verify filter structure
+    assert.deepStrictEqual(filter, { committee: { $eq: 'תל אביב' } },
+      'Committee filter should use $eq syntax');
+
+    // Verify request structure
+    assert.strictEqual(request.namespace, PINECONE_CONFIG.namespace,
+      'Request should have correct namespace');
+    assert.strictEqual(request.topK, 10, 'Request should have correct topK');
+    assert.ok(request.filter, 'Request should have filter');
+
+    // Simulate query and verify results
+    const response = simulateQueryWithFilter(testVectors, request);
+
+    // All matches should have committee = 'תל אביב'
+    assert.ok(response.matches.length <= 2,
+      'Should return at most 2 matches (only 2 תל אביב vectors)');
+
+    for (const match of response.matches) {
+      assert.strictEqual(match.metadata?.committee, 'תל אביב',
+        'All matches should have committee = תל אביב');
+    }
+
+    console.log('  ✓ Filter by committee - single value');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Filter by committee - single value: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 2: Filter by year
+  try {
+    const filter = buildPineconeFilter({ year: '2024' });
+    const queryEmbedding = generateMockEmbedding();
+    const request = buildQueryRequest(queryEmbedding, 10, filter);
+
+    assert.deepStrictEqual(filter, { year: { $eq: '2024' } },
+      'Year filter should use $eq syntax');
+
+    const response = simulateQueryWithFilter(testVectors, request);
+
+    // Should return vectors with year = 2024 (3 vectors)
+    assert.ok(response.matches.length <= 3,
+      'Should return at most 3 matches for year 2024');
+
+    for (const match of response.matches) {
+      assert.strictEqual(match.metadata?.year, '2024',
+        'All matches should have year = 2024');
+    }
+
+    console.log('  ✓ Filter by year');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Filter by year: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 3: Filter by caseType (Hebrew)
+  try {
+    const filter = buildPineconeFilter({ caseType: 'היטל השבחה' });
+    const queryEmbedding = generateMockEmbedding();
+    const request = buildQueryRequest(queryEmbedding, 10, filter);
+
+    assert.deepStrictEqual(filter, { caseType: { $eq: 'היטל השבחה' } },
+      'caseType filter should use $eq syntax');
+
+    const response = simulateQueryWithFilter(testVectors, request);
+
+    // Should return vectors with caseType = 'היטל השבחה' (2 vectors)
+    assert.ok(response.matches.length <= 2,
+      'Should return at most 2 matches for היטל השבחה');
+
+    for (const match of response.matches) {
+      assert.strictEqual(match.metadata?.caseType, 'היטל השבחה',
+        'All matches should have caseType = היטל השבחה');
+    }
+
+    console.log('  ✓ Filter by caseType (Hebrew)');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Filter by caseType (Hebrew): ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 4: Filter by block number
+  try {
+    const filter = buildPineconeFilter({ block: '6158' });
+    const queryEmbedding = generateMockEmbedding();
+    const request = buildQueryRequest(queryEmbedding, 10, filter);
+
+    assert.deepStrictEqual(filter, { block: { $eq: '6158' } },
+      'Block filter should use $eq syntax');
+
+    const response = simulateQueryWithFilter(testVectors, request);
+
+    // Should return exactly 1 vector with block = 6158
+    assert.strictEqual(response.matches.length, 1,
+      'Should return exactly 1 match for block 6158');
+    assert.strictEqual(response.matches[0].metadata?.block, '6158',
+      'Match should have block = 6158');
+
+    console.log('  ✓ Filter by block number');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Filter by block number: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 5: Combine multiple filters (committee AND year)
+  try {
+    const filter = buildPineconeFilter({
+      committee: 'תל אביב',
+      year: '2024'
+    });
+    const queryEmbedding = generateMockEmbedding();
+    const request = buildQueryRequest(queryEmbedding, 10, filter);
+
+    // Verify combined filter structure
+    assert.deepStrictEqual(filter, {
+      committee: { $eq: 'תל אביב' },
+      year: { $eq: '2024' }
+    }, 'Combined filter should have both conditions');
+
+    const response = simulateQueryWithFilter(testVectors, request);
+
+    // Should return only vectors matching BOTH conditions
+    // תל אביב with 2024 = 1 vector (index 0)
+    assert.strictEqual(response.matches.length, 1,
+      'Should return 1 match for תל אביב AND 2024');
+    assert.strictEqual(response.matches[0].metadata?.committee, 'תל אביב',
+      'Match should have committee = תל אביב');
+    assert.strictEqual(response.matches[0].metadata?.year, '2024',
+      'Match should have year = 2024');
+
+    console.log('  ✓ Combine multiple filters (committee AND year)');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Combine multiple filters (committee AND year): ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 6: Filter with no matching results
+  try {
+    const filter = buildPineconeFilter({ committee: 'אשדוד' }); // Not in test data
+    const queryEmbedding = generateMockEmbedding();
+    const request = buildQueryRequest(queryEmbedding, 10, filter);
+
+    const response = simulateQueryWithFilter(testVectors, request);
+
+    assert.strictEqual(response.matches.length, 0,
+      'Should return 0 matches for non-existent committee');
+
+    console.log('  ✓ Filter with no matching results');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Filter with no matching results: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 7: Empty filter returns all results (up to topK)
+  try {
+    const filter = buildPineconeFilter({});
+    const queryEmbedding = generateMockEmbedding();
+    const request = buildQueryRequest(queryEmbedding, 3, filter);
+
+    // Verify no filter is added for empty conditions
+    assert.deepStrictEqual(filter, {}, 'Empty conditions should produce empty filter');
+    assert.strictEqual(request.filter, undefined,
+      'Request should not have filter when empty');
+
+    const response = simulateQueryWithFilter(testVectors, request);
+
+    // Should return up to topK results
+    assert.strictEqual(response.matches.length, 3,
+      'Should return topK (3) matches when no filter');
+
+    console.log('  ✓ Empty filter returns all results');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Empty filter returns all results: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 8: Filter ignores null values
+  try {
+    const filter = buildPineconeFilter({
+      committee: 'תל אביב',
+      appraiser: null // Should be ignored
+    });
+
+    // Verify null values are not included in filter
+    assert.deepStrictEqual(filter, { committee: { $eq: 'תל אביב' } },
+      'Filter should not include null values');
+    assert.ok(!('appraiser' in filter),
+      'Null appraiser should not be in filter');
+
+    console.log('  ✓ Filter ignores null values');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Filter ignores null values: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 9: Query request structure matches Pinecone API
+  try {
+    const filter = buildPineconeFilter({ committee: 'חיפה', year: '2024' });
+    const queryEmbedding = generateMockEmbedding();
+    const request = buildQueryRequest(queryEmbedding, 5, filter);
+
+    // Verify complete request structure
+    assert.ok(Array.isArray(request.vector), 'vector should be array');
+    assert.strictEqual(request.vector.length, PINECONE_CONFIG.dimension,
+      'vector should have correct dimension');
+    assert.strictEqual(typeof request.topK, 'number', 'topK should be number');
+    assert.strictEqual(typeof request.namespace, 'string', 'namespace should be string');
+    assert.strictEqual(typeof request.includeMetadata, 'boolean', 'includeMetadata should be boolean');
+    assert.strictEqual(typeof request.filter, 'object', 'filter should be object');
+
+    // Verify filter structure matches Pinecone syntax
+    const filterObj = request.filter as Record<string, { $eq: string }>;
+    assert.ok('committee' in filterObj, 'filter should have committee');
+    assert.ok('$eq' in filterObj.committee, 'committee filter should use $eq');
+    assert.ok('year' in filterObj, 'filter should have year');
+    assert.ok('$eq' in filterObj.year, 'year filter should use $eq');
+
+    console.log('  ✓ Query request structure matches Pinecone API');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Query request structure matches Pinecone API: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 10: Response includes metadata when includeMetadata=true
+  try {
+    const filter = buildPineconeFilter({ committee: 'ירושלים' });
+    const queryEmbedding = generateMockEmbedding();
+    const request = buildQueryRequest(queryEmbedding, 10, filter);
+
+    // Verify includeMetadata is set
+    assert.strictEqual(request.includeMetadata, true,
+      'includeMetadata should be true by default');
+
+    const response = simulateQueryWithFilter(testVectors, request);
+
+    // Verify response has metadata
+    for (const match of response.matches) {
+      assert.ok(match.metadata, 'Match should include metadata');
+      assert.ok(match.metadata.title, 'Metadata should have title');
+      assert.ok(match.metadata.committee, 'Metadata should have committee');
+    }
+
+    console.log('  ✓ Response includes metadata when includeMetadata=true');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Response includes metadata when includeMetadata=true: ${(error as Error).message}`);
+    failed++;
+  }
+
+  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+}
+
 // Run tests
 console.log('===== Pinecone Integration Tests =====\n');
 test_upsert_single_document();
 test_upsert_with_metadata();
+test_query_by_filter();
 console.log('\n✓ All tests passed!');
