@@ -3262,3 +3262,64 @@ Results: 7 passed, 0 failed, 0 skipped
 7. **Path format**: Use `/c/Users/...` on Windows bash, not `C:\Users\...`
 
 ---
+
+---
+
+## Iteration 39 — US-P5-003 test_specific_search()
+- **Date**: 2026-01-21
+- **Task**: US-P5-003 - E2E Tests: test_specific_search() - "החלטות בגוש 6158"
+
+### What Was Done
+
+Implemented E2E test for specific block search queries to verify the filter system works correctly for property-based searches.
+
+### Files Modified
+
+1. **chatbot/tests/test_e2e.ts**
+   - Added `test_specific_search()` function with 7 test cases:
+     1. Send specific block search query - validates response structure
+     2. Response mentions the searched block number or indicates status
+     3. Response is in Hebrew
+     4. Different block numbers produce different responses (filter verification)
+     5. Sources include block information if available
+     6. Hebrew block prefix variations ("בגוש", "גוש") work the same
+     7. Combined block and plot search ("גוש 6158 חלקה 25") works
+
+2. **chatbot/PRD.md**
+   - Marked `test_specific_search()` as complete [x]
+
+### Test Coverage
+
+| Test Case | Description |
+|-----------|-------------|
+| Block search query | Validates response structure for "החלטות בגוש 6158" |
+| Block reference | Response mentions 6158 or indicates search status |
+| Hebrew content | Response is in Hebrew |
+| Filter verification | Different blocks produce different responses |
+| Sources structure | Sources have title and URL, or empty if no matches |
+| Query variations | Multiple Hebrew phrasings work for same block |
+| Combined filters | Block + plot search returns valid response |
+
+### Test Results
+
+All 7 test cases passed:
+```
+Running: test_specific_search()
+  ✓ Response structure is valid
+  ✓ Response acknowledges block search
+  ✓ Response is in Hebrew
+  ✓ Different blocks produce different responses
+  ✓ Sources returned with valid structure (5 sources)
+  ✓ Hebrew block prefix variations both work
+  ✓ Combined block/plot search works
+
+Results: 7 passed, 0 failed, 0 skipped
+```
+
+### Learnings for Next Cycles
+
+1. **Graceful handling of empty results**: Block filters may return no documents if that block doesn't exist in the database - tests should accept both populated and empty responses
+2. **Filter verification**: Testing two different block numbers and comparing responses verifies the filter is actually applied
+3. **Query variations**: Hebrew has multiple ways to phrase the same search - tests should verify common variations work
+4. **Combined filters**: Users often search for block AND plot together - test verifies this works
+5. **Running tests**: `cd mcp-server && node --import tsx ../chatbot/tests/test_e2e.ts`

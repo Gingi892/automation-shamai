@@ -579,7 +579,7 @@ function showError(type) {
 
 **Test Cases:**
 - [x] `test_simple_query()` - "מה זה היטל השבחה?"
-- [ ] `test_specific_search()` - "החלטות בגוש 6158"
+- [x] `test_specific_search()` - "החלטות בגוש 6158"
 - [ ] `test_analytical_query()` - "כמה החלטות בתל אביב?"
 - [ ] `test_citation_format()` - Response contains [S0]
 - [ ] `test_hallucination_detection()` - Grounding badge present

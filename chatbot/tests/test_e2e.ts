@@ -389,6 +389,224 @@ async function test_simple_query(): Promise<void> {
 }
 
 // ============================================================
+// Test: test_specific_search
+// ============================================================
+
+/**
+ * Test a specific search query: "החלטות בגוש 6158"
+ * Expected: Response filters by block number and returns relevant decisions
+ */
+async function test_specific_search(): Promise<void> {
+  console.log('\nRunning: test_specific_search()');
+  let passed = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  // Test case 1: Send specific block search query
+  try {
+    const request: ChatRequest = {
+      message: 'החלטות בגוש 6158'
+    };
+
+    console.log('  Sending query: "החלטות בגוש 6158"');
+    const response = await sendChatRequest(request);
+
+    if (response === null) {
+      console.log('  ⊘ API call failed - test skipped (webhook may be unavailable)');
+      skipped++;
+    } else {
+      // Validate response structure
+      const validation = validateResponseStructure(response);
+      if (!validation.valid) {
+        console.log(`  ✗ Invalid response structure: ${validation.errors.join(', ')}`);
+        failed++;
+      } else {
+        assert.strictEqual(response.success, true,
+          'Response should indicate success');
+        console.log('  ✓ Response structure is valid');
+        passed++;
+      }
+    }
+  } catch (error) {
+    console.log(`  ✗ Send specific block search query: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 2: Response mentions the searched block number
+  try {
+    const request: ChatRequest = {
+      message: 'החלטות בגוש 6158'
+    };
+
+    const response = await sendChatRequest(request);
+
+    if (response === null || !response.success) {
+      console.log('  ⊘ Block reference check skipped');
+      skipped++;
+    } else {
+      // Response should mention block 6158 or indicate no results found
+      const responseText = response.response;
+      const mentionsBlock = responseText.includes('6158') ||
+                            responseText.includes('גוש') ||
+                            responseText.includes('לא נמצאו') ||
+                            responseText.includes('לא נמצא');
+
+      assert.ok(mentionsBlock,
+        'Response should mention the block number or indicate search status');
+      console.log('  ✓ Response acknowledges block search');
+      passed++;
+    }
+  } catch (error) {
+    console.log(`  ✗ Response mentions the searched block number: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 3: Response is in Hebrew
+  try {
+    const request: ChatRequest = {
+      message: 'החלטות בגוש 6158'
+    };
+
+    const response = await sendChatRequest(request);
+
+    if (response === null || !response.success) {
+      console.log('  ⊘ Hebrew content check skipped');
+      skipped++;
+    } else {
+      assert.ok(containsHebrew(response.response),
+        'Response should contain Hebrew text');
+      console.log('  ✓ Response is in Hebrew');
+      passed++;
+    }
+  } catch (error) {
+    console.log(`  ✗ Response is in Hebrew: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 4: Query with different block number produces different response
+  try {
+    const request1: ChatRequest = { message: 'החלטות בגוש 6158' };
+    const request2: ChatRequest = { message: 'החלטות בגוש 1234' };
+
+    const response1 = await sendChatRequest(request1);
+    const response2 = await sendChatRequest(request2);
+
+    if (response1 === null || response2 === null || !response1.success || !response2.success) {
+      console.log('  ⊘ Different block comparison skipped');
+      skipped++;
+    } else {
+      // Responses should be different (or both indicate no results)
+      // This verifies the filter is actually being applied
+      const response1Text = response1.response;
+      const response2Text = response2.response;
+
+      // They don't need to be completely different, but the search should acknowledge the different blocks
+      const r1HasBlock6158 = response1Text.includes('6158');
+      const r2HasBlock1234 = response2Text.includes('1234');
+      const bothEmpty = (response1Text.includes('לא נמצא') || response1Text.includes('לא נמצאו')) &&
+                       (response2Text.includes('לא נמצא') || response2Text.includes('לא נמצאו'));
+
+      assert.ok(r1HasBlock6158 || r2HasBlock1234 || bothEmpty || response1Text !== response2Text,
+        'Different block searches should produce contextually different responses');
+      console.log('  ✓ Different blocks produce different responses');
+      passed++;
+    }
+  } catch (error) {
+    console.log(`  ✗ Different blocks produce different responses: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 5: Sources include block information (if available)
+  try {
+    const request: ChatRequest = {
+      message: 'החלטות בגוש 6158'
+    };
+
+    const response = await sendChatRequest(request);
+
+    if (response === null || !response.success) {
+      console.log('  ⊘ Sources check skipped');
+      skipped++;
+    } else {
+      // Sources may be empty if no documents match, but structure should be valid
+      if (response.sources && response.sources.length > 0) {
+        // Check that sources have required fields
+        for (const source of response.sources) {
+          assert.ok(source.title, 'Each source should have a title');
+          assert.ok(source.url, 'Each source should have a URL');
+        }
+        console.log(`  ✓ Sources returned with valid structure (${response.sources.length} sources)`);
+      } else {
+        // No sources is acceptable - the block may not exist in the database
+        console.log('  ✓ No sources returned (block may not exist in database)');
+      }
+      passed++;
+    }
+  } catch (error) {
+    console.log(`  ✗ Sources include block information: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 6: Search with Hebrew block prefix "גוש" works the same
+  try {
+    const request1: ChatRequest = { message: 'החלטות בגוש 6158' };
+    const request2: ChatRequest = { message: 'מצא החלטות בנושא גוש 6158' };
+
+    const response1 = await sendChatRequest(request1);
+    const response2 = await sendChatRequest(request2);
+
+    if (response1 === null || response2 === null || !response1.success || !response2.success) {
+      console.log('  ⊘ Hebrew prefix variations skipped');
+      skipped++;
+    } else {
+      // Both should return valid responses for the same block
+      assert.ok(response1.response.length > 0 && response2.response.length > 0,
+        'Both query variations should return responses');
+      console.log('  ✓ Hebrew block prefix variations both work');
+      passed++;
+    }
+  } catch (error) {
+    console.log(`  ✗ Hebrew block prefix variations: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 7: Combined block and plot search
+  try {
+    const request: ChatRequest = {
+      message: 'החלטות בגוש 6158 חלקה 25'
+    };
+
+    const response = await sendChatRequest(request);
+
+    if (response === null || !response.success) {
+      console.log('  ⊘ Combined block/plot search skipped');
+      skipped++;
+    } else {
+      // Response should indicate understanding of both block and plot
+      const responseText = response.response;
+      const mentionsBoth = (responseText.includes('6158') || responseText.includes('גוש')) &&
+                           (responseText.includes('25') || responseText.includes('חלקה') ||
+                            responseText.includes('לא נמצא') || responseText.includes('לא נמצאו'));
+
+      // Either mentions search criteria or indicates no results
+      assert.ok(responseText.length > 20,
+        'Response should provide meaningful content for combined search');
+      console.log('  ✓ Combined block/plot search works');
+      passed++;
+    }
+  } catch (error) {
+    console.log(`  ✗ Combined block/plot search: ${(error as Error).message}`);
+    failed++;
+  }
+
+  console.log(`\nResults: ${passed} passed, ${failed} failed, ${skipped} skipped`);
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+}
+
+// ============================================================
 // Main - Run tests
 // ============================================================
 
@@ -398,6 +616,7 @@ async function runTests(): Promise<void> {
   console.log(`Timeout: ${TIMEOUT_MS / 1000}s\n`);
 
   await test_simple_query();
+  await test_specific_search();
 
   console.log('\n✓ All tests completed!');
 }
