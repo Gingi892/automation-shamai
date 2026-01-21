@@ -1351,3 +1351,90 @@ Parse Query Filters → Check Counting Query
 - Must have at least one filter for counting query to activate (prevents counting entire index)
 
 ---
+
+## Iteration 16 — US-P3-003 Statistics Aggregation Before AI
+- **Date**: 2026-01-21
+- **Task**: US-P3-003 - For statistics: aggregate results before sending to AI
+
+### What Was Done
+
+Implemented statistics aggregation for analytical queries like "מי השמאי עם הכי הרבה החלטות?" or "מהי התפלגות סוגי התיקים?". These queries now aggregate Pinecone results before responding, ensuring factual statistics without AI hallucination.
+
+### Workflow Changes (McOa9j15PRy8AZ8v)
+
+Added 4 new nodes to create a statistics branch parallel to the counting branch:
+
+1. **Check Statistics Query** (check-statistics-query)
+   - Position: [440, 0]
+   - Type: If node
+   - Purpose: Routes queries based on `isStatisticsQuery` flag
+   - True branch → Statistics aggregation flow
+   - False branch → Check Counting Query (existing)
+
+2. **Query Pinecone Stats** (query-pinecone-stats)
+   - Position: [620, 300]
+   - Type: HTTP Request
+   - Uses zero vector with topK=100 and includeMetadata=true
+   - Applies any filters from parsed query
+
+3. **Aggregate Statistics** (aggregate-statistics)
+   - Position: [820, 300]
+   - Type: Code node
+   - Groups results by the detected `groupBy` field (appraiser, caseType, committee, year)
+   - Computes counts, percentages, and chart data
+   - Handles comparison type for year-over-year queries
+
+4. **Build Statistics Response** (build-statistics-response)
+   - Position: [1020, 300]
+   - Type: Code node
+   - Formats aggregated data into Hebrew response
+   - Returns 100% grounding confidence (factual data)
+   - Includes chart data for frontend visualization
+
+### Updated Node
+
+**Parse Query Filters** - Added statistics query detection with pattern matching:
+- `isStatisticsQuery` - Boolean flag for statistics queries
+- `statisticsGroupBy` - Field to group by (appraiser, caseType, committee, year)
+- `statisticsType` - Type of aggregation (top, distribution, comparison)
+- `comparisonYears` - Array of years for comparison queries
+
+### Statistics Patterns Detected
+
+| Pattern (Hebrew) | groupBy | type |
+|------------------|---------|------|
+| מי השמאי עם הכי הרבה | appraiser | top |
+| התפלגות השמאים | appraiser | distribution |
+| התפלגות סוגי התיקים | caseType | distribution |
+| התפלגות הוועדות | committee | distribution |
+| השוואה בין 2023 ל-2024 | year | comparison |
+
+### Connection Flow
+
+```
+Parse Query Filters → Check Statistics Query
+    ├─ (true)  → Query Pinecone Stats → Aggregate Statistics → Build Statistics Response → Respond
+    └─ (false) → Check Counting Query
+                    ├─ (true)  → Query Pinecone Count → Build Counting Response → Respond
+                    └─ (false) → Embed User Query → ... RAG flow ... → Respond
+```
+
+### Example Behavior
+
+| Query | Result |
+|-------|--------|
+| "מי השמאי עם הכי הרבה החלטות?" | רשימת עשר שמאי המובילים: 1. כהן: 15 החלטות (20%)... |
+| "מהי התפלגות סוגי התיקים?" | התפלגות לפי סוג תיק: - היטל השבחה: 45 החלטות (60%)... |
+| "השווה בין 2023 ל-2024" | השוואה בין שנים: - שנת 2023: 50 החלטות - שנת 2024: 65 החלטות עלייה של 15 החלטות (30%) |
+
+### Learnings for Next Cycles
+
+- Statistics queries use `includeMetadata: true` (unlike counting which uses false)
+- topK=100 provides enough data for meaningful aggregations
+- The `groupBy` field determines which metadata field to aggregate on
+- Response includes `chartData` array for frontend chart rendering
+- Statistics queries bypass hallucination detection (100% grounded from Pinecone data)
+- Hebrew patterns need to handle optional ה prefix (e.g., השמאי/שמאי)
+- n8n updateNode requires `updates` object, not direct parameters
+
+---
