@@ -114,3 +114,98 @@
 - Document chunking approach differs from PRD "one doc = one vector" requirement
 
 ---
+
+## Iteration 2 — Document Current Pinecone Schema and Data
+- **Date**: 2026-01-21
+- **Task**: US-P1-001 - Document current Pinecone schema and data
+
+### Pinecone Configuration
+
+| Setting | Value |
+|---------|-------|
+| Host | https://gov-il-decisions-k1iqa9s.svc.aped-4627-b74a.pinecone.io |
+| Namespace | gov-il-decisions |
+| Dimension | 1024 (text-embedding-3-small) |
+| Max metadata size | 40KB per vector |
+
+### Current Pinecone Vector Schema (from n8n Document Processor)
+
+The "Combine Results" node in workflow `kTZqcClvtUspeC28` defines the vector schema:
+
+```typescript
+interface PineconeVector {
+  id: string;           // Format: {documentId}_p{pageNumber} e.g., "doc_1705123456789_0_p1"
+  values: number[];     // 1024-dimension embedding array
+  metadata: {
+    // Document identification
+    documentId: string;        // Generated ID: "doc_{timestamp}_{index}"
+    title: string;             // Full Hebrew title of the decision
+    url: string;               // PDF URL (free-justice.openapi.gov.il)
+
+    // Structured fields (for filtering)
+    committee: string;         // ועדה מקומית (local committee name)
+    block: string;             // גוש (block number)
+    plot: string;              // חלקה (plot number)
+    appraiser: string;         // שמאי name (for decisive_appraiser only)
+    publishDate: string;       // Publication date
+
+    // Page-specific fields
+    pageNumber: number;        // Page/chunk number (1-indexed)
+    totalPages: number;        // Total pages/chunks in document
+    content: string;           // Text content (truncated to 10,000 chars)
+    contentLength: number;     // Original content length
+  }
+}
+```
+
+### Current Schema vs PRD Schema Gap Analysis
+
+| Field | Current Schema | PRD Schema | Gap |
+|-------|---------------|------------|-----|
+| id | `{docId}_p{page}` | `{database}-{hash12}` | ❌ Different format, current is page-based |
+| database | ❌ Missing | Required | ❌ No database field (always decisive_appraiser implied) |
+| title | ✅ Present | Required | ✅ |
+| url | ✅ Present | Required | ✅ |
+| block | ✅ Present | Required | ✅ |
+| plot | ✅ Present | Required | ✅ |
+| committee | ✅ Present | Required | ✅ |
+| appraiser | ✅ Present | Required | ✅ |
+| caseType | ❌ Missing | Required | ❌ Not extracted |
+| decisionDate | ❌ Missing | Required | ❌ Not extracted (only publishDate) |
+| year | ❌ Missing | Required | ❌ Not extracted for filtering |
+| description | content field | Required | ⚠️ Limited to 10KB, not full PDF text |
+| contentHash | ❌ Missing | Required | ❌ No deduplication |
+| indexedAt | ❌ Missing | Required | ❌ No timestamp |
+
+### Key Issues Identified
+
+1. **Document Chunking**: Current system splits PDFs into ~2000 char chunks, creating multiple vectors per document
+   - PRD requires: "One document = one vector" (no splitting)
+   - This affects citation accuracy and statistics queries
+
+2. **Missing Fields**:
+   - `database` - Cannot distinguish between 3 sources
+   - `caseType` - Cannot filter by היטל השבחה, פיצויים, etc.
+   - `decisionDate` - Cannot do date-based filtering/statistics
+   - `year` - Cannot do year-based analytics queries
+   - `contentHash` - No deduplication mechanism
+
+3. **Metadata Fields Expected by RAG Chatbot**:
+   The RAG workflow queries for: `meta.title`, `meta.description`, `meta.text`, `meta.content`, `meta.url`, `meta.publishDate`
+   - Note: Uses fallback chain: `description || text || content`
+
+### Data Coverage (Estimated)
+
+Based on workflow analysis:
+- Only `decisive_appraiser` database is being indexed
+- `appeals_committee` and `appeals_board` not yet connected
+- Total vectors unknown without direct Pinecone stats query (requires API call)
+
+### Learnings for Next Cycles
+- Pinecone schema needs significant updates to match PRD requirements
+- Must add database field to distinguish between 3 sources
+- Need to switch from chunked approach to whole-document vectors
+- caseType and decisionDate extraction already exists in MCP server scraper - can reuse
+- contentHash is generated in scraper's `toDecision()` method - can reuse
+
+---
