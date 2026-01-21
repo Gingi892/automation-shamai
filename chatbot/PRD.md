@@ -97,10 +97,10 @@ OpenAI:
 **So that** I know what needs to be indexed
 
 **Acceptance Criteria:**
-- [ ] Query Pinecone to count existing vectors by namespace
-- [ ] Estimate total documents from each gov.il database
-- [ ] Calculate coverage percentage per database
-- [ ] List databases with <80% coverage
+- [x] Query Pinecone to count existing vectors by namespace
+- [x] Estimate total documents from each gov.il database
+- [x] Calculate coverage percentage per database
+- [x] List databases with <80% coverage
 
 ---
 

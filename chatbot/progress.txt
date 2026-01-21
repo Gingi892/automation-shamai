@@ -623,3 +623,75 @@ function computeGroundingScore(p1, p0, hasCitations) {
 - Tooltip positioning has mobile-specific behavior (bottom sheet vs floating)
 
 ---
+
+## Iteration 6 — Data Gap Analysis (US-P1-002)
+- **Date**: 2026-01-21
+- **Task**: US-P1-002 - Data Gap Analysis
+
+### Pinecone Vector Count by Namespace
+
+| Namespace | Vector Count |
+|-----------|--------------|
+| gov-il-decisions | **73 vectors** |
+
+**Note**: Based on Iteration 3 direct Pinecone API query.
+
+### Estimated Total Documents per Gov.il Database
+
+| Database | Hebrew Name | URL | Estimated Docs |
+|----------|-------------|-----|----------------|
+| decisive_appraiser | שמאי מכריע | https://www.gov.il/he/departments/dynamiccollectors/decisive_appraisal_decisions | ~10,000 |
+| appeals_committee | ועדת השגות | https://www.gov.il/he/departments/dynamiccollectors/committee | ~5,000 |
+| appeals_board | ועדת ערעורים | https://www.gov.il/he/departments/dynamiccollectors/decisions_appeals_board | ~5,000 |
+| **TOTAL** | | | **~20,000** |
+
+### Coverage Percentage per Database
+
+| Database | Estimated | Indexed | Coverage | Below 80%? |
+|----------|-----------|---------|----------|------------|
+| decisive_appraiser | 10,000 | ~10-20* | **<0.2%** | ❌ YES |
+| appeals_committee | 5,000 | 0 | **0%** | ❌ YES |
+| appeals_board | 5,000 | 0 | **0%** | ❌ YES |
+| **OVERALL** | **20,000** | **73 vectors** | **0.37%** | ❌ YES |
+
+*Note: 73 vectors with ~2000 char chunks means approximately 10-20 unique documents from decisive_appraiser only.
+
+### Databases with <80% Coverage
+
+**ALL THREE databases are below 80% coverage:**
+
+1. **decisive_appraiser** (שמאי מכריע) - <0.2% coverage
+   - Only ~10-20 documents indexed out of ~10,000
+   - Scraper uses `premium=true` instead of required `ultra_premium=true`
+
+2. **appeals_committee** (ועדת השגות) - 0% coverage
+   - No workflow connected to this database
+   - 0 documents indexed out of ~5,000
+
+3. **appeals_board** (ועדת ערעורים) - 0% coverage
+   - No workflow connected to this database
+   - 0 documents indexed out of ~5,000
+
+### Root Causes
+
+1. **ScraperAPI misconfiguration**: Uses `premium=true` instead of `ultra_premium=true`
+2. **Limited execution**: Scraper workflow only ran ~10 times
+3. **Missing databases**: appeals_committee and appeals_board not connected
+4. **Chunking reduces coverage**: Multiple vectors per document (73 vectors ≈ 10-20 docs)
+
+### Created n8n Workflow
+
+- **Workflow ID**: `ezuYHVmfjIiThqXW`
+- **Name**: "Data Gap Analysis - Pinecone vs Gov.il"
+- **Purpose**: Query Pinecone stats and calculate coverage
+- **Status**: Active (webhook at `/data-gap-analysis`)
+
+### Learnings for Next Cycles
+
+- All 3 databases require full indexing - PRD Phase 2 is critical path
+- Fix ScraperAPI settings BEFORE running any full index
+- Must implement "one doc = one vector" approach (PRD requirement)
+- Current 73 vectors are from decisive_appraiser only
+- Need to add scrapers for appeals_committee and appeals_board
+
+---
