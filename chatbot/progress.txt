@@ -3060,3 +3060,149 @@ Implemented comprehensive mobile responsive fixes for the chatbot frontend to en
 7. **RTL considerations**: Hebrew text renders correctly with proper viewport meta tag
 
 ---
+
+## Iteration 26 — US-P5-002 test_query_semantic()
+- **Date**: 2026-01-21
+- **Task**: US-P5-002 - Integration Tests - Pinecone: test_query_semantic()
+
+### What Was Done
+
+Added semantic/embedding similarity tests to `chatbot/tests/test_pinecone.ts`.
+
+### Files Modified
+
+1. **chatbot/tests/test_pinecone.ts**
+   - Added `cosineSimilarity()` helper function for calculating vector similarity
+   - Added `generateSimilarEmbedding()` to create vectors with controlled noise levels
+   - Added `generateDifferentEmbedding()` for random/different vectors
+   - Added `simulateSemanticQuery()` to simulate Pinecone semantic search with scoring
+   - Added `test_query_semantic()` function with 10 test cases
+
+### Test Cases Implemented
+
+| # | Test Case | Description |
+|---|-----------|-------------|
+| 1 | Most similar vector ranked first | Vector with lowest noise to base is top result |
+| 2 | Scores in descending order | Results sorted by similarity score |
+| 3 | Identical embedding ~1.0 | Same vector returns score near 1.0 |
+| 4 | topK limits results | Only returns requested number of matches |
+| 5 | Random vectors low correlation | High-dimensional random vectors are nearly orthogonal |
+| 6 | Negative embedding ~-1.0 | Opposite direction vector gives score -1.0 |
+| 7 | Metadata included | Results include metadata when flag is true |
+| 8 | Metadata excluded | Results omit metadata when flag is false |
+| 9 | Scores between -1 and 1 | Cosine similarity range validation |
+| 10 | Dimension mismatch throws | Error when vector sizes don't match |
+
+### Key Implementation Details
+
+```javascript
+// Cosine similarity calculation
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dotProduct = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+// Generate similar embedding with controlled noise
+function generateSimilarEmbedding(base: number[], noiseLevel: number): number[] {
+  return base.map(v => v + (Math.random() * 2 - 1) * noiseLevel);
+}
+```
+
+### Learnings for Next Cycles
+
+1. **High-dimensional orthogonality**: In 1024 dimensions, random vectors have near-zero correlation due to concentration of measure phenomenon
+2. **Noise level controls similarity**: Lower noiseLevel (0.1) = higher similarity; higher (1.0) = less similar
+3. **Test determinism**: Tests use relative comparisons (more/less similar) rather than exact scores since embeddings are random
+4. **Score range**: Cosine similarity is always in [-1, 1], making it easy to validate
+5. **Metadata flag**: `includeMetadata` parameter must be tested for both true and false paths
+
+---
+
+## Iteration 29 — US-P5-002 test_no_duplicates()
+- **Date**: 2026-01-21
+- **Task**: US-P5-002 - Integration Tests - Pinecone: test_no_duplicates()
+
+### What Was Done
+
+Implemented the `test_no_duplicates()` test function to verify contentHash-based deduplication for Pinecone vectors. This completes US-P5-002 Pinecone integration tests.
+
+### Files Modified
+
+1. **chatbot/tests/test_pinecone.ts**
+   - Added `checkDuplicateExists()` function for duplicate detection
+   - Added `simulateBatchUpsertWithDedup()` function for batch upsert simulation
+   - Added `test_no_duplicates()` function with 12 test cases:
+
+### Test Cases Implemented
+
+| # | Test Case | Description |
+|---|-----------|-------------|
+| 1 | Same content = same contentHash | Identical title+description produces identical SHA256 hash |
+| 2 | Different content = different hash | Different content produces different hashes |
+| 3 | Same content + same database = same ID | Vector ID deterministically derived from database + contentHash |
+| 4 | Same content + different database = different ID | Database prefix differentiates IDs across sources |
+| 5 | Duplicate detection works | Existing vector with same ID is detected |
+| 6 | Non-duplicate passes | Different content is not flagged as duplicate |
+| 7 | Batch upsert deduplication | Mixed batch correctly upserts new, skips duplicates |
+| 8 | Minor changes = different hash | Single character change produces different hash |
+| 9 | Empty index accepts all | All vectors upserted to empty index |
+| 10 | Whitespace changes = different hash | Spaces/whitespace affect hash |
+| 11 | ID uniqueness within batch | All IDs unique when batch has different content |
+| 12 | Deterministic across builds | Same content always produces same ID and hash |
+
+### Key Implementation Details
+
+```typescript
+// Check if a vector with the same contentHash already exists
+function checkDuplicateExists(
+  existingVectors: PineconeVector[],
+  newVector: PineconeVector
+): { isDuplicate: boolean; existingId?: string } {
+  // ID format: {database}-{contentHash.slice(0,12)}
+  const existingMatch = existingVectors.find(v => v.id === newVector.id);
+  if (existingMatch) {
+    return { isDuplicate: true, existingId: existingMatch.id };
+  }
+
+  // Also check full contentHash in metadata for extra safety
+  const hashMatch = existingVectors.find(v =>
+    v.metadata.contentHash === newVector.metadata.contentHash &&
+    v.metadata.database === newVector.metadata.database
+  );
+  if (hashMatch) {
+    return { isDuplicate: true, existingId: hashMatch.id };
+  }
+
+  return { isDuplicate: false };
+}
+```
+
+### PRD Compliance
+
+- PRD US-P2-003 specifies: "contentHash prevents duplicates"
+- ID format `${database}-${contentHash.slice(0,12)}` ensures:
+  - Same content in same database = same vector (upsert overwrites)
+  - Same content in different database = different vectors (allowed)
+  - Different content = different vectors (allowed)
+
+### Test Execution
+
+```bash
+cd mcp-server && node --import tsx ../chatbot/tests/test_pinecone.ts
+# Results: 12 passed, 0 failed
+```
+
+### Learnings for Next Cycles
+
+1. **Dual deduplication check**: Check both ID match and full contentHash match for robustness (ID uses truncated hash)
+2. **Database scoping**: Same document can exist in different databases - this is intentional per PRD schema
+3. **Whitespace sensitivity**: Content hashes are sensitive to whitespace - normalization may be needed in production
+4. **Deterministic IDs**: Vector IDs are deterministic based on content, enabling safe re-indexing
+5. **Batch deduplication**: When upserting batches, check against both existing vectors AND already-upserted vectors in the batch
+
+---

@@ -568,7 +568,7 @@ function showError(type) {
 - [x] `test_upsert_with_metadata()` - All fields
 - [x] `test_query_by_filter()` - committee filter
 - [x] `test_query_semantic()` - Embedding similarity
-- [ ] `test_no_duplicates()` - contentHash check
+- [x] `test_no_duplicates()` - contentHash check
 
 ---
 

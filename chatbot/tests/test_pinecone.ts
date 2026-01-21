@@ -1529,10 +1529,468 @@ function test_query_semantic(): void {
   }
 }
 
+// ============================================================
+// Test: test_no_duplicates
+// ============================================================
+
+/**
+ * Check if a vector with the same contentHash already exists
+ * This simulates the deduplication check before upserting
+ */
+function checkDuplicateExists(
+  existingVectors: PineconeVector[],
+  newVector: PineconeVector
+): { isDuplicate: boolean; existingId?: string } {
+  // The PRD specifies ID format: {database}-{contentHash.slice(0,12)}
+  // Two vectors with the same database and content will have the same ID
+  const existingMatch = existingVectors.find(v => v.id === newVector.id);
+
+  if (existingMatch) {
+    return { isDuplicate: true, existingId: existingMatch.id };
+  }
+
+  // Also check full contentHash in metadata for extra safety
+  const hashMatch = existingVectors.find(v =>
+    v.metadata.contentHash === newVector.metadata.contentHash &&
+    v.metadata.database === newVector.metadata.database
+  );
+
+  if (hashMatch) {
+    return { isDuplicate: true, existingId: hashMatch.id };
+  }
+
+  return { isDuplicate: false };
+}
+
+/**
+ * Simulate batch upsert with deduplication
+ * Returns which vectors were upserted vs skipped
+ */
+function simulateBatchUpsertWithDedup(
+  existingVectors: PineconeVector[],
+  newVectors: PineconeVector[]
+): { upserted: PineconeVector[]; skipped: PineconeVector[]; finalVectors: PineconeVector[] } {
+  const upserted: PineconeVector[] = [];
+  const skipped: PineconeVector[] = [];
+  const finalVectors = [...existingVectors];
+
+  for (const vector of newVectors) {
+    const dupCheck = checkDuplicateExists(finalVectors, vector);
+
+    if (dupCheck.isDuplicate) {
+      skipped.push(vector);
+    } else {
+      upserted.push(vector);
+      finalVectors.push(vector);
+    }
+  }
+
+  return { upserted, skipped, finalVectors };
+}
+
+/**
+ * Test contentHash-based deduplication mechanism
+ * Verifies PRD requirement: contentHash prevents duplicates
+ */
+function test_no_duplicates(): void {
+  console.log('\nRunning: test_no_duplicates()');
+  let passed = 0;
+  let failed = 0;
+
+  // Test case 1: Same content produces same contentHash
+  try {
+    const title = 'הכרעת שמאי מכריע מיום 15-03-2024 בעניין תל אביב';
+    const description = 'תוכן ההחלטה המלא בעברית. השמאי קבע פיצוי של 50,000 ש"ח.';
+
+    const hash1 = generateContentHash(title + description);
+    const hash2 = generateContentHash(title + description);
+
+    assert.strictEqual(hash1, hash2,
+      'Same content should produce identical contentHash');
+    assert.strictEqual(hash1.length, 64,
+      'contentHash should be SHA256 (64 hex characters)');
+
+    console.log('  ✓ Same content produces same contentHash');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Same content produces same contentHash: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 2: Different content produces different contentHash
+  try {
+    const hash1 = generateContentHash('הכרעה א');
+    const hash2 = generateContentHash('הכרעה ב');
+
+    assert.notStrictEqual(hash1, hash2,
+      'Different content should produce different contentHash');
+
+    console.log('  ✓ Different content produces different contentHash');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Different content produces different contentHash: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 3: Same content in same database = same vector ID
+  try {
+    const embedding1 = generateMockEmbedding();
+    const embedding2 = generateMockEmbedding(); // Different embedding, same content
+
+    const title = 'הכרעת שמאי מכריע מיום 01-01-2024';
+    const description = 'תוכן זהה';
+
+    const vector1 = buildPineconeVector(
+      'decisive_appraiser',
+      title,
+      'https://example.com/doc1.pdf',
+      description,
+      embedding1
+    );
+
+    const vector2 = buildPineconeVector(
+      'decisive_appraiser',
+      title,
+      'https://example.com/doc2.pdf', // Different URL but same content
+      description,
+      embedding2
+    );
+
+    assert.strictEqual(vector1.id, vector2.id,
+      'Same content in same database should produce same ID');
+    assert.strictEqual(vector1.metadata.contentHash, vector2.metadata.contentHash,
+      'Same content should have same contentHash');
+
+    console.log('  ✓ Same content in same database = same vector ID');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Same content in same database = same vector ID: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 4: Same content in different database = different vector ID
+  try {
+    const embedding = generateMockEmbedding();
+    const title = 'החלטה משותפת';
+    const description = 'תוכן זהה לשני מאגרים';
+
+    const vector1 = buildPineconeVector(
+      'decisive_appraiser',
+      title,
+      'https://example.com/doc.pdf',
+      description,
+      embedding
+    );
+
+    const vector2 = buildPineconeVector(
+      'appeals_committee',
+      title,
+      'https://example.com/doc.pdf',
+      description,
+      embedding
+    );
+
+    // Same content but different database prefix
+    assert.notStrictEqual(vector1.id, vector2.id,
+      'Same content in different databases should have different IDs');
+    assert.strictEqual(vector1.metadata.contentHash, vector2.metadata.contentHash,
+      'Same content should have same contentHash regardless of database');
+    assert.ok(vector1.id.startsWith('decisive_appraiser-'),
+      'Vector 1 should have decisive_appraiser prefix');
+    assert.ok(vector2.id.startsWith('appeals_committee-'),
+      'Vector 2 should have appeals_committee prefix');
+
+    console.log('  ✓ Same content in different database = different vector ID');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Same content in different database = different vector ID: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 5: Duplicate detection identifies existing vector
+  try {
+    const embedding = generateMockEmbedding();
+    const existingVector = buildPineconeVector(
+      'decisive_appraiser',
+      'הכרעה קיימת',
+      'https://example.com/existing.pdf',
+      'תוכן קיים במאגר',
+      embedding,
+      { committee: 'תל אביב', year: '2024' }
+    );
+
+    const existingVectors = [existingVector];
+
+    // Try to add same content again
+    const duplicateVector = buildPineconeVector(
+      'decisive_appraiser',
+      'הכרעה קיימת',
+      'https://example.com/duplicate.pdf', // Different URL
+      'תוכן קיים במאגר',
+      generateMockEmbedding() // Different embedding
+    );
+
+    const dupCheck = checkDuplicateExists(existingVectors, duplicateVector);
+
+    assert.strictEqual(dupCheck.isDuplicate, true,
+      'Should detect duplicate');
+    assert.strictEqual(dupCheck.existingId, existingVector.id,
+      'Should return existing vector ID');
+
+    console.log('  ✓ Duplicate detection identifies existing vector');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Duplicate detection identifies existing vector: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 6: Non-duplicate passes detection
+  try {
+    const existingVector = buildPineconeVector(
+      'decisive_appraiser',
+      'הכרעה א',
+      'https://example.com/a.pdf',
+      'תוכן א',
+      generateMockEmbedding()
+    );
+
+    const existingVectors = [existingVector];
+
+    const newVector = buildPineconeVector(
+      'decisive_appraiser',
+      'הכרעה ב', // Different title
+      'https://example.com/b.pdf',
+      'תוכן ב', // Different content
+      generateMockEmbedding()
+    );
+
+    const dupCheck = checkDuplicateExists(existingVectors, newVector);
+
+    assert.strictEqual(dupCheck.isDuplicate, false,
+      'Different content should not be detected as duplicate');
+    assert.strictEqual(dupCheck.existingId, undefined,
+      'Should not return existing ID for non-duplicate');
+
+    console.log('  ✓ Non-duplicate passes detection');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Non-duplicate passes detection: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 7: Batch upsert with mixed duplicates and new vectors
+  try {
+    // Create existing vectors
+    const existing1 = buildPineconeVector(
+      'decisive_appraiser',
+      'הכרעה קיימת 1',
+      'https://example.com/1.pdf',
+      'תוכן 1',
+      generateMockEmbedding(),
+      { committee: 'תל אביב' }
+    );
+    const existing2 = buildPineconeVector(
+      'decisive_appraiser',
+      'הכרעה קיימת 2',
+      'https://example.com/2.pdf',
+      'תוכן 2',
+      generateMockEmbedding(),
+      { committee: 'ירושלים' }
+    );
+
+    const existingVectors = [existing1, existing2];
+
+    // New vectors - some duplicates, some new
+    const newVectors = [
+      buildPineconeVector( // Duplicate of existing1
+        'decisive_appraiser',
+        'הכרעה קיימת 1',
+        'https://example.com/1-copy.pdf',
+        'תוכן 1',
+        generateMockEmbedding()
+      ),
+      buildPineconeVector( // New vector
+        'decisive_appraiser',
+        'הכרעה חדשה 3',
+        'https://example.com/3.pdf',
+        'תוכן 3',
+        generateMockEmbedding(),
+        { committee: 'חיפה' }
+      ),
+      buildPineconeVector( // Duplicate of existing2
+        'decisive_appraiser',
+        'הכרעה קיימת 2',
+        'https://example.com/2-copy.pdf',
+        'תוכן 2',
+        generateMockEmbedding()
+      ),
+      buildPineconeVector( // New vector
+        'appeals_committee',
+        'החלטה חדשה 4',
+        'https://example.com/4.pdf',
+        'תוכן 4',
+        generateMockEmbedding(),
+        { committee: 'באר שבע' }
+      )
+    ];
+
+    const result = simulateBatchUpsertWithDedup(existingVectors, newVectors);
+
+    assert.strictEqual(result.upserted.length, 2,
+      'Should upsert 2 new vectors');
+    assert.strictEqual(result.skipped.length, 2,
+      'Should skip 2 duplicate vectors');
+    assert.strictEqual(result.finalVectors.length, 4,
+      'Final index should have 4 unique vectors');
+
+    console.log('  ✓ Batch upsert with mixed duplicates and new vectors');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Batch upsert with mixed duplicates and new vectors: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 8: Minor content changes produce different hash
+  try {
+    const baseContent = 'הכרעת שמאי מכריע בעניין היטל השבחה';
+
+    // Add a single character
+    const modifiedContent = baseContent + '.';
+
+    const hash1 = generateContentHash(baseContent);
+    const hash2 = generateContentHash(modifiedContent);
+
+    assert.notStrictEqual(hash1, hash2,
+      'Minor content change should produce different hash');
+
+    console.log('  ✓ Minor content changes produce different hash');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Minor content changes produce different hash: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 9: Empty index allows all new vectors
+  try {
+    const existingVectors: PineconeVector[] = [];
+
+    const newVectors = [
+      buildPineconeVector('decisive_appraiser', 'א', 'url1', 'content1', generateMockEmbedding()),
+      buildPineconeVector('decisive_appraiser', 'ב', 'url2', 'content2', generateMockEmbedding()),
+      buildPineconeVector('appeals_committee', 'ג', 'url3', 'content3', generateMockEmbedding())
+    ];
+
+    const result = simulateBatchUpsertWithDedup(existingVectors, newVectors);
+
+    assert.strictEqual(result.upserted.length, 3,
+      'All vectors should be upserted to empty index');
+    assert.strictEqual(result.skipped.length, 0,
+      'No vectors should be skipped');
+
+    console.log('  ✓ Empty index allows all new vectors');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Empty index allows all new vectors: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 10: Whitespace-only difference produces different hash
+  try {
+    const content1 = 'שמאי מכריע';
+    const content2 = 'שמאי  מכריע'; // Extra space
+    const content3 = ' שמאי מכריע'; // Leading space
+
+    const hash1 = generateContentHash(content1);
+    const hash2 = generateContentHash(content2);
+    const hash3 = generateContentHash(content3);
+
+    assert.notStrictEqual(hash1, hash2,
+      'Extra space should produce different hash');
+    assert.notStrictEqual(hash1, hash3,
+      'Leading space should produce different hash');
+    assert.notStrictEqual(hash2, hash3,
+      'Different whitespace patterns should produce different hashes');
+
+    console.log('  ✓ Whitespace-only difference produces different hash');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Whitespace-only difference produces different hash: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 11: ID uniqueness within batch (no self-duplicates)
+  try {
+    const vectors: PineconeVector[] = [];
+    const titles = ['הכרעה א', 'הכרעה ב', 'הכרעה ג', 'הכרעה ד', 'הכרעה ה'];
+
+    for (const title of titles) {
+      vectors.push(buildPineconeVector(
+        'decisive_appraiser',
+        title,
+        `https://example.com/${title}.pdf`,
+        `תוכן עבור ${title}`,
+        generateMockEmbedding()
+      ));
+    }
+
+    // All IDs should be unique
+    const ids = vectors.map(v => v.id);
+    const uniqueIds = new Set(ids);
+
+    assert.strictEqual(uniqueIds.size, vectors.length,
+      'All vector IDs should be unique within batch');
+
+    console.log('  ✓ ID uniqueness within batch (no self-duplicates)');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ ID uniqueness within batch (no self-duplicates): ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 12: ContentHash is deterministic across builds
+  try {
+    const title = 'הכרעת שמאי מכריע';
+    const description = 'תוכן ההחלטה';
+
+    // Build same vector multiple times
+    const vector1 = buildPineconeVector(
+      'decisive_appraiser', title, 'url', description, generateMockEmbedding()
+    );
+    const vector2 = buildPineconeVector(
+      'decisive_appraiser', title, 'url', description, generateMockEmbedding()
+    );
+    const vector3 = buildPineconeVector(
+      'decisive_appraiser', title, 'url', description, generateMockEmbedding()
+    );
+
+    assert.strictEqual(vector1.metadata.contentHash, vector2.metadata.contentHash,
+      'ContentHash should be same across builds');
+    assert.strictEqual(vector2.metadata.contentHash, vector3.metadata.contentHash,
+      'ContentHash should be deterministic');
+    assert.strictEqual(vector1.id, vector2.id,
+      'Vector ID should be same across builds');
+    assert.strictEqual(vector2.id, vector3.id,
+      'Vector ID should be deterministic');
+
+    console.log('  ✓ ContentHash is deterministic across builds');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ ContentHash is deterministic across builds: ${(error as Error).message}`);
+    failed++;
+  }
+
+  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+}
+
 // Run tests
 console.log('===== Pinecone Integration Tests =====\n');
 test_upsert_single_document();
 test_upsert_with_metadata();
 test_query_by_filter();
 test_query_semantic();
+test_no_duplicates();
 console.log('\n✓ All tests passed!');
