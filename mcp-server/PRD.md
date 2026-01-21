@@ -188,10 +188,10 @@ const scraperUrl = buildScraperUrl(pdfUrl);
 **So that** the database stays current
 
 **Acceptance Criteria:**
-- [ ] Script checks first 5 pages (50 decisions)
-- [ ] Uses content_hash to detect new decisions
-- [ ] Only inserts decisions not already in database
-- [ ] Run via: `npm run daily-update`
+- [x] Script checks first 5 pages (50 decisions)
+- [x] Uses content_hash to detect new decisions
+- [x] Only inserts decisions not already in database
+- [x] Run via: `npm run daily-update`
 
 ---
 

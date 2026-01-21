@@ -128,3 +128,20 @@
   - AnalyticsQueryType defined as type literal for type safety
   - Handler returns different structures for avg_decisions_per_month vs other queries
 ---
+
+## Iteration 7 — US-007: Incremental Updates (VERIFIED COMPLETE)
+- **What was done:** Verified all 4 acceptance criteria for US-007 are already fully implemented
+- **Files verified:**
+  - `scripts/daily-update.ts` - Complete incremental update script:
+    - Default 5 pages per database (line 22)
+    - Calls indexer.updateRecent() (line 79)
+  - `src/indexer.ts` - `updateRecent()` method (lines 194-238):
+    - Iterates first N pages
+    - Uses existsByHash for deduplication (line 210)
+    - Only inserts new decisions
+  - `src/database.ts` - `existsByHash()` method (line 215)
+  - `package.json` - `npm run daily-update` script (line 12)
+- **Learnings for next cycles:**
+  - The indexer's updateRecent method stops early if no new documents found (line 220)
+  - Updates `last_update` metadata after completion
+---
