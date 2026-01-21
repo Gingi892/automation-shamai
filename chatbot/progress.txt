@@ -3760,3 +3760,73 @@ All 5 sources point to the SAME URL - confirming duplicate chunks issue.
 - [ ] Implement deduplication by URL before returning sources
 
 ---
+
+## Iteration 37 — US-P8-002 Design PDF Content Extraction Pipeline
+- **Date**: 2026-01-21
+- **Task**: US-P8-002 - Design PDF Content Extraction Pipeline
+
+### What Was Done
+
+Designed and documented the complete PDF content extraction pipeline architecture.
+
+### Key Design Decisions
+
+1. **Decision: Modify existing Full Indexer workflow (`1zYlIK6VnynTHiHl`)**
+   - Already has PDF extraction infrastructure in place
+   - Already has Hebrew text cleaning via `cleanHebrewText()`
+   - Has rate limiting and progress tracking
+   - Avoids duplicating the entire pipeline
+
+2. **Cost optimization: Direct PDF fetch (no ScraperAPI)**
+   - Gov.il PDF URLs (free-justice.openapi.gov.il) are directly accessible
+   - Document Processor already uses direct HTTP fetch successfully
+   - Reduces cost from ~$400 to ~$100 (ScraperAPI only for listing pages)
+
+3. **Chunking strategy: Truncation with link**
+   - Truncate to 35KB (Pinecone 40KB limit - 5KB headroom)
+   - Append link message for full document access
+   - One document = one vector (PRD requirement)
+
+### Workflow Analysis
+
+| Workflow | ID | Has PDF Fetch | Has Chunking | Status |
+|----------|-----|---------------|--------------|--------|
+| Document Processor | kTZqcClvtUspeC28 | ✅ Direct HTTP | ❌ 2000 char chunks | Produces multiple vectors |
+| Full Indexer | 1zYlIK6VnynTHiHl | ✅ ScraperAPI | ✅ 35KB truncation | Needs connection fixes |
+
+### Files Modified
+
+1. **chatbot/PRD.md**
+   - Added complete design document under US-P8-002
+   - Node-by-node flow diagram (ASCII art)
+   - Rate limiting strategy documentation
+   - Cost estimate (reduced from $413 to ~$102)
+   - Marked all 5 acceptance criteria as complete
+
+### Key Node Modifications Required (for next tasks)
+
+| Node | Change Required |
+|------|-----------------|
+| `Fetch PDF Content` | Change from ScraperAPI to direct HTTP |
+| `Create Embedding` | Update input to use `title + description` |
+| `Prepare Pinecone Vector` | Ensure `description` field populated |
+
+### Learnings for Next Cycles
+
+1. **Gov.il PDFs are directly accessible**: No ScraperAPI needed for PDF downloads, only for listing page scrapes (which require JavaScript rendering)
+
+2. **Document Processor DOES extract content**: The issue isn't missing extraction - it's chunking + metadata loss
+
+3. **Two pipelines exist**:
+   - Scraper (`oqihIkB7Ur9WVJZG`) → sends to Document Processor → chunks into vectors
+   - Full Indexer (`1zYlIK6VnynTHiHl`) → has PDF extraction but untested connections
+
+4. **Cost breakdown**:
+   - Listing pages: ~2000 ScraperAPI ultra_premium calls (~$100)
+   - PDF fetches: Direct HTTP (free)
+   - Embeddings: ~$2
+   - Total: ~$102 (75% less than original $413 estimate)
+
+5. **Design verification**: Used `n8n_get_workflow` with `mode: full` to verify actual node implementations before finalizing design
+
+---

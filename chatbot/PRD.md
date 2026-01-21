@@ -990,11 +990,160 @@ Listing Page Scrape → Extract Metadata + PDF URL →
 ```
 
 **Acceptance Criteria:**
-- [ ] Design node-by-node flow for PDF extraction
-- [ ] Decide: New workflow OR modify existing indexer workflow?
-- [ ] Plan rate limiting (ScraperAPI costs, gov.il throttling)
-- [ ] Plan chunking strategy for large PDFs (>40KB limit)
-- [ ] Document estimated cost (ScraperAPI credits × 20,000 docs)
+- [x] Design node-by-node flow for PDF extraction
+- [x] Decide: New workflow OR modify existing indexer workflow?
+- [x] Plan rate limiting (ScraperAPI costs, gov.il throttling)
+- [x] Plan chunking strategy for large PDFs (>40KB limit)
+- [x] Document estimated cost (ScraperAPI credits × 20,000 docs)
+
+---
+
+#### 📐 DESIGN DOCUMENT (Completed 2026-01-21)
+
+##### Decision: Modify Existing Full Indexer Workflow
+**Workflow ID:** `1zYlIK6VnynTHiHl` ("Full Indexer - All Databases")
+
+**Rationale:**
+1. Already has PDF extraction infrastructure (Fetch PDF Content → Extract PDF Text → Prepare PDF Text)
+2. Already has Hebrew text cleaning via `cleanHebrewText()` function
+3. Already has rate limiting (Wait node) and progress tracking
+4. Has `continueOnFail: true` on PDF nodes for graceful error handling
+5. Avoids duplicating scraper → processor → Pinecone pipeline
+
+##### Node-by-Node Flow Design
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                      FULL INDEXER - ALL DATABASES (1zYlIK6VnynTHiHl)                │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  TRIGGER PHASE                                                                       │
+│  ┌─────────────┐     ┌─────────────────┐     ┌────────────┐                         │
+│  │ Webhook/    │────►│ Load Progress   │────►│ Set Config │                         │
+│  │ Manual      │     │ State           │     │            │                         │
+│  └─────────────┘     └─────────────────┘     └─────┬──────┘                         │
+│                                                     │                                │
+│  SCRAPE PHASE                                       ▼                                │
+│  ┌───────────────────┐     ┌─────────────────┐     ┌────────────────────┐           │
+│  │ Build ScraperAPI  │────►│ Fetch Page via  │────►│ Extract Documents  │           │
+│  │ URL               │     │ ScraperAPI      │     │ (metadata + URL)   │           │
+│  └───────────────────┘     └─────────────────┘     └─────────┬──────────┘           │
+│                                                               │                      │
+│  ┌───────────────────┐     ┌─────────────────┐               │                      │
+│  │ Create Document   │◄────┤                 │◄──────────────┘                      │
+│  │ Records (PRD      │     │                 │                                       │
+│  │ schema)           │     └─────────────────┘                                       │
+│  └─────────┬─────────┘                                                               │
+│            │                                                                         │
+│  PAGINATION LOOP      ┌─────────────────┐     ┌───────────────────┐                 │
+│            ▼          │ Rate Limit Wait │────►│ Save Progress     │────►[LOOP]      │
+│  ┌─────────────────┐  │ (1 sec)         │     │ State             │                 │
+│  │ Has More Pages? ├──┴─────────────────┘     └───────────────────┘                 │
+│  │ (IF node)       │                                                                 │
+│  └────────┬────────┘                                                                 │
+│           │ NO                                                                       │
+│           ▼                                                                          │
+│  PDF EXTRACTION PHASE                                                                │
+│  ┌───────────────────┐                                                               │
+│  │ Process Batch for │                                                               │
+│  │ Embedding         │                                                               │
+│  └─────────┬─────────┘                                                               │
+│            │                                                                         │
+│            ▼                                                                         │
+│  ┌────────────────┐    TRUE    ┌─────────────────┐    ┌──────────────────┐          │
+│  │ Check PDF URL  │───────────►│ Fetch PDF       │───►│ Extract PDF Text │          │
+│  │ (IF node)      │            │ Content (HTTP)  │    │ (extractFromFile)│          │
+│  └───────┬────────┘            └─────────────────┘    └────────┬─────────┘          │
+│          │ FALSE                                                │                    │
+│          │                     ┌──────────────────┐             │                    │
+│          └────────────────────►│ Skip PDF -       │             │                    │
+│                                │ No URL           │             │                    │
+│                                └────────┬─────────┘             │                    │
+│                                         │                       │                    │
+│                                         │                       ▼                    │
+│                                         │    ┌───────────────────────┐              │
+│                                         │    │ Prepare PDF Text      │              │
+│                                         │    │ - cleanHebrewText()   │              │
+│                                         │    │ - Truncate to 35KB    │              │
+│                                         │    └───────────┬───────────┘              │
+│                                         │                │                           │
+│                                         ▼                ▼                           │
+│  ┌─────────────────────────────────────────────────────────────────┐                │
+│  │                      Merge PDF Results                          │                │
+│  │                      (Append mode)                              │                │
+│  └──────────────────────────────┬──────────────────────────────────┘                │
+│                                  │                                                   │
+│  EMBEDDING PHASE                 ▼                                                   │
+│  ┌───────────────────┐     ┌───────────────────┐     ┌──────────────────┐           │
+│  │ Create Embedding  │────►│ Prepare Pinecone  │────►│ Upsert to        │           │
+│  │ (OpenAI)          │     │ Vector (PRD       │     │ Pinecone         │           │
+│  │ INPUT: title +    │     │ schema + full     │     │                  │           │
+│  │ description       │     │ text in           │     │                  │           │
+│  └───────────────────┘     │ description)      │     └────────┬─────────┘           │
+│                            └───────────────────┘              │                      │
+│                                                                ▼                     │
+│  COMPLETION PHASE          ┌───────────────────┐     ┌──────────────────┐           │
+│                            │ Aggregate Batch   │◄────┤                  │           │
+│                            │ Results           │     └──────────────────┘           │
+│                            └─────────┬─────────┘                                     │
+│                                      │                                               │
+│                                      ▼                                               │
+│  ┌───────────────────┐     ┌───────────────────┐                                    │
+│  │ Final Summary     │────►│ Mark Indexing     │                                    │
+│  │                   │     │ Complete          │                                    │
+│  └───────────────────┘     └───────────────────┘                                    │
+│                                                                                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+##### Key Node Modifications Required
+
+| Node | Current State | Target State | Change Required |
+|------|--------------|--------------|-----------------|
+| `Fetch PDF Content` | Uses ScraperAPI with `premium=true` | Direct HTTP fetch (gov.il not blocked) | ✅ Change URL to direct fetch |
+| `Prepare PDF Text` | Truncates to 35KB | Keep 35KB truncation | ✅ Already correct |
+| `Create Embedding` | Uses `$json.content` (chunk) | Use `title + description` (full doc) | 🔧 Update input field |
+| `Prepare Pinecone Vector` | Missing `description` field | Add `description: $json.fullText` | 🔧 Add field |
+
+##### Rate Limiting Strategy
+
+1. **Listing Page Scrapes**: 1 req/sec via Wait node (ScraperAPI ultra_premium)
+2. **PDF Fetches**: Direct to gov.il (no ScraperAPI needed) - 0.5 sec delay recommended
+3. **Embeddings**: OpenAI rate limit ~3000 RPM - batching via n8n handles this
+4. **Pinecone Upserts**: 100 vectors/request supported - currently doing 1 at a time
+
+##### Chunking Strategy for Large PDFs (>40KB)
+
+**Approach: Truncation with Summary**
+
+```javascript
+const MAX_DESCRIPTION = 35000; // 35KB leaves 5KB headroom for other metadata
+
+function prepareText(fullText) {
+  if (fullText.length <= MAX_DESCRIPTION) {
+    return fullText;
+  }
+  // Truncate with marker
+  return fullText.substring(0, MAX_DESCRIPTION - 50) + '\n\n... [מקוצר - לצפייה במסמך המלא לחץ על הקישור]';
+}
+```
+
+**One Document = One Vector** (PRD requirement):
+- NO splitting into chunks/pages
+- Full text embedded for semantic search
+- Truncated text stored in metadata
+- PDF URL preserved for full document access
+
+##### Cost Estimate (Updated)
+
+| Item | Calculation | Cost |
+|------|-------------|------|
+| ScraperAPI (listing pages) | 20,000 docs ÷ 10 per page × $0.05/ultra_premium | ~$100 |
+| PDF Fetches | Direct HTTP (free, no ScraperAPI) | $0 |
+| OpenAI Embeddings | 20,000 docs × 5K tokens avg × $0.02/1M tokens | ~$2 |
+| **Total One-Time Cost** | | **~$102** |
+
+**Note:** Original estimate was $413, but PDFs can be fetched directly from gov.il without ScraperAPI, reducing cost by 75%.
 
 ---
 
@@ -1135,8 +1284,8 @@ Day 4: Verify and test
 
 ```
 🔴 Phase 8: PDF CONTENT EXTRACTION (BLOCKING - Do First!)
-  └─► US-P8-001: Analyze indexing gap [ ]
-  └─► US-P8-002: Design extraction pipeline [ ]
+  └─► US-P8-001: Analyze indexing gap [x]
+  └─► US-P8-002: Design extraction pipeline [x]
   └─► US-P8-003: Implement PDF fetcher [ ]
   └─► US-P8-004: Implement text extractor [ ]
   └─► US-P8-005: Update embedding to use full text [ ]
