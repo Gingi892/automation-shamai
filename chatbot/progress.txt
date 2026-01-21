@@ -1593,3 +1593,76 @@ Query Pinecone Stats → Aggregate Statistics → Build Statistics Response
 - removeConnection operation removes direct path; new path flows through synthesis nodes
 
 ---
+
+## Iteration 19 — US-P3-004 Link Ungrounded Claims to Need Verification State
+- **Date**: 2026-01-21
+- **Task**: US-P3-004 - Link ungrounded claims to "need verification" state
+
+### What Was Done
+
+Implemented the "need verification" interactive feature for ungrounded claims in the frontend (`workflows/chatbot-frontend.html`).
+
+### Changes to Frontend
+
+1. **New CSS Styles** (lines 520-592):
+   - `.claim-verify-btn` - Button for marking claims for verification
+   - `.claim-verify-btn.marked` - Visual state when claim is marked
+   - `.claim-item.needs-verification` - Highlighted row state with orange border
+   - `.verification-summary` - Summary bar showing count of marked claims
+   - `.verification-clear-btn` - Button to clear all verification marks
+
+2. **Updated Claim Item HTML** (lines 918-946):
+   - Added unique IDs to each claim item for DOM manipulation
+   - Added "לבדיקה" (for verification) button to ungrounded claims only
+   - Added verification summary section below claims list
+
+3. **New JavaScript Functions** (lines 1089-1151):
+   - `verificationStates` - Object tracking marked claims per message
+   - `toggleVerification(messageId, claimIndex)` - Toggle verification state
+   - `clearVerifications(messageId)` - Clear all marks for a message
+
+### Feature Behavior
+
+| Action | Result |
+|--------|--------|
+| Click "לבדיקה" button | Claim row highlights orange, button changes to "סומן" (marked) |
+| Click "סומן" button | Removes highlight, reverts to "לבדיקה" |
+| Mark multiple claims | Summary bar appears: "X טענות סומנו לבדיקה" |
+| Click "נקה הכל" | Clears all verification marks for that message |
+
+### UI Flow
+
+```
+Ungrounded Claim Row
+  ├─ [✗] claim text [45%] [🔍 לבדיקה]  ← Initial state
+  │
+  └─ Click "לבדיקה" →
+      └─ [✗] claim text [45%] [✓ סומן]  ← Marked state (orange highlight)
+      │
+      └─ Verification Summary appears: "X טענות סומנו לבדיקה" [נקה הכל]
+```
+
+### Files Modified
+
+1. **workflows/chatbot-frontend.html** - Added verification state feature
+2. **chatbot/PRD.md** - Marked all US-P3-004 items as complete
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Show grounding badge prominently | ✅ Complete (was already implemented) |
+| Per-claim breakdown expandable | ✅ Complete (was already implemented) |
+| Warning banner for ungrounded claims | ✅ Complete (was already implemented) |
+| Link ungrounded claims to "need verification" state | ✅ Complete (NEW) |
+
+### Learnings for Next Cycles
+
+- The frontend already had robust hallucination UI - only verification linking was missing
+- Hebrew plural forms need special handling (טענה אחת vs טענות)
+- Using Set for tracking states is cleaner than object/array
+- DOM IDs must be unique per message to support multiple responses
+- The verification state is transient (not persisted) - suitable for session-based review
+- Orange color (#ff9800, #fff3e0) provides good visual distinction for "needs attention" state
+
+---

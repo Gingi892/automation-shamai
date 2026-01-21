@@ -517,6 +517,80 @@
             text-align: left;
         }
 
+        /* Need Verification State for Ungrounded Claims */
+        .claim-verify-btn {
+            flex-shrink: 0;
+            padding: 3px 8px;
+            border: 1px solid #ef9a9a;
+            border-radius: 12px;
+            background: #fff;
+            color: #c62828;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .claim-verify-btn:hover {
+            background: #ffebee;
+            border-color: #c62828;
+        }
+
+        .claim-verify-btn.marked {
+            background: #fff3e0;
+            border-color: #ff9800;
+            color: #e65100;
+        }
+
+        .claim-item.needs-verification {
+            background: #fff8e1;
+            border-right: 3px solid #ff9800;
+            margin-right: -10px;
+            padding-right: 10px;
+        }
+
+        .verification-summary {
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background: #fff3e0;
+            border-radius: 8px;
+            border: 1px solid #ffcc80;
+            font-size: 0.8rem;
+            color: #e65100;
+        }
+
+        .verification-summary.show {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .verification-summary-icon {
+            font-size: 1.1rem;
+        }
+
+        .verification-summary-text {
+            flex: 1;
+        }
+
+        .verification-clear-btn {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 6px;
+            background: #fff;
+            color: #e65100;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .verification-clear-btn:hover {
+            background: #ffe0b2;
+        }
+
         .warning-banner {
             background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
             color: #e65100;
@@ -841,21 +915,44 @@
                             <div class="grounding-details-title">פירוט טענות (${groundedClaims}/${totalClaims} מבוססות):</div>
                     `;
 
+                    let claimIndex = 0;
                     hallucinationCheck.claims.forEach(claim => {
                         const claimStatus = claim.grounded ? 'grounded' : 'ungrounded';
                         const claimIcon = claim.grounded ? '✓' : '✗';
                         const confidence = Math.round((claim.confidence || 0) * 100);
                         const claimText = claim.text || '';
                         const displayText = claimText.length > 80 ? claimText.substring(0, 80) + '...' : claimText;
+                        const claimItemId = `claim-${messageId}-${claimIndex}`;
 
                         messageHTML += `
-                            <div class="claim-item">
+                            <div class="claim-item" id="${claimItemId}" data-claim-index="${claimIndex}">
                                 <div class="claim-status ${claimStatus}">${claimIcon}</div>
                                 <div class="claim-text">${escapeHtml(displayText)}</div>
                                 <div class="claim-confidence">${confidence}%</div>
-                            </div>
                         `;
+
+                        // Add "need verification" button only for ungrounded claims
+                        if (!claim.grounded) {
+                            messageHTML += `
+                                <button class="claim-verify-btn" onclick="toggleVerification('${messageId}', ${claimIndex})" title="סמן לבדיקה">
+                                    <span>🔍</span>
+                                    <span>לבדיקה</span>
+                                </button>
+                            `;
+                        }
+
+                        messageHTML += `</div>`;
+                        claimIndex++;
                     });
+
+                    // Add verification summary section (hidden by default)
+                    messageHTML += `
+                        <div class="verification-summary" id="verification-summary-${messageId}">
+                            <span class="verification-summary-icon">📋</span>
+                            <span class="verification-summary-text" id="verification-count-${messageId}">0 טענות סומנו לבדיקה</span>
+                            <button class="verification-clear-btn" onclick="clearVerifications('${messageId}')">נקה הכל</button>
+                        </div>
+                    `;
 
                     messageHTML += `</div>`;
                 }
@@ -986,6 +1083,70 @@
             const details = document.getElementById('details-' + messageId);
             if (details) {
                 details.classList.toggle('show');
+            }
+        }
+
+        // Track verification states per message
+        const verificationStates = {};
+
+        // Toggle verification state for a claim
+        function toggleVerification(messageId, claimIndex) {
+            // Initialize state for this message if needed
+            if (!verificationStates[messageId]) {
+                verificationStates[messageId] = new Set();
+            }
+
+            const claimItem = document.getElementById(`claim-${messageId}-${claimIndex}`);
+            const verifyBtn = claimItem.querySelector('.claim-verify-btn');
+            const summary = document.getElementById(`verification-summary-${messageId}`);
+            const countText = document.getElementById(`verification-count-${messageId}`);
+
+            if (verificationStates[messageId].has(claimIndex)) {
+                // Unmark for verification
+                verificationStates[messageId].delete(claimIndex);
+                claimItem.classList.remove('needs-verification');
+                verifyBtn.classList.remove('marked');
+                verifyBtn.innerHTML = '<span>🔍</span><span>לבדיקה</span>';
+            } else {
+                // Mark for verification
+                verificationStates[messageId].add(claimIndex);
+                claimItem.classList.add('needs-verification');
+                verifyBtn.classList.add('marked');
+                verifyBtn.innerHTML = '<span>✓</span><span>סומן</span>';
+            }
+
+            // Update summary
+            const count = verificationStates[messageId].size;
+            if (count > 0) {
+                summary.classList.add('show');
+                countText.textContent = count === 1
+                    ? 'טענה אחת סומנה לבדיקה'
+                    : `${count} טענות סומנו לבדיקה`;
+            } else {
+                summary.classList.remove('show');
+            }
+        }
+
+        // Clear all verification marks for a message
+        function clearVerifications(messageId) {
+            if (!verificationStates[messageId]) return;
+
+            verificationStates[messageId].forEach(claimIndex => {
+                const claimItem = document.getElementById(`claim-${messageId}-${claimIndex}`);
+                if (claimItem) {
+                    claimItem.classList.remove('needs-verification');
+                    const verifyBtn = claimItem.querySelector('.claim-verify-btn');
+                    if (verifyBtn) {
+                        verifyBtn.classList.remove('marked');
+                        verifyBtn.innerHTML = '<span>🔍</span><span>לבדיקה</span>';
+                    }
+                }
+            });
+
+            verificationStates[messageId].clear();
+            const summary = document.getElementById(`verification-summary-${messageId}`);
+            if (summary) {
+                summary.classList.remove('show');
             }
         }
 

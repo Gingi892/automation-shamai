@@ -268,13 +268,13 @@ interface DecisionMetadata {
 **Current:** Strawberry/Pythea KL-divergence algorithm (EXISTS)
 
 **Enhancements:**
-- [ ] Show grounding badge prominently:
+- [x] Show grounding badge prominently:
   - 🟢 `מבוסס` (>80% grounded)
   - 🟡 `מבוסס חלקית` (50-80% grounded)
   - 🔴 `דורש בדיקה` (<50% grounded)
-- [ ] Per-claim breakdown expandable
-- [ ] Warning banner for ungrounded claims
-- [ ] Link ungrounded claims to "need verification" state
+- [x] Per-claim breakdown expandable
+- [x] Warning banner for ungrounded claims
+- [x] Link ungrounded claims to "need verification" state
 
 ---
 
