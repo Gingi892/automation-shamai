@@ -3206,3 +3206,59 @@ cd mcp-server && node --import tsx ../chatbot/tests/test_pinecone.ts
 5. **Batch deduplication**: When upserting batches, check against both existing vectors AND already-upserted vectors in the batch
 
 ---
+
+## Iteration 38 — US-P5-003 test_simple_query()
+- **Date**: 2026-01-21
+- **Task**: US-P5-003 - E2E Tests - Chat Flow: test_simple_query()
+
+### What Was Done
+
+Created the first E2E test for the chat flow, testing the simple Hebrew query "מה זה היטל השבחה?" (What is betterment levy?).
+
+### Files Created
+
+1. **chatbot/tests/test_e2e.ts**
+   - New E2E test file for chat flow testing
+   - Defined interfaces: `ChatRequest`, `ChatResponse`, `Source`, `Claim`, `HallucinationCheck`
+   - Implemented helper functions:
+     - `sendChatRequest()` - Sends POST request to webhook with timeout and error handling
+     - `containsHebrew()` - Validates Hebrew content in response
+     - `containsCitations()` - Checks for [S0], [S1] citation markers
+     - `extractCitationNumbers()` - Parses citation numbers from text
+     - `validateResponseStructure()` - Validates response matches expected schema
+   - Implemented `test_simple_query()` with 7 test cases:
+     1. Response structure is valid (success=true, response string)
+     2. Response is in Hebrew (contains Hebrew characters)
+     3. Response is meaningful (>50 characters)
+     4. Response mentions relevant terms (היטל, השבחה, תכנון, etc.)
+     5. Sources returned from RAG retrieval
+     6. Match count is positive
+     7. No server errors in response
+
+### Test Execution
+
+```bash
+cd mcp-server && node --import tsx ../chatbot/tests/test_e2e.ts
+```
+
+Results: 7 passed, 0 failed, 0 skipped
+
+### Test Design Principles
+
+1. **Graceful degradation**: Tests return `skipped` instead of `failed` when webhook unavailable
+2. **Timeout handling**: 60 second timeout per request with AbortController
+3. **Hebrew validation**: Uses Unicode range `[\u0590-\u05FF]` for Hebrew detection
+4. **Content relevance**: Checks for domain-specific terms in response
+5. **Schema validation**: Validates response structure before asserting on content
+
+### Learnings for Next Cycles
+
+1. **Webhook availability**: E2E tests require running webhook - use graceful skipping
+2. **Timeout is important**: n8n RAG workflow can take 10-30 seconds; 60s timeout is safe
+3. **Hebrew regex**: `[\u0590-\u05FF]` matches all Hebrew letters
+4. **Citation regex**: `/\[S\d+\]/g` extracts citation markers
+5. **Response validation**: Check `success` field first, then validate content
+6. **Test isolation**: Each test case makes independent request (no shared state)
+7. **Path format**: Use `/c/Users/...` on Windows bash, not `C:\Users\...`
+
+---

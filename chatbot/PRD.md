@@ -578,7 +578,7 @@ function showError(type) {
 **So that** the full flow works
 
 **Test Cases:**
-- [ ] `test_simple_query()` - "מה זה היטל השבחה?"
+- [x] `test_simple_query()` - "מה זה היטל השבחה?"
 - [ ] `test_specific_search()` - "החלטות בגוש 6158"
 - [ ] `test_analytical_query()` - "כמה החלטות בתל אביב?"
 - [ ] `test_citation_format()` - Response contains [S0]
