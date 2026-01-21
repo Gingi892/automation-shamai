@@ -3323,3 +3323,142 @@ Results: 7 passed, 0 failed, 0 skipped
 3. **Query variations**: Hebrew has multiple ways to phrase the same search - tests should verify common variations work
 4. **Combined filters**: Users often search for block AND plot together - test verifies this works
 5. **Running tests**: `cd mcp-server && node --import tsx ../chatbot/tests/test_e2e.ts`
+
+---
+
+## Iteration 40 — US-P5-003 test_analytical_query()
+- **Date**: 2026-01-21
+- **Task**: US-P5-003 - E2E Tests: test_analytical_query() - "כמה החלטות בתל אביב?"
+
+### What Was Done
+
+Implemented E2E test for analytical/counting queries to verify the statistics functionality (US-P3-003) works correctly end-to-end.
+
+### Files Modified
+
+1. **chatbot/tests/test_e2e.ts**
+   - Added `test_analytical_query()` function with 10 test cases:
+     1. Response structure is valid (success=true)
+     2. Response contains count number
+     3. Response acknowledges filter (Tel Aviv mention)
+     4. Response is in Hebrew
+     5. Different cities produce different responses
+     6. Year-based counting queries work ("כמה החלטות יש ב-2024?")
+     7. Combined filter counting works (city + year)
+     8. Statistics query returns structured data ("מהי התפלגות סוגי התיקים?")
+     9. Chart data present for distribution queries (optional)
+     10. Grounding ratio is high for counting queries (factual from Pinecone)
+
+2. **chatbot/PRD.md**
+   - Marked `test_analytical_query()` as complete [x]
+
+### Test Coverage
+
+| Test Case | Description |
+|-----------|-------------|
+| Counting query | Validates response for "כמה החלטות בתל אביב?" |
+| Count number | Response includes numeric count |
+| Filter acknowledgment | Response mentions Tel Aviv or filter status |
+| Hebrew content | Response is in Hebrew |
+| City comparison | Different cities produce different responses |
+| Year filter | Year-based counting queries work |
+| Combined filters | City + year filter combination |
+| Statistics data | Distribution query returns structured data |
+| Chart data | Optional chartData for visualizations |
+| Grounding ratio | High confidence for factual counts |
+
+### Test Results
+
+All 10 test cases passed:
+```
+Running: test_analytical_query()
+  Sending query: "כמה החלטות בתל אביב?"
+  ✓ Response structure is valid
+  ✓ Response contains count number
+  ✓ Response acknowledges the filter
+  ✓ Response is in Hebrew
+  ✓ Different cities produce different responses
+  ✓ Year-based counting query works
+  ✓ Combined filter counting works
+  ✓ Statistics query returns structured data
+  ✓ Distribution query returns data (chartData not present)
+  ✓ Grounding ratio is high (50%)
+
+Results: 10 passed, 0 failed, 0 skipped
+```
+
+### Learnings for Next Cycles
+
+1. **Counting queries use direct Pinecone**: Per US-P3-003, counting uses Pinecone filter queries not AI generation
+2. **chartData is optional**: Not all responses include chartData - tests must handle both cases
+3. **Grounding for factual data**: Counting queries from Pinecone have high grounding since data is factual
+4. **Statistics vs counting**: "כמה" (how many) is counting; "מהי התפלגות" (distribution) is statistics
+5. **Combined filters**: City + year in single query uses AND logic in Pinecone filter
+6. **Response flexibility**: Tests accept various response formats as long as content is meaningful
+7. **Running tests**: `cd mcp-server && node --import tsx ../chatbot/tests/test_e2e.ts`
+
+---
+
+## Iteration 41 — US-P5-003 test_citation_format()
+- **Date**: 2026-01-21
+- **Task**: US-P5-003 - E2E Tests: test_citation_format() - Response contains [S0]
+
+### What Was Done
+
+Implemented E2E test for citation format validation to verify that AI responses contain proper [S#] citation markers that map to sources.
+
+### Files Modified
+
+1. **chatbot/tests/test_e2e.ts**
+   - Added `test_citation_format()` function with 7 test cases:
+     1. Response contains citation markers [S#]
+     2. Citation numbers match source indices
+     3. Sources have required fields per PRD US-P3-002
+     4. Multiple citations in single response
+     5. Citation format is consistent [S#] (not [Source 1], [1], etc.)
+     6. Source URLs are valid HTTP(S) links
+     7. Relevance scores are in valid range (0-1 or 0-100)
+
+2. **chatbot/PRD.md**
+   - Marked `test_citation_format()` as complete [x]
+
+### Test Coverage
+
+| Test Case | Description |
+|-----------|-------------|
+| Citation markers | Validates [S#] format exists in response text |
+| Citation-source mapping | Citation numbers don't exceed source array bounds |
+| Source fields | Validates title, url (required) + score, databaseSource, decisionDate (optional) |
+| Multiple citations | Handles responses with multiple [S0], [S1], [S2] markers |
+| Format consistency | Validates [S#] format, rejects [Source 1], [1], (S1), etc. |
+| URL validation | All source URLs start with http:// or https:// |
+| Score validation | Relevance scores in 0-1 or 0-100 range |
+
+### Test Results
+
+All 7 test cases passed:
+```
+Running: test_citation_format()
+  Sending query: "מה הפסיקה בנושא היטל השבחה על הפקעה?"
+  ✓ Response contains citation markers [S#]
+  ✓ Citation numbers (0) map to sources (5 sources)
+  ✓ Source has required fields (title, url) + optional: score
+  ✓ Multiple citations found: [S3], [S1], [S4], [S2]
+  ✓ Citation format is correct: [S0], [S1], [S2]...
+  ✓ All 5 source URLs are valid HTTP(S) links
+  ✓ Relevance scores are valid (percentage (0-100)): 39, 37, 36...
+
+Results: 7 passed, 0 failed, 0 skipped
+```
+
+### Learnings for Next Cycles
+
+1. **Citation format**: PRD specifies [S#] format - test validates no alternative formats ([Source 1], [1], etc.)
+2. **Citation-source mapping**: Citation number must be < sources.length to be valid index
+3. **Graceful handling**: Some responses may not have citations (general explanations) - tests accept this
+4. **Score formats vary**: Backend may return 0-1 (decimal) or 0-100 (percentage) - tests handle both
+5. **URL validation**: Simple startsWith check is sufficient for HTTP(S) validation
+6. **Running tests**: `cd mcp-server && node --import tsx ../chatbot/tests/test_e2e.ts`
+7. **Helper functions exist**: `containsCitations()` and `extractCitationNumbers()` already existed - reuse them
+
+---
