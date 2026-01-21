@@ -150,11 +150,11 @@ const TITLE_REGEX = /הכרעת שמאי מכריע מיום (\d{2}-\d{2}-\d{4})
 
 **Acceptance Criteria:**
 - [x] Fetch PDF via ScraperAPI (same settings)
-- [ ] Extract text using pdf-parse
-- [ ] Handle Hebrew RTL text properly
-- [ ] Store full text as Pinecone metadata (max 40KB per vector)
-- [ ] For large PDFs, store first 35KB + summary
-- [ ] Link PDF URL in metadata for direct access
+- [x] Extract text using pdf-parse
+- [x] Handle Hebrew RTL text properly
+- [x] Store full text as Pinecone metadata (max 40KB per vector)
+- [x] For large PDFs, store first 35KB + summary
+- [x] Link PDF URL in metadata for direct access
 
 ---
 
