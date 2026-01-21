@@ -779,6 +779,59 @@ When decisions array is empty:
         }
       }
     }
+  },
+  {
+    name: 'get_analytics',
+    description: `שאילתות אנליטיות על מאגר ההחלטות / Run analytical queries on the decisions database.
+
+## מתי להשתמש / When to Use
+- To answer questions like "מי השמאי עם הכי הרבה החלטות?"
+- For trend analysis: "כמה החלטות בשנה?"
+- For comparative analysis: "באילו ועדות יש הכי הרבה תיקי היטל השבחה?"
+
+## סוגי שאילתות / Query Types
+| query_type | Hebrew | Description |
+|------------|--------|-------------|
+| decisions_by_committee | החלטות לפי ועדה | Count per local committee |
+| decisions_by_year | החלטות לפי שנה | Count per year |
+| decisions_by_appraiser | החלטות לפי שמאי | Count per appraiser |
+| decisions_by_case_type | החלטות לפי סוג תיק | Count per case type |
+| avg_decisions_per_month | ממוצע החלטות לחודש | Monthly average |
+
+## דוגמאות שאילתות / Query Examples
+| User Question | query_type |
+|---------------|------------|
+| "מי השמאי עם הכי הרבה החלטות?" | decisions_by_appraiser |
+| "כמה החלטות היו בכל שנה?" | decisions_by_year |
+| "באילו ועדות יש הכי הרבה היטל השבחה?" | decisions_by_committee (+ filter) |
+| "מה הממוצע החודשי?" | avg_decisions_per_month |
+
+## פלט / Output
+Returns structured JSON with:
+- query_type: The type of query executed
+- results: Array of {name, count} or single value
+- total: Total count across all results`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query_type: {
+          type: 'string',
+          enum: ['decisions_by_committee', 'decisions_by_year', 'decisions_by_appraiser', 'decisions_by_case_type', 'avg_decisions_per_month'],
+          description: 'סוג השאילתה האנליטית / Type of analytical query to run'
+        },
+        limit: {
+          type: 'number',
+          description: 'מספר תוצאות מקסימלי (ברירת מחדל: 50) / Maximum number of results',
+          default: 50
+        },
+        database: {
+          type: 'string',
+          enum: ['decisive_appraiser', 'appeals_committee', 'appeals_board'],
+          description: 'סינון לפי מאגר / Filter by specific database (optional)'
+        }
+      },
+      required: ['query_type']
+    }
   }
 ];
 
@@ -1221,6 +1274,82 @@ async function handleTriggerUpdate(params: { pagesToCheck?: number }): Promise<M
       isError: true
     };
   }
+}
+
+type AnalyticsQueryType = 'decisions_by_committee' | 'decisions_by_year' | 'decisions_by_appraiser' | 'decisions_by_case_type' | 'avg_decisions_per_month';
+
+async function handleGetAnalytics(params: { query_type: AnalyticsQueryType; limit?: number; database?: DatabaseType }): Promise<MCPToolResult> {
+  // Check database availability
+  const dbError = checkDatabaseAvailable();
+  if (dbError) return dbError;
+
+  const limit = params.limit || 50;
+  const database = params.database;
+
+  let results: Array<{ name: string; count: number }> | { avgPerMonth: number; totalMonths: number; totalDecisions: number };
+  let total = 0;
+
+  switch (params.query_type) {
+    case 'decisions_by_committee':
+      results = db!.getDecisionsByCommittee(limit, database);
+      total = (results as Array<{ count: number }>).reduce((sum, r) => sum + r.count, 0);
+      break;
+
+    case 'decisions_by_year':
+      results = db!.getDecisionsByYear(limit, database);
+      total = (results as Array<{ count: number }>).reduce((sum, r) => sum + r.count, 0);
+      break;
+
+    case 'decisions_by_appraiser':
+      results = db!.getDecisionsByAppraiser(limit, database);
+      total = (results as Array<{ count: number }>).reduce((sum, r) => sum + r.count, 0);
+      break;
+
+    case 'decisions_by_case_type':
+      results = db!.getDecisionsByCaseType(limit, database);
+      total = (results as Array<{ count: number }>).reduce((sum, r) => sum + r.count, 0);
+      break;
+
+    case 'avg_decisions_per_month':
+      results = db!.getAvgDecisionsPerMonth(database);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            query_type: params.query_type,
+            database: database || 'all',
+            avgDecisionsPerMonth: results.avgPerMonth,
+            totalMonths: results.totalMonths,
+            totalDecisions: results.totalDecisions
+          }, null, 2)
+        }]
+      };
+
+    default:
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            error: `Invalid query_type: ${params.query_type}`,
+            validTypes: ['decisions_by_committee', 'decisions_by_year', 'decisions_by_appraiser', 'decisions_by_case_type', 'avg_decisions_per_month']
+          })
+        }],
+        isError: true
+      };
+  }
+
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        query_type: params.query_type,
+        database: database || 'all',
+        total,
+        count: (results as Array<{ name: string; count: number }>).length,
+        results
+      }, null, 2)
+    }]
+  };
 }
 
 async function handleHealthCheck(params: { verbose?: boolean }): Promise<MCPToolResult> {
@@ -2055,14 +2184,17 @@ async function main() {
         case 'health_check':
           return await handleHealthCheck(args as { verbose?: boolean });
 
+        case 'get_analytics':
+          return await handleGetAnalytics(args as { query_type: AnalyticsQueryType; limit?: number; database?: DatabaseType });
+
         default:
           return {
             content: [{
               type: 'text',
               text: JSON.stringify({
                 error: `Unknown tool: ${name}`,
-                suggestion: 'Available tools: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check',
-                suggestionHe: 'כלים זמינים: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check'
+                suggestion: 'Available tools: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check, get_analytics',
+                suggestionHe: 'כלים זמינים: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check, get_analytics'
               })
             }],
             isError: true

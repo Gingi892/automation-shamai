@@ -679,6 +679,137 @@ export class DecisionDatabase {
   }
 
   /**
+   * US-006: Get analytics data - decisions by committee
+   */
+  getDecisionsByCommittee(limit: number = 50, database?: DatabaseType): Array<{ name: string; count: number }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const dbFilter = database ? ' AND database = ?' : '';
+    const params = database ? [database, limit] : [limit];
+
+    const result = this.db.exec(
+      `SELECT committee, COUNT(*) as count FROM decisions
+       WHERE committee IS NOT NULL AND committee != ''${dbFilter}
+       GROUP BY committee
+       ORDER BY count DESC
+       LIMIT ?`,
+      params
+    );
+
+    if (result.length === 0) return [];
+    return result[0].values.map(v => ({
+      name: String(v[0]),
+      count: Number(v[1])
+    }));
+  }
+
+  /**
+   * US-006: Get analytics data - decisions by year
+   */
+  getDecisionsByYear(limit: number = 50, database?: DatabaseType): Array<{ name: string; count: number }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const dbFilter = database ? ' AND database = ?' : '';
+    const params = database ? [database, limit] : [limit];
+
+    const result = this.db.exec(
+      `SELECT substr(decision_date, 7, 4) as year, COUNT(*) as count FROM decisions
+       WHERE decision_date IS NOT NULL AND length(decision_date) >= 10${dbFilter}
+       GROUP BY year
+       ORDER BY year DESC
+       LIMIT ?`,
+      params
+    );
+
+    if (result.length === 0) return [];
+    return result[0].values
+      .filter(v => v[0] !== null)
+      .map(v => ({
+        name: String(v[0]),
+        count: Number(v[1])
+      }));
+  }
+
+  /**
+   * US-006: Get analytics data - decisions by appraiser
+   */
+  getDecisionsByAppraiser(limit: number = 50, database?: DatabaseType): Array<{ name: string; count: number }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const dbFilter = database ? ' AND database = ?' : '';
+    const params = database ? [database, limit] : [limit];
+
+    const result = this.db.exec(
+      `SELECT appraiser, COUNT(*) as count FROM decisions
+       WHERE appraiser IS NOT NULL AND appraiser != ''${dbFilter}
+       GROUP BY appraiser
+       ORDER BY count DESC
+       LIMIT ?`,
+      params
+    );
+
+    if (result.length === 0) return [];
+    return result[0].values.map(v => ({
+      name: String(v[0]),
+      count: Number(v[1])
+    }));
+  }
+
+  /**
+   * US-006: Get analytics data - decisions by case type
+   */
+  getDecisionsByCaseType(limit: number = 50, database?: DatabaseType): Array<{ name: string; count: number }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const dbFilter = database ? ' AND database = ?' : '';
+    const params = database ? [database, limit] : [limit];
+
+    const result = this.db.exec(
+      `SELECT case_type, COUNT(*) as count FROM decisions
+       WHERE case_type IS NOT NULL AND case_type != ''${dbFilter}
+       GROUP BY case_type
+       ORDER BY count DESC
+       LIMIT ?`,
+      params
+    );
+
+    if (result.length === 0) return [];
+    return result[0].values.map(v => ({
+      name: String(v[0]),
+      count: Number(v[1])
+    }));
+  }
+
+  /**
+   * US-006: Get analytics data - average decisions per month
+   */
+  getAvgDecisionsPerMonth(database?: DatabaseType): { avgPerMonth: number; totalMonths: number; totalDecisions: number } {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const dbFilter = database ? ' WHERE database = ?' : '';
+    const params = database ? [database] : [];
+
+    // Get total decisions
+    const totalResult = this.db.exec(
+      `SELECT COUNT(*) FROM decisions${dbFilter}`,
+      params
+    );
+    const totalDecisions = totalResult.length > 0 ? Number(totalResult[0].values[0][0]) : 0;
+
+    // Get unique months count
+    const monthsResult = this.db.exec(
+      `SELECT COUNT(DISTINCT substr(decision_date, 4, 7)) FROM decisions
+       WHERE decision_date IS NOT NULL AND length(decision_date) >= 10${database ? ' AND database = ?' : ''}`,
+      params
+    );
+    const totalMonths = monthsResult.length > 0 ? Number(monthsResult[0].values[0][0]) : 0;
+
+    const avgPerMonth = totalMonths > 0 ? Math.round((totalDecisions / totalMonths) * 100) / 100 : 0;
+
+    return { avgPerMonth, totalMonths, totalDecisions };
+  }
+
+  /**
    * Close database connection
    */
   close(): void {

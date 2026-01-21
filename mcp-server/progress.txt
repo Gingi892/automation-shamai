@@ -105,3 +105,26 @@
 - **Learnings for next cycles:**
   - Added new method instead of modifying existing `getDistinctValues` for backwards compatibility
 ---
+
+## Iteration 6 — US-006: Analytics Queries (IMPLEMENTED)
+- **What was done:** Implemented `get_analytics` MCP tool with 5 query types
+- **Files modified:**
+  - `src/database.ts` - Added 5 analytics methods:
+    - `getDecisionsByCommittee()` - count per committee, sorted by count DESC
+    - `getDecisionsByYear()` - count per year, sorted by year DESC
+    - `getDecisionsByAppraiser()` - count per appraiser, sorted by count DESC
+    - `getDecisionsByCaseType()` - count per case type, sorted by count DESC
+    - `getAvgDecisionsPerMonth()` - calculates average from total/months
+  - `src/index.ts` - Added:
+    - Tool definition with `query_type` enum and parameters
+    - `handleGetAnalytics()` handler with switch for all query types
+    - Added case to switch statement
+- **Technical notes:**
+  - All methods support optional database filter
+  - Year extracted from DD-MM-YYYY format via substr(decision_date, 7, 4)
+  - Monthly average uses COUNT(DISTINCT month) for unique months
+  - TypeScript type check passes
+- **Learnings for next cycles:**
+  - AnalyticsQueryType defined as type literal for type safety
+  - Handler returns different structures for avg_decisions_per_month vs other queries
+---

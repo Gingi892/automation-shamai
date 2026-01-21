@@ -172,13 +172,13 @@ const scraperUrl = buildScraperUrl(pdfUrl);
 - "באילו ועדות יש הכי הרבה תיקי היטל השבחה?" (Committees with most betterment levy cases)
 
 **Acceptance Criteria:**
-- [ ] MCP tool `get_analytics` with `query_type` parameter:
+- [x] MCP tool `get_analytics` with `query_type` parameter:
   - `decisions_by_committee`: Count per committee
   - `decisions_by_year`: Count per year
   - `decisions_by_appraiser`: Count per appraiser
   - `decisions_by_case_type`: Count per case type
   - `avg_decisions_per_month`: Monthly average
-- [ ] Returns structured data Claude can use to answer questions
+- [x] Returns structured data Claude can use to answer questions
 
 ---
 
