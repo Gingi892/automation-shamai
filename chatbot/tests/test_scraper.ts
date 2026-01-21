@@ -548,6 +548,160 @@ function test_extract_block_plot(): void {
   }
 }
 
+// ============================================================
+// Committee (ועדה) Name Extraction Tests
+// ============================================================
+
+/**
+ * Extract committee (ועדה) name from Hebrew text
+ * Implements the same patterns as scraper.ts lines 992-1011
+ */
+function extractCommittee(text: string): string | null {
+  // Pattern 1: ועדה מקומית לתכנון ובניה XXX or ועדה מקומית XXX
+  const committeeFullMatch = text.match(/ועדה מקומית(?:\s+לתכנון\s+(?:ו)?בניה)?\s+([א-ת\s-]+?)(?:\s+גוש|\s+[גג]\s|\s+-|$)/);
+  if (committeeFullMatch) {
+    return committeeFullMatch[1].trim();
+  }
+
+  // Pattern 2: Short committee name after 'נ' (in decisive appraiser format)
+  const committeeAfterN = text.match(/\sנ\s+([א-ת\s-]+?)(?:\s+גוש|\s+[גג]\s)/);
+  if (committeeAfterN) {
+    return committeeAfterN[1].trim().replace(/ועדה מקומית\s*/i, '').trim();
+  }
+
+  // Pattern 3: Committee in context with לתו"ב
+  const committeeTub = text.match(/לתו"ב\s+([א-ת\s-]+?)(?:\s+גוש|\s+[גג]\s|\s+-|$)/);
+  if (committeeTub) {
+    return committeeTub[1].trim();
+  }
+
+  return null;
+}
+
+// Test data for committee extraction
+const COMMITTEE_TEST_CASES = [
+  {
+    name: 'Basic ועדה מקומית format',
+    text: 'החלטה בהשגה מס\' 12345 ועדה מקומית תל אביב גוש 6158 חלקה 25',
+    expected: 'תל אביב'
+  },
+  {
+    name: 'ועדה מקומית with לתכנון ובניה',
+    text: 'החלטה בהשגה מס\' 99999 ועדה מקומית לתכנון ובניה הרצליה גוש 500 חלקה 10',
+    expected: 'הרצליה'
+  },
+  {
+    name: 'ועדה מקומית with לתכנון בניה (no ו)',
+    text: 'ועדה מקומית לתכנון בניה נתניה גוש 1234 חלקה 56',
+    expected: 'נתניה'
+  },
+  {
+    name: 'Committee after נ (decisive appraiser format)',
+    text: 'הכרעת שמאי מכריע מיום 15-03-2024 בעניין היטל השבחה נ ועדה מקומית ירושלים ג 1234 ח 56',
+    expected: 'ירושלים'
+  },
+  {
+    name: 'Committee name with hyphen',
+    text: 'ועדה מקומית תל-אביב גוש 6158 חלקה 25',
+    expected: 'תל-אביב'
+  },
+  {
+    name: 'Committee with לתו"ב format',
+    text: 'לתו"ב חיפה גוש 7890 חלקה 12',
+    expected: 'חיפה'
+  },
+  {
+    name: 'Committee with multiple words',
+    text: 'ועדה מקומית באר שבע גוש 38 חלקה 1',
+    expected: 'באר שבע'
+  },
+  {
+    name: 'Committee before hyphen ending',
+    text: 'ועדה מקומית אשדוד - שמאי כהן',
+    expected: 'אשדוד'
+  },
+  {
+    name: 'Committee with short block format (ג)',
+    text: 'ועדה מקומית ראשון לציון ג 5000 ח 50',
+    expected: 'ראשון לציון'
+  },
+  {
+    name: 'Long committee name with extended description',
+    text: 'ועדה מקומית לתכנון ובניה פתח תקווה גוש 6200 חלקה 30',
+    expected: 'פתח תקווה'
+  }
+];
+
+// Negative test cases - should return null
+const COMMITTEE_NEGATIVE_CASES = [
+  {
+    name: 'No committee mentioned',
+    text: 'מסמך כללי בעברית ללא ועדה'
+  },
+  {
+    name: 'Only "ועדה" without "מקומית"',
+    text: 'ועדה תל אביב גוש 1234 חלקה 56'
+  },
+  {
+    name: 'Empty string',
+    text: ''
+  },
+  {
+    name: 'Random Hebrew text',
+    text: 'טקסט אקראי בעברית'
+  },
+  {
+    name: 'ועדה מקומית at end without block/plot',
+    text: 'החלטה של ועדה מקומית'
+  }
+];
+
+/**
+ * Test: test_extract_committee
+ * Verifies that committee (ועדה) names are correctly extracted from Hebrew text
+ */
+function test_extract_committee(): void {
+  console.log('Running: test_extract_committee()');
+  let passed = 0;
+  let failed = 0;
+
+  // Test positive cases
+  for (const testCase of COMMITTEE_TEST_CASES) {
+    try {
+      const result = extractCommittee(testCase.text);
+
+      assert.strictEqual(result, testCase.expected,
+        `${testCase.name}: expected "${testCase.expected}", got "${result}"`);
+
+      console.log(`  ✓ ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  // Test negative cases
+  for (const testCase of COMMITTEE_NEGATIVE_CASES) {
+    try {
+      const result = extractCommittee(testCase.text);
+      assert.strictEqual(result, null,
+        `${testCase.name}: should be null, got "${result}"`);
+      console.log(`  ✓ Negative: ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ Negative: ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+}
+
 // Run tests
 console.log('===== Scraper Unit Tests =====\n');
 test_parse_decisive_appraiser_title();
@@ -555,4 +709,6 @@ console.log('');
 test_parse_appeals_committee_title();
 console.log('');
 test_extract_block_plot();
+console.log('');
+test_extract_committee();
 console.log('\n✓ All tests passed!');

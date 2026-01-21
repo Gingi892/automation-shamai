@@ -2082,3 +2082,56 @@ Created unit tests for גוש (block) and חלקה (plot) extraction from variou
 5. **Test cases should include real-world examples**: Using actual title formats from decisive appraiser and appeals committee ensures patterns work in context
 
 ---
+
+## Iteration 27 — US-P5-001 test_extract_committee()
+- **Date**: 2026-01-21
+- **Task**: US-P5-001 - Unit Tests - Scraper: test_extract_committee()
+
+### What Was Done
+
+Created unit tests for committee (ועדה) name extraction from Hebrew text.
+
+### Files Modified
+
+1. **chatbot/tests/test_scraper.ts**
+   - Added `extractCommittee()` function implementing 3 patterns from scraper.ts lines 992-1011
+   - Added 10 positive test cases:
+     - Basic ועדה מקומית format
+     - ועדה מקומית with לתכנון ובניה
+     - ועדה מקומית with לתכנון בניה (no ו)
+     - Committee after נ (decisive appraiser format)
+     - Committee name with hyphen (תל-אביב)
+     - Committee with לתו"ב format
+     - Committee with multiple words (באר שבע)
+     - Committee before hyphen ending
+     - Committee with short block format (ג)
+     - Long committee name with extended description
+   - Added 5 negative test cases:
+     - No committee mentioned
+     - Only "ועדה" without "מקומית"
+     - Empty string
+     - Random Hebrew text
+     - ועדה מקומית at end without block/plot
+
+### Test Patterns Implemented
+
+| Pattern | Description | Regex |
+|---------|-------------|-------|
+| Pattern 1 | ועדה מקומית לתכנון ובניה XXX | `/ועדה מקומית(?:\s+לתכנון\s+(?:ו)?בניה)?\s+([א-ת\s-]+?)(?:\s+גוש\|\s+[גג]\s\|\s+-\|$)/` |
+| Pattern 2 | After נ in decisive appraiser | `/\sנ\s+([א-ת\s-]+?)(?:\s+גוש\|\s+[גג]\s)/` |
+| Pattern 3 | With לתו"ב prefix | `/לתו"ב\s+([א-ת\s-]+?)(?:\s+גוש\|\s+[גג]\s\|\s+-\|$)/` |
+
+### Test Results
+
+All 15 tests passed (10 positive + 5 negative cases).
+
+### Learnings for Next Cycles
+
+1. **Multiple patterns required**: Committee extraction needs 3 different patterns for different title formats
+2. **Pattern order matters**: Pattern 1 (ועדה מקומית) is most common and should be tried first
+3. **Lazy quantifiers**: Using `+?` instead of `+` ensures the shortest match, preventing overreach into block/plot data
+4. **End anchors**: Using `(?:\s+גוש|\s+[גג]\s|\s+-|$)` ensures the committee name ends at the right point
+5. **Prefix handling**: The לתכנון ובניה prefix is optional and must be removed to get just the city name
+6. **Test cities without 'ג'**: Same limitation as other patterns - cities containing 'ג' (רמת גן) break the pattern
+
+---
