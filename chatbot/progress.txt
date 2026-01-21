@@ -1056,3 +1056,95 @@ Verified that all US-P2-002 acceptance criteria were already implemented in work
 - Workflow validation confirmed all nodes connected correctly
 
 ---
+
+## Iteration 12 — US-P3-001 Improved Query Understanding
+- **Date**: 2026-01-21
+- **Task**: US-P3-001 - Parse query for structured filters, combine with semantic search, dynamic topK
+
+### What Was Done
+
+Implemented query filter parsing in the RAG Chatbot workflow (`McOa9j15PRy8AZ8v`) to extract structured filters from Hebrew queries and apply them to Pinecone searches.
+
+### New Node Added
+
+**Parse Query Filters** (parse-query-filters)
+- Position: [330, 0] - Between Extract User Message and Embed User Query
+- Type: Code node
+- Purpose: Parse Hebrew queries for structured filters
+
+### Filter Parsing Implemented
+
+| Filter Type | Hebrew Pattern | Example | Pinecone Filter |
+|-------------|----------------|---------|-----------------|
+| Block | גוש \d+ | גוש 6158 | `block: { $eq: "6158" }` |
+| Plot | חלקה \d+ | חלקה 25 | `plot: { $eq: "25" }` |
+| Committee | City names | תל אביב | `committee: { $eq: "תל אביב" }` |
+| Year | 20\d{2} or תשפ"ד | 2024 | `year: { $eq: "2024" }` |
+| Case Type | היטל השבחה, פיצויים, etc. | היטל השבחה | `caseType: { $eq: "היטל השבחה" }` |
+| Appraiser | שמאי + name | שמאי כהן | `appraiser: { $eq: "כהן" }` |
+
+### Hebrew Year Mappings
+
+- תשפ"ה / תשפה → 2025
+- תשפ"ד / תשפד → 2024
+- תשפ"ג / תשפג → 2023
+- תשפ"ב / תשפב → 2022
+- תשפ"א / תשפא → 2021
+- תש"פ / תשפ → 2020
+
+### City/Committee Mappings
+
+Supports: תל אביב, ירושלים, חיפה, באר שבע, רמת גן, פתח תקווה, נתניה, ראשון לציון, אשדוד, הרצליה
+
+### Analytical Query Detection
+
+Detects statistical intent from patterns:
+- כמה (how many)
+- סטטיסטיקה (statistics)
+- התפלגות (distribution)
+- השוואה/השוואה (comparison)
+- ממוצע (average)
+- סה"כ / סך הכל (total)
+- מספר (number)
+
+When analytical intent detected: `topK=20` instead of default `topK=5`
+
+### Nodes Modified
+
+1. **Query Pinecone** - Updated jsonBody to include dynamic filters and topK:
+   ```javascript
+   Object.assign({
+     vector: embedding,
+     topK: parsedFilters.topK || 5,
+     includeMetadata: true,
+     namespace: 'gov-il-decisions'
+   }, pineconeFilter ? { filter: pineconeFilter } : {})
+   ```
+
+2. **Build RAG Context** - Updated to:
+   - Access parsedFilters from Parse Query Filters node
+   - Include filter context in system prompt
+   - Pass isAnalytical flag to response
+
+### Connection Flow
+
+```
+Chat Webhook → Extract User Message → Parse Query Filters → Embed User Query → Query Pinecone → ...
+```
+
+### Validation
+
+- Workflow validation completed with expected false positives (Code node return format, expression URLs)
+- All connections verified correct
+- Node positions adjusted for proper visual flow
+
+### Learnings for Next Cycles
+
+- Pinecone filter format uses `{ $eq: value }` syntax for exact matches
+- Hebrew regex patterns must handle optional prefixes (ב, ה, ו, etc.)
+- Hebrew year conversion requires handling both with and without geresh (תשפ"ד vs תשפד)
+- City name matching should be case-insensitive and handle hyphenated variants
+- n8n expressions cannot use optional chaining (?.) - use ternary or Object.assign instead
+- Dynamic topK based on query intent improves analytical query results
+
+---

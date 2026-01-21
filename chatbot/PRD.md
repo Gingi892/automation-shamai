@@ -207,14 +207,14 @@ interface DecisionMetadata {
 **So that** I retrieve the most relevant documents
 
 **Acceptance Criteria:**
-- [ ] Parse query for structured filters:
+- [x] Parse query for structured filters:
   - Block/plot: `גוש 6158` → filter `block=6158`
   - Committee: `תל אביב` → filter `committee=תל אביב`
   - Year: `2024` or `תשפ"ד` → filter `year=2024`
   - Case type: `היטל השבחה` → filter `caseType=היטל השבחה`
   - Appraiser: `שמאי כהן` → filter `appraiser=כהן`
-- [ ] Combine semantic search with metadata filters
-- [ ] Increase topK for analytical queries (topK=20 for statistics)
+- [x] Combine semantic search with metadata filters
+- [x] Increase topK for analytical queries (topK=20 for statistics)
 
 ---
 
