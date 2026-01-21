@@ -301,15 +301,15 @@ interface DecisionMetadata {
 **So that** I can review and access original documents
 
 **Acceptance Criteria:**
-- [ ] Collapsible sources section below each response
-- [ ] Each source shows:
+- [x] Collapsible sources section below each response
+- [x] Each source shows:
   - Number badge [S0], [S1], etc.
   - Title (clickable → opens PDF)
   - Database label (color-coded)
   - Relevance percentage
   - Decision date
-- [ ] Sort by relevance (default) or date
-- [ ] "Open PDF" button for each source
+- [x] Sort by relevance (default) or date
+- [x] "Open PDF" button for each source
 
 ---
 

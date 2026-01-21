@@ -1594,6 +1594,57 @@ Query Pinecone Stats → Aggregate Statistics → Build Statistics Response
 
 ---
 
+## Iteration 21 — US-P4-002 Source Display Panel Enhancement
+- **Date**: 2026-01-21
+- **Task**: US-P4-002 - Source Display Panel
+
+### What Was Done
+
+Enhanced the source display panel in `workflows/chatbot-frontend.html` with:
+1. **Database label (color-coded)** - Shows Hebrew database name with color-coded badge
+2. **Decision date** - Displays date in DD-MM-YYYY format
+3. **Sort controls** - Added buttons to sort by relevance (default) or date
+4. **"Open PDF" button** - Explicit button for each source item
+
+### CSS Additions (lines 283-370)
+- `.database-badge` - Base style for database labels
+- `.database-badge.decisive_appraiser` - Blue for שמאי מכריע
+- `.database-badge.appeals_committee` - Purple for ועדת השגות
+- `.database-badge.appeals_board` - Orange for ועדת ערעורים
+- `.source-date` - Date display styling
+- `.source-pdf-btn` - PDF button styling
+- `.sources-controls` - Sort controls container
+- `.sort-btn` - Sort button styling with active state
+
+### JavaScript Additions (lines 921-1012)
+- `getDatabaseInfo(databaseSource)` - Maps database codes to Hebrew labels and CSS classes
+- `formatDate(dateStr)` - Formats date strings for display
+- `sortSources(sources, sortBy)` - Sorts sources by relevance or date
+- `renderSourcesList(sources, messageId)` - Renders source items with all new fields
+- `sortSourcesList(messageId, sortBy)` - Re-sorts and re-renders source list
+
+### Source Item Structure
+Each source now displays:
+- Number badge (1-indexed)
+- Title (clickable link)
+- Database label (color-coded badge)
+- Relevance percentage
+- Decision date (if available)
+- "PDF" button
+
+### Files Modified
+1. **workflows/chatbot-frontend.html** - Added source panel enhancements
+2. **chatbot/PRD.md** - Marked all US-P4-002 items as complete
+
+### Learnings for Next Cycles
+- The API response provides `databaseSource` or `database` field - frontend handles both
+- Date sorting parses DD-MM-YYYY format and sorts newest-first
+- Sort state is stored per-message in window['sources_' + messageId]
+- Original index preserved for citation highlighting after re-sort
+- Color scheme: Blue (decisive_appraiser), Purple (appeals_committee), Orange (appeals_board)
+
+---
+
 ## Iteration 20 — US-P4-001 Mark Professional Legal UI Complete
 - **Date**: 2026-01-21
 - **Task**: US-P4-001 - Professional Legal UI

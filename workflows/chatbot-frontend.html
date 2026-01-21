@@ -280,6 +280,95 @@
             color: #c62828;
         }
 
+        /* Database Label Badges */
+        .database-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .database-badge.decisive_appraiser {
+            background: #e3f2fd;
+            color: #1565C0;
+        }
+
+        .database-badge.appeals_committee {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .database-badge.appeals_board {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .source-date {
+            font-size: 0.75rem;
+            color: #888;
+            white-space: nowrap;
+        }
+
+        .source-pdf-btn {
+            padding: 4px 10px;
+            border: 1px solid #2196F3;
+            border-radius: 6px;
+            background: #fff;
+            color: #1565C0;
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .source-pdf-btn:hover {
+            background: #e3f2fd;
+            border-color: #1976D2;
+        }
+
+        /* Sort Controls */
+        .sources-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-top: 1px solid #eee;
+            background: #fafafa;
+        }
+
+        .sort-label {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .sort-btn {
+            padding: 3px 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background: #fff;
+            color: #555;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sort-btn:hover {
+            background: #f5f5f5;
+            border-color: #bdbdbd;
+        }
+
+        .sort-btn.active {
+            background: #e3f2fd;
+            border-color: #2196F3;
+            color: #1565C0;
+        }
+
         /* Citation Tooltip */
         .citation-tooltip {
             position: fixed;
@@ -829,6 +918,99 @@
             return 'low';
         }
 
+        // Get Hebrew database label and CSS class
+        function getDatabaseInfo(databaseSource) {
+            const labels = {
+                'decisive_appraiser': { label: 'שמאי מכריע', class: 'decisive_appraiser' },
+                'שמאי מכריע': { label: 'שמאי מכריע', class: 'decisive_appraiser' },
+                'appeals_committee': { label: 'ועדת השגות', class: 'appeals_committee' },
+                'ועדת השגות': { label: 'ועדת השגות', class: 'appeals_committee' },
+                'appeals_board': { label: 'ועדת ערעורים', class: 'appeals_board' },
+                'ועדת ערעורים': { label: 'ועדת ערעורים', class: 'appeals_board' }
+            };
+            return labels[databaseSource] || { label: databaseSource || 'לא ידוע', class: '' };
+        }
+
+        // Format date for display (DD-MM-YYYY to readable Hebrew format)
+        function formatDate(dateStr) {
+            if (!dateStr) return null;
+            // Already in DD-MM-YYYY format, just return as-is for Hebrew display
+            return dateStr;
+        }
+
+        // Sort sources array
+        function sortSources(sources, sortBy) {
+            const sorted = [...sources];
+            if (sortBy === 'date') {
+                sorted.sort((a, b) => {
+                    const dateA = a.decisionDate || a.publishDate || '00-00-0000';
+                    const dateB = b.decisionDate || b.publishDate || '00-00-0000';
+                    // Parse DD-MM-YYYY and compare
+                    const [dA, mA, yA] = dateA.split('-').map(Number);
+                    const [dB, mB, yB] = dateB.split('-').map(Number);
+                    // Sort descending (newest first)
+                    return (yB * 10000 + mB * 100 + dB) - (yA * 10000 + mA * 100 + dA);
+                });
+            } else {
+                // Sort by relevance (default)
+                sorted.sort((a, b) => (b.score || 0) - (a.score || 0));
+            }
+            return sorted;
+        }
+
+        // Render sources list HTML
+        function renderSourcesList(sources, messageId) {
+            return sources.map((s, idx) => {
+                const relevanceClass = getRelevanceClass(s.score);
+                const scorePercent = Math.round((s.score || 0) * 100);
+                const dbInfo = getDatabaseInfo(s.databaseSource || s.database);
+                const decisionDate = formatDate(s.decisionDate);
+
+                return `
+                    <li class="source-item" data-source-index="${idx}" data-original-index="${s.originalIndex !== undefined ? s.originalIndex : idx}" id="source-${messageId}-${idx}">
+                        <span class="source-index">${idx + 1}</span>
+                        <div class="source-info">
+                            <a href="${s.url || '#'}" target="_blank" class="source-link" title="${escapeHtml(s.title || 'מסמך')}">
+                                ${escapeHtml(s.title || 'מסמך')}
+                            </a>
+                            <div class="source-meta">
+                                <span class="database-badge ${dbInfo.class}">${dbInfo.label}</span>
+                                <span class="relevance-badge ${relevanceClass}">${scorePercent}%</span>
+                                ${decisionDate ? `<span class="source-date">📅 ${decisionDate}</span>` : ''}
+                            </div>
+                        </div>
+                        <a href="${s.url || '#'}" target="_blank" class="source-pdf-btn" title="פתח PDF">
+                            <span>📄</span>
+                            <span>PDF</span>
+                        </a>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Sort and re-render sources list
+        function sortSourcesList(messageId, sortBy) {
+            const sources = window['sources_' + messageId];
+            if (!sources) return;
+
+            // Update button states
+            document.getElementById('sort-relevance-' + messageId).classList.remove('active');
+            document.getElementById('sort-date-' + messageId).classList.remove('active');
+            document.getElementById('sort-' + sortBy + '-' + messageId).classList.add('active');
+
+            // Sort sources (preserve original index for citation mapping)
+            const sortedSources = sources.map((s, i) => ({ ...s, originalIndex: i }));
+            const sorted = sortSources(sortedSources, sortBy);
+
+            // Re-render list
+            const listEl = document.getElementById('sources-list-' + messageId);
+            if (listEl) {
+                listEl.innerHTML = renderSourcesList(sorted, messageId);
+            }
+
+            window['sortOrder_' + messageId] = sortBy;
+        }
+
         function addMessage(content, role, sources = [], hallucinationCheck = null, warning = null) {
             const messagesContainer = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
@@ -846,6 +1028,10 @@
 
             // Add sources section with numbered items
             if (sources && sources.length > 0) {
+                // Store original sources order for sorting
+                window['sources_' + messageId] = sources;
+                window['sortOrder_' + messageId] = 'relevance';
+
                 messageHTML += `
                     <div class="sources" id="sources-${messageId}">
                         <div class="sources-header" onclick="toggleSources('${messageId}')">
@@ -855,24 +1041,13 @@
                             </span>
                             <span class="sources-toggle-icon">▼</span>
                         </div>
+                        <div class="sources-controls">
+                            <span class="sort-label">מיון:</span>
+                            <button class="sort-btn active" id="sort-relevance-${messageId}" onclick="sortSourcesList('${messageId}', 'relevance')">רלוונטיות</button>
+                            <button class="sort-btn" id="sort-date-${messageId}" onclick="sortSourcesList('${messageId}', 'date')">תאריך</button>
+                        </div>
                         <ul class="sources-list" id="sources-list-${messageId}">
-                            ${sources.map((s, idx) => {
-                                const relevanceClass = getRelevanceClass(s.score);
-                                const scorePercent = Math.round(s.score * 100);
-                                return `
-                                    <li class="source-item" data-source-index="${idx}" id="source-${messageId}-${idx}">
-                                        <span class="source-index">${idx + 1}</span>
-                                        <div class="source-info">
-                                            <a href="${s.url || '#'}" target="_blank" class="source-link" title="${escapeHtml(s.title || 'מסמך')}">
-                                                ${escapeHtml(s.title || 'מסמך')}
-                                            </a>
-                                            <div class="source-meta">
-                                                <span class="relevance-badge ${relevanceClass}">${scorePercent}% רלוונטי</span>
-                                            </div>
-                                        </div>
-                                    </li>
-                                `;
-                            }).join('')}
+                            ${renderSourcesList(sources, messageId)}
                         </ul>
                     </div>
                 `;
