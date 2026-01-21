@@ -985,6 +985,71 @@
             font-size: 0.9rem;
         }
 
+        /* Enhanced Error Handling Styles */
+        .error-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 15px 20px;
+            background: #ffebee;
+            border-radius: 12px;
+            margin: 10px 20px;
+            border: 1px solid #ef9a9a;
+        }
+
+        .error-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .error-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .error-text {
+            flex: 1;
+        }
+
+        .error-title {
+            font-weight: 600;
+            color: #c62828;
+            margin-bottom: 4px;
+            font-size: 0.95rem;
+        }
+
+        .error-description {
+            color: #d32f2f;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .error-retry-btn {
+            align-self: flex-end;
+            padding: 8px 20px;
+            border: none;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .error-retry-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .error-retry-btn:active {
+            transform: translateY(0);
+        }
+
         /* Mobile responsive */
         @media (max-width: 600px) {
             .citation-tooltip {
@@ -1823,7 +1888,125 @@
             }
         }
 
-        function showError(message) {
+        // Enhanced Error Handling - US-P4-005
+        // Error types with Hebrew messages
+        const errorMessages = {
+            network: {
+                title: 'שגיאת חיבור',
+                description: 'אנא בדוק את החיבור לאינטרנט',
+                icon: '🔌'
+            },
+            server: {
+                title: 'שגיאה בשרת',
+                description: 'אנא נסה שוב בעוד מספר שניות',
+                icon: '⚙️'
+            },
+            empty: {
+                title: 'לא נמצאה תשובה',
+                description: 'נסה לנסח את השאלה אחרת',
+                icon: '🔍'
+            },
+            timeout: {
+                title: 'הבקשה ארכה זמן רב',
+                description: 'אנא נסה שאלה קצרה יותר',
+                icon: '⏱️'
+            },
+            default: {
+                title: 'שגיאה',
+                description: '',
+                icon: '❌'
+            }
+        };
+
+        // Track last message for retry functionality
+        let lastUserMessage = '';
+
+        // Detect error type from error object or status
+        function detectErrorType(error, response = null) {
+            // Network errors (fetch failed, no connection)
+            if (error instanceof TypeError || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                return 'network';
+            }
+
+            // Timeout errors
+            if (error.name === 'AbortError' || error.message.includes('timeout') || error.message.includes('Timeout')) {
+                return 'timeout';
+            }
+
+            // Server errors (500 range)
+            if (response && response.status >= 500) {
+                return 'server';
+            }
+
+            // HTTP errors
+            if (error.message && error.message.includes('HTTP error')) {
+                const statusMatch = error.message.match(/status:\s*(\d+)/);
+                if (statusMatch) {
+                    const status = parseInt(statusMatch[1]);
+                    if (status >= 500) return 'server';
+                }
+            }
+
+            return 'default';
+        }
+
+        // Show enhanced error with retry button
+        function showError(errorOrMessage, errorType = null) {
+            const errorContainer = document.getElementById('errorContainer');
+
+            // Determine error type if not provided
+            let type = errorType;
+            let customDescription = '';
+
+            if (!type) {
+                if (typeof errorOrMessage === 'string') {
+                    // Legacy string message - use as custom description
+                    customDescription = errorOrMessage;
+                    type = 'default';
+                } else if (errorOrMessage instanceof Error) {
+                    type = detectErrorType(errorOrMessage);
+                } else {
+                    type = 'default';
+                }
+            }
+
+            const errorConfig = errorMessages[type] || errorMessages.default;
+            const description = customDescription || errorConfig.description;
+
+            errorContainer.innerHTML = `
+                <div class="error-container">
+                    <div class="error-content">
+                        <span class="error-icon">${errorConfig.icon}</span>
+                        <div class="error-text">
+                            <div class="error-title">${errorConfig.title}</div>
+                            <div class="error-description">${escapeHtml(description)}</div>
+                        </div>
+                    </div>
+                    <button class="error-retry-btn" onclick="retryLastMessage()">
+                        <span>🔄</span>
+                        <span>נסה שוב</span>
+                    </button>
+                </div>
+            `;
+        }
+
+        // Hide error
+        function hideError() {
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.innerHTML = '';
+        }
+
+        // Retry the last message
+        function retryLastMessage() {
+            if (lastUserMessage) {
+                hideError();
+                document.getElementById('userInput').value = lastUserMessage;
+                sendMessage();
+            }
+        }
+
+        // Legacy showError function - simple message display (for backward compatibility)
+        function showSimpleError(message) {
             const errorContainer = document.getElementById('errorContainer');
             errorContainer.innerHTML = `<div class="error-message">${escapeHtml(message)}</div>`;
             setTimeout(() => {
@@ -1840,9 +2023,13 @@
             if (!message) return;
 
             if (!webhookUrl) {
-                showError('נא להזין את כתובת ה-Webhook של n8n');
+                showSimpleError('נא להזין את כתובת ה-Webhook של n8n');
                 return;
             }
+
+            // Store message for retry functionality
+            lastUserMessage = message;
+            hideError();
 
             addMessage(message, 'user');
             conversationHistory.push({ role: 'user', content: message });
@@ -1850,6 +2037,10 @@
             input.value = '';
             sendButton.disabled = true;
             showTyping();
+
+            // Create AbortController for timeout handling
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
 
             try {
                 const response = await fetch(webhookUrl, {
@@ -1860,8 +2051,19 @@
                     body: JSON.stringify({
                         message: message,
                         history: conversationHistory.slice(-10)
-                    })
+                    }),
+                    signal: controller.signal
                 });
+
+                clearTimeout(timeoutId);
+
+                // Check for server errors (500 range)
+                if (response.status >= 500) {
+                    hideTyping();
+                    showError(new Error(`HTTP error! status: ${response.status}`), 'server');
+                    console.error('Server error:', response.status);
+                    return;
+                }
 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -1870,7 +2072,15 @@
                 const data = await response.json();
                 hideTyping();
 
+                // Check for empty response
+                if (!data.response || data.response.trim() === '') {
+                    showError(null, 'empty');
+                    return;
+                }
+
                 if (data.success && data.response) {
+                    // Clear last message on success (no retry needed)
+                    hideError();
                     addMessage(
                         data.response,
                         'assistant',
@@ -1882,12 +2092,22 @@
                     );
                     conversationHistory.push({ role: 'assistant', content: data.response });
                 } else {
-                    throw new Error(data.error || 'Unknown error occurred');
+                    // Empty or error response from API
+                    showError(null, 'empty');
                 }
 
             } catch (error) {
+                clearTimeout(timeoutId);
                 hideTyping();
-                showError(`שגיאה: ${error.message}`);
+
+                // Detect and show appropriate error type
+                if (error.name === 'AbortError') {
+                    showError(error, 'timeout');
+                } else if (error instanceof TypeError || error.message.includes('Failed to fetch')) {
+                    showError(error, 'network');
+                } else {
+                    showError(error);
+                }
                 console.error('Error:', error);
             } finally {
                 sendButton.disabled = false;

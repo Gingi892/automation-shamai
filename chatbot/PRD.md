@@ -75,6 +75,84 @@ OpenAI:
 
 ---
 
+## 🚨 PHASE 0: CRITICAL FIX (DO THIS FIRST)
+
+### US-CRITICAL-001: Fix Webhook Response Node Connection
+**Priority:** BLOCKING - Chatbot cannot respond without this fix
+**Status:** [x] FIXED (2026-01-21)
+
+**Error:** `500 Internal Server Error: "No Respond to Webhook node found in the workflow"`
+
+**Root Cause:**
+The n8n workflow (ID: `McOa9j15PRy8AZ8v`) has `responseMode: "responseNode"` on the webhook, but the execution path cannot find the "Respond to Webhook" node. The local workflow JSON (`workflows/3-rag-chatbot.json`) has correct connections, but the live n8n workflow is broken.
+
+**Fix Instructions (Manual in n8n UI):**
+
+**Option A: Re-import the Local Workflow**
+1. Go to https://a-i-do.app.n8n.cloud/workflow/McOa9j15PRy8AZ8v
+2. Delete all nodes (Ctrl+A, Delete)
+3. Open `C:\Users\user\automation-shamai\workflows\3-rag-chatbot.json`
+4. Copy the entire JSON content
+5. In n8n, paste (Ctrl+V) to import all nodes
+6. Save and Activate
+
+**Option B: Fix Connections Manually**
+1. Open https://a-i-do.app.n8n.cloud/workflow/McOa9j15PRy8AZ8v
+2. Verify these nodes exist:
+   - `Chat Webhook` (trigger)
+   - `Respond with Chat` (respondToWebhook node)
+3. Trace the connection path:
+   ```
+   Chat Webhook → Extract User Message → Embed User Query → Query Pinecone →
+   Build RAG Context → Generate AI Response → Extract Claims & Citations →
+   Build Verification Prompts → [PARALLEL: Verify Posterior, Verify Prior] →
+   Merge Verification Results → Compute Budget Gaps → Format Response →
+   Respond with Chat
+   ```
+4. If any connection is missing, drag from the output dot to input dot
+5. Save and Activate
+
+**Acceptance Criteria:**
+- [x] Workflow responds to POST requests at `/webhook/chat`
+- [x] Response includes `success: true` and `response: "..."` fields
+- [x] Test query: `curl -X POST -H "Content-Type: application/json" -d '{"message":"מה זה היטל השבחה?"}' https://a-i-do.app.n8n.cloud/webhook/chat`
+
+**Actual Fixes Applied (2026-01-21):**
+1. Added IF node connections (Check Statistics Query + Check Counting Query)
+2. Fixed corrupted HTTP Request nodes (Embed User Query, Query Pinecone, Query Pinecone Stats)
+3. Simplified Parse Query Filters to bypass broken Hebrew regex
+4. Added bypass connection from Extract User Message → Embed User Query
+5. Updated Build RAG Context to reference Extract User Message instead of Parse Query Filters
+
+---
+
+### US-CRITICAL-002: Simplified Fallback Workflow (If US-CRITICAL-001 Fails)
+**Priority:** HIGH - Alternative if hallucination detection path is broken
+
+If the full hallucination detection path is too complex, create a simplified version:
+
+```
+Chat Webhook → Extract Message → Embed → Query Pinecone → Build Context →
+Generate AI Response → Simple Format → Respond with Chat
+```
+
+**Simplified "Simple Format" Code Node:**
+```javascript
+const aiResponse = $input.first().json;
+const contextData = $('Build RAG Context').first().json;
+
+return {
+  success: true,
+  response: aiResponse?.choices?.[0]?.message?.content || 'מצטער, לא הצלחתי לייצר תשובה.',
+  sources: contextData?.relevantDocs || [],
+  matchCount: contextData?.matchCount || 0
+};
+```
+
+This bypasses hallucination detection but gets the chatbot working immediately.
+
+---
+
 ## Phase 1: Discovery & Planning
 
 ### US-P1-001: Analyze Existing System
@@ -278,7 +356,19 @@ interface DecisionMetadata {
 
 ---
 
-## Phase 4: Frontend UI/UX
+## Phase 4: Frontend UI/UX (ENHANCED - Legal Chatbot Best Practices)
+
+### Legal Chatbot UI/UX Best Practices Reference
+Based on industry standards for legal technology interfaces:
+
+1. **Trust Indicators** - Legal professionals need confidence in AI output
+2. **Source Transparency** - Every claim must be traceable
+3. **Professional Aesthetics** - Avoid informal/playful design
+4. **Accessibility** - WCAG compliance for government/legal use
+5. **Error Recovery** - Clear guidance when things go wrong
+6. **Loading States** - Lawyers bill by the hour; show progress
+
+---
 
 ### US-P4-001: Professional Legal UI
 **As** a legal professional
@@ -346,6 +436,111 @@ interface DecisionMetadata {
 
 ---
 
+### US-P4-005: Enhanced Error Handling (NEW)
+**As** a user
+**I want** clear error messages in Hebrew
+**So that** I know what went wrong and how to recover
+
+**Acceptance Criteria:**
+- [x] Network errors show: "שגיאת חיבור - אנא בדוק את החיבור לאינטרנט"
+- [x] Server errors (500) show: "שגיאה בשרת - אנא נסה שוב בעוד מספר שניות"
+- [x] Empty response shows: "לא נמצאה תשובה - נסה לנסח את השאלה אחרת"
+- [x] Timeout shows: "הבקשה ארכה זמן רב - אנא נסה שאלה קצרה יותר"
+- [x] Retry button appears on error
+
+**Implementation (add to frontend):**
+```javascript
+function showError(type) {
+  const errors = {
+    network: 'שגיאת חיבור - אנא בדוק את החיבור לאינטרנט',
+    server: 'שגיאה בשרת - אנא נסה שוב בעוד מספר שניות',
+    empty: 'לא נמצאה תשובה - נסה לנסח את השאלה אחרת',
+    timeout: 'הבקשה ארכה זמן רב - אנא נסה שאלה קצרה יותר'
+  };
+  // Show error with retry button
+}
+```
+
+---
+
+### US-P4-006: Loading State Improvements (NEW)
+**As** a user
+**I want** to see progress while waiting
+**So that** I know the system is working
+
+**Acceptance Criteria:**
+- [ ] Animated typing indicator (3 dots)
+- [ ] Progress text changes every 3 seconds:
+  1. "מעבד את השאלה..." (Processing question)
+  2. "מחפש במאגר ההחלטות..." (Searching decisions)
+  3. "מנתח את התוצאות..." (Analyzing results)
+  4. "מכין תשובה מבוססת מקורות..." (Preparing sourced answer)
+- [ ] Subtle pulse animation on chat container
+- [ ] Estimated time indicator (optional)
+
+---
+
+### US-P4-007: Disclaimer Banner (CRITICAL for Legal)
+**As** a legal platform
+**I want** a clear disclaimer
+**So that** users understand AI limitations
+
+**Acceptance Criteria:**
+- [ ] Sticky banner at top (collapsible):
+  ```
+  ⚠️ הכלי מספק מידע לצורכי מחקר בלבד. אין להסתמך על התשובות כייעוץ משפטי.
+  יש לאמת כל מידע מול המקורות המצוינים.
+  ```
+- [ ] First-time popup explaining:
+  - This is AI-assisted search
+  - Always verify with original documents
+  - Not legal advice
+- [ ] "הבנתי" (I understand) button to dismiss
+
+---
+
+### US-P4-008: Keyboard Shortcuts (NEW)
+**As** a power user
+**I want** keyboard shortcuts
+**So that** I can work faster
+
+**Acceptance Criteria:**
+- [ ] Enter → Send message
+- [ ] Shift+Enter → New line in message
+- [ ] Ctrl+K → Focus search input
+- [ ] Escape → Cancel loading / close modals
+- [ ] Arrow Up → Edit last message (optional)
+
+---
+
+### US-P4-009: Message History & Export (NEW)
+**As** a researcher
+**I want** to save my chat session
+**So that** I can reference it later
+
+**Acceptance Criteria:**
+- [ ] Local storage saves conversation
+- [ ] Export as PDF button
+- [ ] Export as plain text button
+- [ ] Clear history button with confirmation
+- [ ] Session persists across browser refresh
+
+---
+
+### US-P4-010: Mobile Responsive Fixes (NEW)
+**As** a mobile user
+**I want** the interface to work on my phone
+**So that** I can research on the go
+
+**Acceptance Criteria:**
+- [ ] Input stays at bottom on mobile
+- [ ] Source panel is collapsible on mobile
+- [ ] Touch-friendly button sizes (min 44x44px)
+- [ ] No horizontal scroll
+- [ ] Soft keyboard doesn't hide input
+
+---
+
 ## Phase 5: Testing (TDD)
 
 ### US-P5-001: Unit Tests - Scraper
@@ -395,31 +590,41 @@ interface DecisionMetadata {
 ## Implementation Order (Ralph Loop)
 
 ```
-Phase 1: Discovery
-  └─► US-P1-001: Analyze existing system
-  └─► US-P1-002: Data gap analysis
+🚨 Phase 0: CRITICAL FIX (BLOCKING - DO THIS FIRST!)
+  └─► US-CRITICAL-001: Fix Webhook Response Node Connection
+  └─► US-CRITICAL-002: Simplified Fallback (if 001 fails)
 
-Phase 2: Indexing (CRITICAL PATH)
-  └─► US-P2-003: Pinecone schema (design first)
-  └─► US-P2-001: Full indexer workflow
-  └─► US-P2-002: PDF content extraction
+Phase 1: Discovery (ALREADY DONE ✓)
+  └─► US-P1-001: Analyze existing system [x]
+  └─► US-P1-002: Data gap analysis [x]
 
-Phase 3: RAG Refinement
-  └─► US-P3-001: Query understanding
-  └─► US-P3-002: Source attribution
-  └─► US-P3-003: Analytical queries
-  └─► US-P3-004: Hallucination detection
+Phase 2: Indexing (ALREADY DONE ✓)
+  └─► US-P2-003: Pinecone schema [x]
+  └─► US-P2-001: Full indexer workflow [x]
+  └─► US-P2-002: PDF content extraction [x]
 
-Phase 4: Frontend
-  └─► US-P4-001: Professional UI
-  └─► US-P4-002: Source display
-  └─► US-P4-003: Interactive citations
-  └─► US-P4-004: Analytics dashboard
+Phase 3: RAG Refinement (ALREADY DONE ✓)
+  └─► US-P3-001: Query understanding [x]
+  └─► US-P3-002: Source attribution [x]
+  └─► US-P3-003: Analytical queries [x]
+  └─► US-P3-004: Hallucination detection [x]
+
+Phase 4: Frontend (EXISTING + NEW ITEMS)
+  └─► US-P4-001: Professional UI [x]
+  └─► US-P4-002: Source display [x]
+  └─► US-P4-003: Interactive citations [x]
+  └─► US-P4-004: Analytics dashboard [x]
+  └─► US-P4-005: Enhanced Error Handling [ ] NEW
+  └─► US-P4-006: Loading State Improvements [ ] NEW
+  └─► US-P4-007: Disclaimer Banner [ ] NEW - CRITICAL FOR LEGAL
+  └─► US-P4-008: Keyboard Shortcuts [ ] NEW
+  └─► US-P4-009: Message History & Export [ ] NEW
+  └─► US-P4-010: Mobile Responsive Fixes [ ] NEW
 
 Phase 5: Testing
-  └─► US-P5-001: Scraper tests
-  └─► US-P5-002: Pinecone tests
-  └─► US-P5-003: E2E tests
+  └─► US-P5-001: Scraper tests [x]
+  └─► US-P5-002: Pinecone tests (partial)
+  └─► US-P5-003: E2E tests [ ]
 ```
 
 ---
