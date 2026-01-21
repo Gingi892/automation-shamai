@@ -2979,3 +2979,84 @@ Implemented the two remaining export buttons for US-P4-009 (Message History & Ex
 6. **Color coding**: Different button colors help users distinguish actions (delete=red, export PDF=pink, export text=green)
 
 ---
+
+## Iteration 30 — US-P4-010 Mobile Responsive Fixes
+- **Date**: 2026-01-21
+- **Task**: US-P4-010 - Mobile Responsive Fixes
+
+### What Was Done
+
+Implemented comprehensive mobile responsive fixes for the chatbot frontend to ensure proper functionality on mobile devices.
+
+### Files Modified
+
+1. **workflows/chatbot-frontend.html**
+   - Added comprehensive mobile CSS styles (lines 1408-1660)
+   - Added `isMobile()` detection function (line 1768)
+   - Added `handleViewportResize()` for soft keyboard handling (line 1775)
+   - Modified sources section to be collapsed by default on mobile (line 2276)
+
+### CSS Changes (Comprehensive Mobile Responsive)
+
+1. **Body and Container** - No horizontal scroll, full viewport height
+   - `overflow-x: hidden` on body
+   - `-webkit-fill-available` for iOS Safari viewport fix
+   - `border-radius: 0` and `width: 100%` for chat container
+
+2. **Input Stays at Bottom**
+   - `.chat-input-container` with `position: sticky; bottom: 0`
+   - `z-index: 100` to stay above other content
+   - Box shadow for visual separation
+
+3. **Source Panel Collapsible**
+   - Modified `addMessage()` to detect mobile via `isMobile()`
+   - Sources header and list get `collapsed` class by default on mobile
+   - Tap to expand/collapse works as before
+
+4. **Touch-Friendly Buttons (44x44px min)**
+   - `.send-button`: `min-width: 60px; min-height: 44px`
+   - `.source-pdf-btn`: `min-width: 44px; min-height: 44px`
+   - `.sort-btn`: `min-height: 36px`
+   - All interactive elements meet 44px minimum tap target
+
+5. **No Horizontal Scroll**
+   - `overflow-x: hidden` on body
+   - `max-width: 100%` on containers
+   - Message bubbles set to `max-width: 90%` on mobile
+
+6. **Soft Keyboard Handling**
+   - `visualViewport` event listener for resize
+   - Auto-scroll to bottom when keyboard opens
+   - iOS Safari specific fixes with `env(safe-area-inset-bottom)`
+   - `font-size: 16px` on input to prevent iOS zoom
+
+### Additional Mobile Optimizations
+
+- Header compact: smaller font sizes on mobile
+- Keyboard hints hidden on mobile (space saver)
+- History action buttons wrap on small screens
+- Extra small device support (@media max-width: 375px)
+- Landscape orientation fixes
+- Print media queries preserved
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Input stays at bottom on mobile | ✅ Complete |
+| Source panel is collapsible on mobile | ✅ Complete |
+| Touch-friendly button sizes (min 44x44px) | ✅ Complete |
+| No horizontal scroll | ✅ Complete |
+| Soft keyboard doesn't hide input | ✅ Complete |
+
+### Learnings for Next Cycles
+
+1. **iOS Safari viewport**: Use `-webkit-fill-available` alongside `100vh` for consistent height
+2. **Soft keyboard detection**: Use `visualViewport.resize` event, not `window.resize`
+3. **Font size 16px**: Prevents iOS auto-zoom when focusing inputs
+4. **Safe area insets**: Use `env(safe-area-inset-bottom)` for iPhone notch/home indicator
+5. **Touch targets**: Apple HIG recommends 44x44px minimum; Google Material recommends 48x48px
+6. **Collapsed by default**: Mobile users prefer progressive disclosure - start collapsed, let them expand
+7. **RTL considerations**: Hebrew text renders correctly with proper viewport meta tag
+
+---

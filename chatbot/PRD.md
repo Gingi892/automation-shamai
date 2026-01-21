@@ -533,11 +533,11 @@ function showError(type) {
 **So that** I can research on the go
 
 **Acceptance Criteria:**
-- [ ] Input stays at bottom on mobile
-- [ ] Source panel is collapsible on mobile
-- [ ] Touch-friendly button sizes (min 44x44px)
-- [ ] No horizontal scroll
-- [ ] Soft keyboard doesn't hide input
+- [x] Input stays at bottom on mobile
+- [x] Source panel is collapsible on mobile
+- [x] Touch-friendly button sizes (min 44x44px)
+- [x] No horizontal scroll
+- [x] Soft keyboard doesn't hide input
 
 ---
 
@@ -619,7 +619,7 @@ Phase 4: Frontend (EXISTING + NEW ITEMS)
   └─► US-P4-007: Disclaimer Banner [x] NEW - CRITICAL FOR LEGAL
   └─► US-P4-008: Keyboard Shortcuts [x] NEW
   └─► US-P4-009: Message History & Export [x] NEW
-  └─► US-P4-010: Mobile Responsive Fixes [ ] NEW
+  └─► US-P4-010: Mobile Responsive Fixes [x] NEW
 
 Phase 5: Testing
   └─► US-P5-001: Scraper tests [x]

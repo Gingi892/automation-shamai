@@ -1404,6 +1404,259 @@
                 padding: 10px 12px;
             }
         }
+
+        /* ===== US-P4-010: Comprehensive Mobile Responsive Fixes ===== */
+        @media (max-width: 600px) {
+            /* 1. Body and Container fixes - No horizontal scroll */
+            body {
+                padding: 0;
+                align-items: stretch;
+                min-height: 100vh;
+                min-height: -webkit-fill-available; /* iOS Safari viewport fix */
+                overflow-x: hidden;
+            }
+
+            .chat-container {
+                height: 100vh;
+                height: -webkit-fill-available; /* iOS Safari fix */
+                border-radius: 0;
+                max-width: 100%;
+                width: 100%;
+            }
+
+            /* 2. Header compact on mobile */
+            .chat-header {
+                padding: 12px 15px;
+            }
+
+            .chat-header h1 {
+                font-size: 1.2rem;
+            }
+
+            .chat-header p {
+                font-size: 0.8rem;
+            }
+
+            /* 3. Chat messages area - fills available space */
+            .chat-messages {
+                padding: 12px;
+                padding-bottom: 10px;
+            }
+
+            /* 4. Message bubbles - wider on mobile */
+            .message-bubble {
+                max-width: 90%;
+                padding: 10px 14px;
+                font-size: 0.95rem;
+            }
+
+            /* 5. Sources section - COLLAPSIBLE by default on mobile */
+            .sources {
+                max-width: 95%;
+            }
+
+            .sources-header {
+                padding: 12px 14px;
+                /* Touch-friendly: min 44px tap target */
+                min-height: 44px;
+            }
+
+            .sources-list {
+                /* Collapsed by default on mobile - added via JS */
+            }
+
+            .source-item {
+                flex-wrap: wrap;
+                padding: 12px 14px;
+                gap: 8px;
+                /* Touch-friendly spacing */
+                min-height: 44px;
+            }
+
+            .source-info {
+                width: calc(100% - 44px);
+            }
+
+            .source-meta {
+                width: 100%;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .source-link {
+                white-space: normal;
+                font-size: 0.85rem;
+            }
+
+            /* 6. Touch-friendly buttons - min 44x44px */
+            .source-pdf-btn {
+                min-width: 44px;
+                min-height: 44px;
+                padding: 10px 16px;
+                font-size: 0.8rem;
+            }
+
+            .sort-btn {
+                min-height: 36px;
+                padding: 8px 12px;
+                font-size: 0.75rem;
+            }
+
+            .send-button {
+                min-width: 60px;
+                min-height: 44px;
+                padding: 12px 16px;
+                font-size: 0.9rem;
+            }
+
+            /* 7. Input container - STICKY at bottom */
+            .chat-input-container {
+                position: sticky;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                padding: 12px;
+                gap: 8px;
+                background: white;
+                box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+                z-index: 100;
+            }
+
+            .chat-input {
+                padding: 12px 16px;
+                font-size: 16px; /* Prevents iOS zoom on focus */
+                min-height: 44px;
+                max-height: 100px;
+            }
+
+            /* 8. Keyboard hint hidden on mobile (space saver) */
+            .keyboard-hint {
+                display: none;
+            }
+
+            /* 9. Config panel compact */
+            .config-panel {
+                padding: 10px 12px;
+            }
+
+            .config-input {
+                font-size: 14px;
+                padding: 10px 12px;
+            }
+
+            .history-actions {
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .history-actions button {
+                min-height: 40px;
+                padding: 8px 12px;
+                font-size: 0.75rem;
+            }
+
+            /* 10. Grounding badge touch-friendly */
+            .grounding-badge {
+                min-height: 44px;
+                padding: 8px 14px;
+            }
+
+            /* 11. Claims list touch-friendly */
+            .claim-item {
+                padding: 12px;
+                min-height: 44px;
+            }
+
+            .claim-verify-btn {
+                min-width: 44px;
+                min-height: 36px;
+                padding: 8px 12px;
+            }
+
+            /* 12. Chart container mobile adjustments */
+            .chart-type-btn {
+                min-height: 36px;
+                padding: 8px 12px;
+            }
+
+            .chart-export-btn {
+                min-height: 36px;
+                padding: 8px 12px;
+            }
+
+            /* 13. Warning banner compact */
+            .warning-banner {
+                max-width: 95%;
+                padding: 10px;
+            }
+
+            /* 14. Error messages */
+            #errorContainer {
+                padding: 0 12px;
+            }
+
+            .error-message {
+                padding: 12px;
+                font-size: 0.85rem;
+            }
+
+            /* 15. Loading indicator */
+            .loading-text {
+                font-size: 0.85rem;
+            }
+        }
+
+        /* Extra small devices (iPhone SE, etc.) */
+        @media (max-width: 375px) {
+            .chat-header h1 {
+                font-size: 1rem;
+            }
+
+            .message-bubble {
+                max-width: 95%;
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+
+            .history-actions button {
+                padding: 6px 8px;
+                font-size: 0.7rem;
+            }
+
+            .source-meta {
+                font-size: 0.7rem;
+            }
+        }
+
+        /* Landscape mobile - adjust heights */
+        @media (max-width: 900px) and (orientation: landscape) {
+            .chat-container {
+                height: 100vh;
+            }
+
+            .chat-messages {
+                max-height: calc(100vh - 180px);
+            }
+
+            .chart-wrapper {
+                max-height: 200px;
+            }
+        }
+
+        /* iOS Safari specific fixes for soft keyboard */
+        @supports (-webkit-touch-callout: none) {
+            /* iOS only */
+            .chat-input-container {
+                /* Ensure input stays visible when keyboard opens */
+                padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+            }
+
+            .chat-container {
+                /* Account for Safari's bottom bar */
+                height: calc(100vh - env(safe-area-inset-bottom, 0px));
+                height: -webkit-fill-available;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1511,6 +1764,27 @@
         let isLoading = false;
         let abortController = null;
         let lastUserMessages = []; // Store recent user messages for Arrow Up editing
+
+        // ===== US-P4-010: Mobile Detection =====
+        function isMobile() {
+            return window.innerWidth <= 600 ||
+                   ('ontouchstart' in window) ||
+                   (navigator.maxTouchPoints > 0);
+        }
+
+        // Handle soft keyboard visibility (iOS/Android)
+        function handleViewportResize() {
+            // Scroll to bottom when keyboard opens
+            const chatMessages = document.getElementById('chatMessages');
+            if (chatMessages) {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+        // Listen for visual viewport changes (soft keyboard)
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', handleViewportResize);
+        }
 
         // ===== US-P4-009: Message History & Export =====
         const STORAGE_KEY = 'chatbot_conversation_history';
@@ -1999,9 +2273,14 @@
                 window['sources_' + messageId] = sources;
                 window['sortOrder_' + messageId] = 'relevance';
 
+                // US-P4-010: Collapse sources by default on mobile
+                const mobileCollapsed = isMobile();
+                const headerCollapsedClass = mobileCollapsed ? 'collapsed' : '';
+                const listCollapsedClass = mobileCollapsed ? 'collapsed' : '';
+
                 messageHTML += `
                     <div class="sources" id="sources-${messageId}">
-                        <div class="sources-header" onclick="toggleSources('${messageId}')">
+                        <div class="sources-header ${headerCollapsedClass}" onclick="toggleSources('${messageId}')">
                             <span class="sources-title">
                                 <span>📚</span>
                                 <span>מקורות (${sources.length})</span>
@@ -2013,7 +2292,7 @@
                             <button class="sort-btn active" id="sort-relevance-${messageId}" onclick="sortSourcesList('${messageId}', 'relevance')">רלוונטיות</button>
                             <button class="sort-btn" id="sort-date-${messageId}" onclick="sortSourcesList('${messageId}', 'date')">תאריך</button>
                         </div>
-                        <ul class="sources-list" id="sources-list-${messageId}">
+                        <ul class="sources-list ${listCollapsedClass}" id="sources-list-${messageId}">
                             ${renderSourcesList(sources, messageId)}
                         </ul>
                     </div>
