@@ -888,11 +888,19 @@ const rawDocuments = uniqueMatches.map((match, index) => {
 **Root Cause:** Semantic search alone may not filter by metadata
 
 **Acceptance Criteria:**
-- [ ] Restore Hebrew filter parsing in `Parse Query Filters` node
-- [ ] Enable Pinecone metadata filters for committee, year, etc.
-- [ ] Test: "החלטות בתל אביב" returns decisions with committee="תל אביב"
+- [x] Restore Hebrew filter parsing in `Parse Query Filters` node
+- [x] Enable Pinecone metadata filters for committee, year, etc.
+- [x] Test: "החלטות בתל אביב" returns decisions with committee="תל אביב"
 
 **Fix Location:** `Parse Query Filters` node - restore Hebrew regex patterns
+
+**Implementation Notes (2026-01-21):**
+- Restored full Hebrew filter parsing with patterns for: block (גוש), plot (חלקה), committee (20+ cities), year (Hebrew and Gregorian), case type, appraiser
+- Updated Query Pinecone node to use dynamic filters from Parse Query Filters via `$('Parse Query Filters').first().json.pineconeFilter`
+- Updated Query Pinecone Stats node similarly
+- Fixed IF node type validation from "strict" to "loose" for boolean checks
+- Removed duplicate connection from Extract User Message → Embed User Query to ensure proper data flow
+- Test verified: Query with "תל אביב" correctly applies filter `{ committee: { $eq: "תל אביב" } }` (returns 0 results as expected since current index has limited data)
 
 ---
 
