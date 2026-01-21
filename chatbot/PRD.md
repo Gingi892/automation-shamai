@@ -87,7 +87,7 @@ OpenAI:
 - [x] Document current Pinecone schema and data
 - [x] Identify what documents are already indexed
 - [x] List current frontend features
-- [ ] Document current hallucination detection flow
+- [x] Document current hallucination detection flow
 
 ---
 

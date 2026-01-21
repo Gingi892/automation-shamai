@@ -262,6 +262,266 @@ From the Document Processor workflow (kTZqcClvtUspeC28):
 
 ---
 
+## Iteration 5 — Document Current Hallucination Detection Flow
+- **Date**: 2026-01-21
+- **Task**: US-P1-001 - Document current hallucination detection flow
+
+### Workflow Overview
+
+The hallucination detection is implemented in workflow `McOa9j15PRy8AZ8v` ("RAG Chatbot - Decisive Appraisal with Hallucination Detection"). It uses the **Strawberry/Pythea KL-divergence algorithm** to detect when AI claims are not grounded in retrieved evidence.
+
+### Architecture Diagram
+
+```
+User Query → Embed Query → Pinecone (topK=5) → Build RAG Context → GPT-4o Response
+                                                                        ↓
+                                                    Extract Claims & Citations
+                                                                        ↓
+                                                    Build Verification Prompts
+                                                          ↓           ↓
+                                           ┌──────────────┴───────────┴──────────────┐
+                                           │                                          │
+                                   Verify Posterior              Verify Prior
+                                   (Full Context)                (Scrubbed Context)
+                                   gpt-4o-mini + logprobs        gpt-4o-mini + logprobs
+                                           │                                          │
+                                           └──────────────┬───────────┬──────────────┘
+                                                          ↓           ↓
+                                                    Merge Results (combineByPosition)
+                                                                        ↓
+                                                    Compute Budget Gaps (KL Divergence)
+                                                                        ↓
+                                                    Format Response with Flags
+                                                                        ↓
+                                                    Respond with Chat
+```
+
+### Node-by-Node Analysis (14 nodes total)
+
+#### 1. Chat Webhook (chat-webhook)
+- **Type**: webhook (POST `/chat`)
+- **Purpose**: Entry point for chat requests
+- **Response Mode**: responseNode (async)
+
+#### 2. Extract User Message (extract-message)
+- **Purpose**: Parse user message and conversation history
+- **Input**: `body.message` or `body.query`
+- **Output**: `{ userMessage, conversationHistory, timestamp }`
+
+#### 3. Embed User Query (embed-query)
+- **Model**: text-embedding-3-small (1024 dimensions)
+- **API**: OpenAI /v1/embeddings
+
+#### 4. Query Pinecone (query-pinecone)
+- **topK**: 5 documents
+- **Namespace**: gov-il-decisions
+- **includeMetadata**: true
+
+#### 5. Build RAG Context (build-context)
+- **Purpose**: Prepare context for AI and store raw docs for verification
+- **Key Features**:
+  - Assigns source IDs: `S0`, `S1`, `S2`...
+  - Stores `rawDocuments` array for hallucination checking
+  - Builds Hebrew system prompt with citation instructions
+  - Instructs AI to cite sources as `[S0]`, `[S1]`, etc.
+
+#### 6. Generate AI Response (generate-response)
+- **Model**: GPT-4o
+- **Temperature**: 0.7
+- **Max Tokens**: 1000
+
+#### 7. Extract Claims & Citations (extract-claims)
+- **Purpose**: Split AI response into claims and identify citations
+- **Sentence Pattern**: `/[^.!?\\n]+[.!?]?/g` (Hebrew-aware)
+- **Citation Pattern**: `/\\[S(\\d+)\\]/g`
+- **Filters**: Claims must be >10 characters
+- **Output per claim**:
+  ```json
+  {
+    "id": "claim-0",
+    "originalText": "לפי ההחלטה [S0], השמאי קבע פיצוי.",
+    "cleanClaim": "לפי ההחלטה, השמאי קבע פיצוי.",
+    "citations": ["S0"]
+  }
+  ```
+
+#### 8. Build Verification Prompts (build-verification-prompts)
+- **Purpose**: Create two contexts for each claim
+- **Full Context**: All retrieved documents
+- **Scrubbed Context**: Cited documents replaced with `[REDACTED]`
+- **Limits**: Max 10 claims, min 15 chars per claim
+- **Output format**:
+  ```json
+  {
+    "claimId": "claim-0",
+    "claim": "השמאי קבע פיצוי",
+    "citations": ["S0"],
+    "hasCitations": true,
+    "fullContext": "[S0]: text... [S1]: text...",
+    "scrubbedContext": "[S0]: [REDACTED] [S1]: text..."
+  }
+  ```
+
+#### 9. Verify Posterior - Full Context (verify-posterior)
+- **Model**: gpt-4o-mini
+- **Purpose**: Ask "Is this claim entailed by the full context?"
+- **Settings**: `logprobs: true, top_logprobs: 5, max_tokens: 5`
+- **Response**: YES/NO/UNSURE with probability scores
+- **Batching**: 10 claims, 100ms interval
+
+#### 10. Verify Prior - Scrubbed Context (verify-prior)
+- **Model**: gpt-4o-mini
+- **Purpose**: Ask "Is this claim entailed by the scrubbed context?"
+- **Key Insight**: If cited sources are `[REDACTED]`, the verifier cannot see the evidence. If it still says YES, the claim is likely a hallucination.
+- **Settings**: Same as posterior
+
+#### 11. Merge Verification Results (merge-verification)
+- **Type**: Merge node (combineByPosition)
+- **Purpose**: Pair posterior and prior results for each claim
+
+#### 12. Compute Budget Gaps - KL Divergence (compute-budget-gaps)
+
+**Core Strawberry/Pythea Algorithm:**
+
+```javascript
+// Extract probability of "YES" from logprobs
+function extractPYes(response) {
+  const logprobs = response?.choices?.[0]?.logprobs;
+  if (!logprobs) {
+    // Fallback: text-based detection
+    const text = response?.choices?.[0]?.message?.content?.toUpperCase();
+    if (text.includes('YES')) return 0.85;
+    if (text.includes('NO')) return 0.15;
+    return 0.5;
+  }
+  // Extract from top_logprobs
+  const yesEntry = logprobs.content[0].top_logprobs.find(t =>
+    t.token.toUpperCase().trim() === 'YES'
+  );
+  return yesEntry ? Math.exp(yesEntry.logprob) : 0.5;
+}
+
+// KL Divergence for Bernoulli distributions
+function klBernoulli(p, q) {
+  const eps = 1e-12;
+  p = Math.max(eps, Math.min(1 - eps, p));
+  q = Math.max(eps, Math.min(1 - eps, q));
+  return p * Math.log(p / q) + (1 - p) * Math.log((1 - p) / (1 - q));
+}
+
+// Grounding score computation
+function computeGroundingScore(p1, p0, hasCitations) {
+  // p1 = P(entailed | full context)
+  // p0 = P(entailed | scrubbed context)
+
+  const observed = klBernoulli(p1, 0.5);   // How much model believes the claim
+  const required = klBernoulli(p1, p0);    // How much the evidence changed belief
+  const budgetGap = observed - required;
+
+  const evidenceUse = Math.max(0, p1 - p0);  // Did evidence increase confidence?
+  const evidenceUsed = hasCitations ? evidenceUse > 0.15 : true;
+
+  // Confidence calculation
+  let confidence;
+  if (!hasCitations) {
+    confidence = p1 > 0.7 ? p1 * 0.7 : p1 * 0.4;  // Uncited claims penalized
+  } else {
+    confidence = Math.min(1, evidenceUse * 1.5 + (p1 > 0.7 ? 0.3 : 0));
+  }
+
+  const isGrounded = confidence > 0.45 && evidenceUsed;
+
+  return { confidence, grounded: isGrounded, evidence_use: evidenceUse };
+}
+```
+
+**Key Insight**: If `p1 ≈ p0`, the model's confidence didn't change when evidence was hidden → the claim is NOT grounded in evidence → FLAG as hallucination.
+
+#### 13. Format Response with Flags (format-response)
+- **Purpose**: Build final API response with hallucination data
+- **Overall Grounding Threshold**: 70% of claims must be grounded
+- **Warning Generation**: Hebrew warning for ungrounded claims
+
+#### 14. Respond with Chat (respond-chat)
+- **Headers**: CORS enabled (`Access-Control-Allow-Origin: *`)
+- **Response**: Full JSON with hallucination_check
+
+### API Response Schema
+
+```json
+{
+  "success": true,
+  "response": "לפי ההחלטה [S0], השמאי קבע...",
+  "sources": [
+    {"title": "...", "url": "...", "score": 0.92}
+  ],
+  "matchCount": 5,
+  "model": "gpt-4o",
+  "usage": {"prompt_tokens": 1234, "completion_tokens": 567},
+  "hallucination_check": {
+    "overall_grounded": true,
+    "grounded_claims": 3,
+    "total_claims": 4,
+    "grounding_ratio": 0.75,
+    "claims": [
+      {
+        "text": "השמאי קבע פיצוי של 100,000 ש\"ח",
+        "citing": ["S0"],
+        "p1": 0.92,
+        "p0": 0.23,
+        "observed_bits": 0.531,
+        "required_bits": 1.234,
+        "budget_gap": -0.703,
+        "evidence_use": 0.69,
+        "confidence": 0.88,
+        "evidence_used": true,
+        "grounded": true,
+        "warning": null
+      },
+      {
+        "text": "זה נפוץ במקרים דומים",
+        "citing": [],
+        "p1": 0.65,
+        "p0": 0.61,
+        "evidence_use": 0.04,
+        "confidence": 0.26,
+        "grounded": false,
+        "warning": "לא נמצא מקור מספק"
+      }
+    ]
+  },
+  "warning": "שים לב: 1 טענות בתשובה לא נתמכות במלואן על ידי המקורות."
+}
+```
+
+### Configuration Thresholds
+
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| Evidence use threshold | 0.15 | Minimum p1-p0 difference for cited claims |
+| Confidence threshold | 0.45 | Minimum confidence to be grounded |
+| Overall grounding | 70% | % claims that must be grounded |
+| Max claims verified | 10 | Performance limit |
+| Min claim length | 15 chars | Skip trivial sentences |
+| Verifier model | gpt-4o-mini | Fast, cheap verification |
+
+### Known Issues (from 50% success rate)
+
+1. **Merge node pairing**: The Merge node combines results by position, but async HTTP batching may cause misalignment
+2. **Logprobs extraction**: Fallback to text-based detection may be inaccurate
+3. **Hebrew tokenization**: Sentence splitting may not handle Hebrew punctuation correctly
+4. **Empty claims**: If no claims extracted, verification loop skipped
+
+### Learnings for Next Cycles
+
+- The Strawberry/Pythea algorithm is fully implemented and theoretically sound
+- The 50% success rate suggests issues with data flow, not algorithm
+- The frontend expects this exact response format - any changes must maintain compatibility
+- Confidence thresholds may need tuning based on real-world results
+- Consider adding error handling for API failures in verification nodes
+
+---
+
 ## Iteration 4 — List Current Frontend Features
 - **Date**: 2026-01-21
 - **Task**: US-P1-001 - List current frontend features
