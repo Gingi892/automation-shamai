@@ -705,10 +705,10 @@ automation-shamai/
 **So that** I can execute full indexing efficiently
 
 **Acceptance Criteria:**
-- [ ] Identify existing n8n workflows for scraping (oqihIkB7Ur9WVJZG, kTZqcClvtUspeC28)
-- [ ] Document the scraper → processor → Pinecone pipeline
-- [ ] Count current documents in Pinecone (query for stats)
-- [ ] Identify gaps: which databases have partial/no coverage
+- [x] Identify existing n8n workflows for scraping (oqihIkB7Ur9WVJZG, kTZqcClvtUspeC28)
+- [x] Document the scraper → processor → Pinecone pipeline
+- [x] Count current documents in Pinecone (query for stats)
+- [x] Identify gaps: which databases have partial/no coverage
 
 **Exploration Tasks:**
 ```bash
