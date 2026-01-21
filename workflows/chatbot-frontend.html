@@ -1075,6 +1075,194 @@
             transform: translateY(0);
         }
 
+        /* US-P4-007: Legal Disclaimer Banner */
+        .disclaimer-banner {
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+            color: #e65100;
+            padding: 10px 20px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px solid #ffcc80;
+            position: relative;
+        }
+
+        .disclaimer-banner.collapsed {
+            display: none;
+        }
+
+        .disclaimer-content {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .disclaimer-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .disclaimer-text {
+            flex: 1;
+        }
+
+        .disclaimer-toggle {
+            background: transparent;
+            border: 1px solid #e65100;
+            border-radius: 6px;
+            padding: 4px 10px;
+            color: #e65100;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .disclaimer-toggle:hover {
+            background: rgba(230, 81, 0, 0.1);
+        }
+
+        .disclaimer-expand-btn {
+            position: absolute;
+            top: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff3e0;
+            border: 1px solid #ffcc80;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            padding: 2px 12px 4px;
+            font-size: 0.7rem;
+            color: #e65100;
+            cursor: pointer;
+            display: none;
+            z-index: 10;
+        }
+
+        .disclaimer-expand-btn:hover {
+            background: #ffe0b2;
+        }
+
+        .disclaimer-expand-btn.show {
+            display: block;
+        }
+
+        /* US-P4-007: First-time Popup */
+        .disclaimer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .disclaimer-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .disclaimer-popup {
+            background: white;
+            border-radius: 16px;
+            max-width: 500px;
+            width: 90%;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: translateY(20px) scale(0.95);
+            transition: transform 0.3s ease;
+            text-align: center;
+        }
+
+        .disclaimer-overlay.visible .disclaimer-popup {
+            transform: translateY(0) scale(1);
+        }
+
+        .disclaimer-popup-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        .disclaimer-popup-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin-bottom: 20px;
+        }
+
+        .disclaimer-popup-content {
+            text-align: right;
+            margin-bottom: 25px;
+        }
+
+        .disclaimer-popup-content ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .disclaimer-popup-content li {
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            background: #f5f7fb;
+            border-radius: 10px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 0.95rem;
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .disclaimer-popup-content li:last-child {
+            margin-bottom: 0;
+        }
+
+        .disclaimer-popup-content .item-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .disclaimer-accept-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .disclaimer-accept-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .disclaimer-accept-btn:active {
+            transform: translateY(0);
+        }
+
         /* Mobile responsive */
         @media (max-width: 600px) {
             .citation-tooltip {
@@ -1092,11 +1280,79 @@
             .citation-tooltip.visible {
                 transform: translateY(0);
             }
+
+            .disclaimer-banner {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+                padding: 10px 15px;
+            }
+
+            .disclaimer-toggle {
+                align-self: flex-end;
+            }
+
+            .disclaimer-popup {
+                padding: 20px;
+                margin: 10px;
+            }
+
+            .disclaimer-popup-title {
+                font-size: 1.2rem;
+            }
+
+            .disclaimer-popup-content li {
+                font-size: 0.9rem;
+                padding: 10px 12px;
+            }
         }
     </style>
 </head>
 <body>
+    <!-- US-P4-007: First-time Disclaimer Popup -->
+    <div id="disclaimerOverlay" class="disclaimer-overlay">
+        <div class="disclaimer-popup">
+            <div class="disclaimer-popup-icon">⚖️</div>
+            <h2 class="disclaimer-popup-title">הודעה חשובה לפני השימוש</h2>
+            <div class="disclaimer-popup-content">
+                <ul>
+                    <li>
+                        <span class="item-icon">🤖</span>
+                        <span>הכלי משתמש בבינה מלאכותית לחיפוש ועיבוד מידע ממאגר החלטות שמאי מכריע.</span>
+                    </li>
+                    <li>
+                        <span class="item-icon">📋</span>
+                        <span>יש לאמת כל מידע מול המסמכים המקוריים המצורפים כמקורות.</span>
+                    </li>
+                    <li>
+                        <span class="item-icon">⚠️</span>
+                        <span>המידע מסופק לצורכי מחקר בלבד ואינו מהווה ייעוץ משפטי.</span>
+                    </li>
+                </ul>
+            </div>
+            <button class="disclaimer-accept-btn" onclick="acceptDisclaimer()">
+                <span>✓</span>
+                <span>הבנתי</span>
+            </button>
+        </div>
+    </div>
+
     <div class="chat-container">
+        <!-- US-P4-007: Sticky Disclaimer Banner -->
+        <div id="disclaimerBanner" class="disclaimer-banner">
+            <div class="disclaimer-content">
+                <span class="disclaimer-icon">⚠️</span>
+                <span class="disclaimer-text">
+                    הכלי מספק מידע לצורכי מחקר בלבד. אין להסתמך על התשובות כייעוץ משפטי. יש לאמת כל מידע מול המקורות המצוינים.
+                </span>
+            </div>
+            <button class="disclaimer-toggle" onclick="toggleDisclaimerBanner()" title="הסתר הודעה">
+                <span>✕</span>
+                <span>הסתר</span>
+            </button>
+        </div>
+        <button id="disclaimerExpandBtn" class="disclaimer-expand-btn" onclick="toggleDisclaimerBanner()">⚠️ הצג אזהרה</button>
+
         <div class="chat-header">
             <h1>צ'אטבוט שמאות מכריעה</h1>
             <p>שאל שאלות על החלטות שמאי מכריע בישראל</p>
@@ -2191,8 +2447,63 @@
             }
         });
 
-        // Focus on input when page loads
-        document.getElementById('userInput').focus();
+        // ===== US-P4-007: Disclaimer Banner Functions =====
+
+        // Check if user has already accepted the disclaimer
+        function hasAcceptedDisclaimer() {
+            return localStorage.getItem('disclaimerAccepted') === 'true';
+        }
+
+        // Accept disclaimer and close popup
+        function acceptDisclaimer() {
+            localStorage.setItem('disclaimerAccepted', 'true');
+            const overlay = document.getElementById('disclaimerOverlay');
+            overlay.classList.remove('visible');
+            document.getElementById('userInput').focus();
+        }
+
+        // Toggle disclaimer banner visibility
+        function toggleDisclaimerBanner() {
+            const banner = document.getElementById('disclaimerBanner');
+            const expandBtn = document.getElementById('disclaimerExpandBtn');
+
+            if (banner.classList.contains('collapsed')) {
+                // Show banner
+                banner.classList.remove('collapsed');
+                expandBtn.classList.remove('show');
+                localStorage.setItem('disclaimerBannerCollapsed', 'false');
+            } else {
+                // Hide banner
+                banner.classList.add('collapsed');
+                expandBtn.classList.add('show');
+                localStorage.setItem('disclaimerBannerCollapsed', 'true');
+            }
+        }
+
+        // Initialize disclaimer state on page load
+        function initDisclaimer() {
+            // Check if first-time visitor (show popup)
+            if (!hasAcceptedDisclaimer()) {
+                const overlay = document.getElementById('disclaimerOverlay');
+                overlay.classList.add('visible');
+            }
+
+            // Check if banner should be collapsed
+            if (localStorage.getItem('disclaimerBannerCollapsed') === 'true') {
+                const banner = document.getElementById('disclaimerBanner');
+                const expandBtn = document.getElementById('disclaimerExpandBtn');
+                banner.classList.add('collapsed');
+                expandBtn.classList.add('show');
+            }
+        }
+
+        // Initialize disclaimer on page load
+        initDisclaimer();
+
+        // Focus on input when page loads (only if popup not visible)
+        if (hasAcceptedDisclaimer()) {
+            document.getElementById('userInput').focus();
+        }
     </script>
 </body>
 </html>

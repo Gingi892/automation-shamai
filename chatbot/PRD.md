@@ -486,16 +486,16 @@ function showError(type) {
 **So that** users understand AI limitations
 
 **Acceptance Criteria:**
-- [ ] Sticky banner at top (collapsible):
+- [x] Sticky banner at top (collapsible):
   ```
   ⚠️ הכלי מספק מידע לצורכי מחקר בלבד. אין להסתמך על התשובות כייעוץ משפטי.
   יש לאמת כל מידע מול המקורות המצוינים.
   ```
-- [ ] First-time popup explaining:
+- [x] First-time popup explaining:
   - This is AI-assisted search
   - Always verify with original documents
   - Not legal advice
-- [ ] "הבנתי" (I understand) button to dismiss
+- [x] "הבנתי" (I understand) button to dismiss
 
 ---
 

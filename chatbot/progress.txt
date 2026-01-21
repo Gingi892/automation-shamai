@@ -2705,3 +2705,72 @@ Implemented enhanced loading state feedback in `workflows/chatbot-frontend.html`
 4. **Optional items**: PRD marked "optional" items can be skipped - estimated time indicator not needed for good UX
 
 ---
+
+## Iteration 36 — US-P4-007 Disclaimer Banner (CRITICAL FOR LEGAL)
+- **Date**: 2026-01-21
+- **Task**: US-P4-007 - Disclaimer Banner
+
+### What Was Done
+
+Implemented legal disclaimer banner and first-time popup in `workflows/chatbot-frontend.html` with:
+1. **Sticky banner at top (collapsible)** - Orange warning banner with Hebrew legal disclaimer
+2. **First-time popup** - Modal explaining AI limitations for new visitors
+3. **"הבנתי" (I understand) button** - Dismisses popup and stores acceptance in localStorage
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Sticky banner at top (collapsible) | ✅ Implemented |
+| First-time popup explaining AI limitations | ✅ Implemented |
+| "הבנתי" (I understand) button to dismiss | ✅ Implemented |
+
+### Files Modified
+
+1. **workflows/chatbot-frontend.html**
+   - Added CSS styles for `.disclaimer-banner`, `.disclaimer-content`, `.disclaimer-toggle` (collapsible banner)
+   - Added CSS styles for `.disclaimer-expand-btn` (shows when banner collapsed)
+   - Added CSS styles for `.disclaimer-overlay`, `.disclaimer-popup` (first-time popup modal)
+   - Added mobile responsive styles for disclaimer components
+   - Added HTML for disclaimer overlay popup with 3 explanation items
+   - Added HTML for sticky disclaimer banner with toggle button
+   - Added `hasAcceptedDisclaimer()` function - checks localStorage
+   - Added `acceptDisclaimer()` function - saves to localStorage and closes popup
+   - Added `toggleDisclaimerBanner()` function - toggles banner visibility with localStorage persistence
+   - Added `initDisclaimer()` function - initializes state on page load
+
+2. **chatbot/PRD.md**
+   - Marked all 3 US-P4-007 acceptance criteria as complete
+
+### Banner Content (Hebrew)
+
+```
+⚠️ הכלי מספק מידע לצורכי מחקר בלבד. אין להסתמך על התשובות כייעוץ משפטי. יש לאמת כל מידע מול המקורות המצוינים.
+```
+
+### Popup Content (Hebrew)
+
+| # | Icon | Message |
+|---|------|---------|
+| 1 | 🤖 | הכלי משתמש בבינה מלאכותית לחיפוש ועיבוד מידע ממאגר החלטות שמאי מכריע. |
+| 2 | 📋 | יש לאמת כל מידע מול המסמכים המקוריים המצורפים כמקורות. |
+| 3 | ⚠️ | המידע מסופק לצורכי מחקר בלבד ואינו מהווה ייעוץ משפטי. |
+
+### Technical Details
+
+- **localStorage keys**:
+  - `disclaimerAccepted`: Boolean string for first-time popup dismissal
+  - `disclaimerBannerCollapsed`: Boolean string for banner collapsed state
+- **Popup visibility**: Uses CSS opacity/visibility transition with transform scale effect
+- **Banner collapse**: Adds `.collapsed` class and shows expand button at top
+- **Mobile responsive**: Banner becomes column layout, popup adjusts padding/margins
+
+### Learnings for Next Cycles
+
+1. **Legal disclaimers are critical**: For legal tech tools, disclaimers must be prominent and acknowledged
+2. **localStorage for persistence**: Simple key-value storage for user preferences across sessions
+3. **Two-layer approach**: Sticky banner (always visible) + first-time popup (one-time acknowledgment)
+4. **Expand button positioning**: Use absolute positioning at top center when banner is hidden
+5. **Focus management**: Don't focus input until popup is dismissed for accessibility
+
+---
