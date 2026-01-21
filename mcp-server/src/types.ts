@@ -16,9 +16,10 @@ export interface Decision {
   appraiser: string | null;    // שם השמאי
   caseType: string | null;     // היטל השבחה, פיצויים, etc.
   decisionDate: string | null;
+  year: string | null;         // Extracted year for filtering (YYYY format)
   publishDate: string | null;
   contentHash: string;         // For change detection
-  pdfText: string | null;      // Cached extracted PDF text
+  pdfText: string | null;      // Full text or summary (max 35KB) - maps to PRD 'description' field
   indexedAt: string;
   relevanceScore?: number;     // FTS5 bm25 relevance score (only present when using text search)
 }
@@ -34,6 +35,7 @@ export interface DecisionRow {
   appraiser: string | null;
   case_type: string | null;
   decision_date: string | null;
+  year: string | null;
   publish_date: string | null;
   content_hash: string;
   pdf_text: string | null;
@@ -224,6 +226,7 @@ export function rowToDecision(row: DecisionRow, relevanceScore?: number): Decisi
     appraiser: row.appraiser,
     caseType: row.case_type,
     decisionDate: row.decision_date,
+    year: row.year,
     publishDate: row.publish_date,
     contentHash: row.content_hash,
     pdfText: row.pdf_text,

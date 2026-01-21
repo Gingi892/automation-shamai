@@ -695,3 +695,60 @@ function computeGroundingScore(p1, p0, hasCitations) {
 - Need to add scrapers for appeals_committee and appeals_board
 
 ---
+
+## Iteration 7 — US-P2-003 Pinecone Schema Implementation
+- **Date**: 2026-01-21
+- **Task**: US-P2-003 - Implement Pinecone Schema (design first)
+
+### What Was Done
+
+Implemented the PRD-specified Pinecone schema to ensure all vectors follow a consistent format with proper deduplication and filtering capabilities.
+
+### Files Modified
+
+1. **mcp-server/src/types.ts**
+   - Added `year: string | null` field to `Decision` interface
+   - Added `year: string | null` field to `DecisionRow` interface
+   - Updated `rowToDecision()` to include year mapping
+   - Updated pdfText comment to reference PRD 'description' field mapping
+
+2. **mcp-server/src/scraper.ts**
+   - Added `extractYear()` private method to extract YYYY from date strings
+   - Updated `toDecision()` method to:
+     - Extract year from decisionDate for filtering
+     - Added documentation referencing PRD US-P2-003 schema requirements
+     - Returns year field in the Decision object
+
+3. **mcp-server/src/database.ts**
+   - Added `year TEXT` column to CREATE TABLE schema
+   - Added migration: `ALTER TABLE decisions ADD COLUMN year TEXT` for existing DBs
+   - Added `idx_year` index for year-based filtering
+   - Updated `insertDecision()` to include year field
+   - Updated `insertDecisions()` batch insert to include year field
+
+### Schema Compliance Summary
+
+| PRD Requirement | Implementation | Status |
+|-----------------|----------------|--------|
+| id: `${database}-${contentHash.slice(0,12)}` | scraper.ts line 1111 | ✅ |
+| database: enum | types.ts DatabaseType | ✅ |
+| title: string | types.ts Decision | ✅ |
+| url: string | types.ts Decision | ✅ |
+| block, plot, committee, appraiser | types.ts Decision | ✅ |
+| caseType | types.ts Decision | ✅ |
+| decisionDate | types.ts Decision | ✅ |
+| year: extracted for filtering | types.ts + scraper.ts | ✅ NEW |
+| description (pdfText) | types.ts - mapped to pdfText | ✅ |
+| contentHash: deduplication | scraper.ts toDecision() | ✅ |
+| indexedAt | types.ts Decision | ✅ |
+
+### Learnings for Next Cycles
+
+- The MCP server already had most of the PRD schema implemented
+- The critical missing piece was the `year` field for filtering
+- Year extraction uses simple regex to find 4-digit year from date strings
+- Database migration uses ALTER TABLE with try/catch to handle existing DBs
+- Build validation with `npm run build` confirmed TypeScript compatibility
+- Next task: US-P2-001 Full Indexer Workflow
+
+---

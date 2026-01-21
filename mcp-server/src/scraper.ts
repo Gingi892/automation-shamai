@@ -143,8 +143,9 @@ const DEFAULT_SELECTORS: SelectorConfig = {
     ],
     pdfLink: [
       'a[href*="free-justice.openapi.gov.il"]',
+      'a[href*="SearchPredefinedApi"]',
+      'a[href*="DecisiveAppraiser"]',
       'a[href*=".pdf"]',
-      'a[href*="document"]',
       '.pdf-link a',
       '.download-link a'
     ],
@@ -234,19 +235,22 @@ const DEFAULT_SELECTORS: SelectorConfig = {
   },
   regex: {
     title: [
-      /הכרעת שמאי[^<\n]{10,200}/g,
-      /החלטת ועד[^<\n]{10,200}/g,
-      /ערעור[^<\n]{10,200}/g,
-      /<h3[^>]*>([^<]{10,300})<\/h3>/gi,
-      /<h4[^>]*>([^<]{10,300})<\/h4>/gi,
-      /title["\s]*:["\s]*["']([^"']{10,300})["']/gi
+      // Match full decision title format: הכרעת שמאי מכריע מיום DD-MM-YYYY בעניין...
+      /הכרעת שמאי מכריע מיום \d{2}-\d{2}-\d{4} בעניין[^<\n"]{10,300}/g,
+      /הכרעת שמאי מייעץ מיום \d{2}-\d{2}-\d{4} בעניין[^<\n"]{10,300}/g,
+      /הכרעת שמאי[^<\n"]{10,250}/g,
+      /החלטה בהשגה[^<\n"]{10,200}/g,
+      /ערעור מס[^<\n"]{10,200}/g,
+      /<h3[^>]*>([^<]{10,300})<\/h3>/gi
     ],
     pdfUrl: [
-      /https?:\/\/free-justice\.openapi\.gov\.il[^\s"'<>]+\.pdf/gi,
-      /https?:\/\/[^"'\s<>]*\.gov\.il[^"'\s<>]*\.pdf/gi,
-      /href=["']([^"']*\.pdf[^"']*)["']/gi
+      // Match free-justice API URLs (no .pdf extension needed)
+      /https?:\/\/free-justice\.openapi\.gov\.il\/free\/moj\/portal\/rest\/[^\s"'<>]+/gi,
+      /href=["'](https?:\/\/free-justice\.openapi\.gov\.il[^"']+)["']/gi,
+      /https?:\/\/[^"'\s<>]*\.gov\.il[^"'\s<>]*\.pdf/gi
     ],
     date: [
+      /(\d{2}-\d{2}-\d{4})/g,
       /(\d{1,2}[./-]\d{1,2}[./-]\d{4})/g,
       /(\d{4}[./-]\d{1,2}[./-]\d{1,2})/g
     ]
@@ -400,13 +404,16 @@ export class GovIlScraper {
 
   /**
    * Build the ScraperAPI URL for a gov.il page
+   * Uses ultra_premium=true which is required for gov.il (protected site)
+   * wait_for=5000 ensures Angular app has time to render content
    */
   private buildScraperUrl(targetUrl: string): string {
     const params = new URLSearchParams({
       api_key: this.apiKey,
       url: targetUrl,
       render: this.render.toString(),
-      premium: this.premium.toString()
+      ultra_premium: 'true',  // Required for gov.il - premium alone fails
+      wait_for: '5000'        // Wait 5 seconds for Angular to render
     });
     return `https://api.scraperapi.com?${params.toString()}`;
   }
@@ -794,8 +801,11 @@ export class GovIlScraper {
         for (const match of matches) {
           // Handle href="..." captures
           const urlMatch = match.match(/href=["']([^"']+)["']/i);
-          const url = urlMatch ? urlMatch[1] : match;
-          if (url.includes('.pdf') || url.includes('gov.il')) {
+          let url = urlMatch ? urlMatch[1] : match;
+          // Clean up URL - remove trailing quotes or angle brackets
+          url = url.replace(/["'<>].*$/, '');
+          // Accept free-justice.openapi.gov.il URLs (no .pdf needed)
+          if (url.includes('free-justice.openapi.gov.il') || url.includes('.pdf')) {
             pdfUrls.push(url.startsWith('http') ? url : `https:${url}`);
           }
         }
@@ -1074,12 +1084,34 @@ export class GovIlScraper {
   }
 
   /**
+   * Extract year from a date string in DD-MM-YYYY or similar format
+   */
+  private extractYear(dateStr: string | null): string | null {
+    if (!dateStr) return null;
+
+    // Try to extract 4-digit year from various date formats
+    const yearMatch = dateStr.match(/(\d{4})/);
+    if (yearMatch) {
+      return yearMatch[1];
+    }
+
+    return null;
+  }
+
+  /**
    * Convert parsed decision to database Decision object
+   * Follows PRD US-P2-003 Pinecone Schema:
+   * - id: unique, deterministic format: ${database}-${contentHash.slice(0,12)}
+   * - contentHash: prevents duplicates
+   * - year: extracted from decisionDate for filtering
    */
   toDecision(parsed: ParsedDecision, database: DatabaseType): Omit<Decision, 'indexedAt'> {
     const contentForHash = `${parsed.title}|${parsed.url || ''}|${database}`;
     const contentHash = crypto.createHash('md5').update(contentForHash).digest('hex');
     const id = `${database}-${contentHash.substring(0, 12)}`;
+
+    // Extract year from decisionDate for year-based filtering (PRD requirement)
+    const year = this.extractYear(parsed.decisionDate);
 
     return {
       id,
@@ -1092,6 +1124,7 @@ export class GovIlScraper {
       appraiser: parsed.appraiser,
       caseType: parsed.caseType,
       decisionDate: parsed.decisionDate,
+      year,
       publishDate: parsed.publishDate,
       contentHash,
       pdfText: null  // PDF text is extracted separately, not from HTML scraping

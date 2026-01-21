@@ -192,10 +192,10 @@ interface DecisionMetadata {
 ```
 
 **Acceptance Criteria:**
-- [ ] All vectors follow this schema
-- [ ] id is unique and deterministic
-- [ ] contentHash prevents duplicates
-- [ ] year field enables year-based filtering
+- [x] All vectors follow this schema
+- [x] id is unique and deterministic
+- [x] contentHash prevents duplicates
+- [x] year field enables year-based filtering
 
 ---
 

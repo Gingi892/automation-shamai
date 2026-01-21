@@ -66,6 +66,7 @@ export class DecisionDatabase {
     if (!this.db) throw new Error('Database not initialized');
 
     // Main decisions table
+    // PRD US-P2-003 compliant schema with year field for filtering
     this.db.run(`
       CREATE TABLE IF NOT EXISTS decisions (
         id TEXT PRIMARY KEY,
@@ -78,12 +79,20 @@ export class DecisionDatabase {
         appraiser TEXT,
         case_type TEXT,
         decision_date TEXT,
+        year TEXT,
         publish_date TEXT,
         content_hash TEXT NOT NULL,
         pdf_text TEXT,
         indexed_at TEXT DEFAULT (datetime('now'))
       )
     `);
+
+    // Migrate existing tables: add year column if missing
+    try {
+      this.db.run(`ALTER TABLE decisions ADD COLUMN year TEXT`);
+    } catch (e) {
+      // Column already exists, ignore error
+    }
 
     // Create indexes
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_database ON decisions(database)`);
@@ -92,6 +101,7 @@ export class DecisionDatabase {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_appraiser ON decisions(appraiser)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_case_type ON decisions(case_type)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_decision_date ON decisions(decision_date)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_year ON decisions(year)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_content_hash ON decisions(content_hash)`);
 
     // Metadata table for tracking
@@ -138,8 +148,8 @@ export class DecisionDatabase {
     try {
       this.db.run(`
         INSERT OR REPLACE INTO decisions
-        (id, database, title, url, block, plot, committee, appraiser, case_type, decision_date, publish_date, content_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, database, title, url, block, plot, committee, appraiser, case_type, decision_date, year, publish_date, content_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         decision.id,
         decision.database,
@@ -151,6 +161,7 @@ export class DecisionDatabase {
         decision.appraiser,
         decision.caseType,
         decision.decisionDate,
+        decision.year,
         decision.publishDate,
         decision.contentHash
       ]);
@@ -180,8 +191,8 @@ export class DecisionDatabase {
         if (existing.length === 0 || existing[0].values.length === 0) {
           this.db.run(`
             INSERT INTO decisions
-            (id, database, title, url, block, plot, committee, appraiser, case_type, decision_date, publish_date, content_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, database, title, url, block, plot, committee, appraiser, case_type, decision_date, year, publish_date, content_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `, [
             decision.id,
             decision.database,
@@ -193,6 +204,7 @@ export class DecisionDatabase {
             decision.appraiser,
             decision.caseType,
             decision.decisionDate,
+            decision.year,
             decision.publishDate,
             decision.contentHash
           ]);
