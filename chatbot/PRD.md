@@ -255,7 +255,7 @@ interface DecisionMetadata {
 - [x] Detect analytical intent from query
 - [x] For counting: use Pinecone filter queries, not AI generation
 - [x] For statistics: aggregate results before sending to AI
-- [ ] Return structured data for charts when appropriate
+- [x] Return structured data for charts when appropriate
 - [ ] AI synthesizes the data into Hebrew narrative
 
 ---

@@ -1438,3 +1438,85 @@ Parse Query Filters → Check Statistics Query
 - n8n updateNode requires `updates` object, not direct parameters
 
 ---
+
+## Iteration 17 — US-P3-003 Return Structured Data for Charts
+- **Date**: 2026-01-21
+- **Task**: US-P3-003 - Return structured data for charts when appropriate
+
+### What Was Done
+
+Enhanced the `Build Statistics Response` node (`build-statistics-response`) in workflow `McOa9j15PRy8AZ8v` to return properly structured chart data for frontend visualization.
+
+### Changes to Build Statistics Response Node
+
+Added comprehensive chart configuration output:
+
+1. **chartData** - Main chart configuration object with:
+   - `type`: Chart type selection (`bar`, `pie`, `line`) based on data characteristics
+   - `title`: Hebrew title for the chart
+   - `labels`: Array of labels for chart axes
+   - `datasets`: Array with data values and colors
+   - `options`: Chart.js compatible options (indexAxis for RTL, plugins config)
+
+2. **trendChartData** - Additional line chart for year-based distributions showing trends over time
+
+3. **hasChartData** - Boolean flag for frontend to detect chart availability
+
+### Chart Type Selection Logic
+
+| Query Type | Chart Type | Condition |
+|------------|------------|-----------|
+| top | pie | ≤5 groups |
+| top | bar | >5 groups |
+| distribution | pie | ≤5 groups |
+| distribution | bar | >5 groups |
+| comparison | bar | Always (2 bars) |
+| year distribution | line | Additional trend chart |
+
+### Response Schema Enhancement
+
+```javascript
+{
+  success: true,
+  response: "Hebrew text response...",
+  sources: [...],
+  statistics: { /* existing stats object */ },
+  isStatisticsResponse: true,
+  // NEW: Structured chart data
+  chartData: {
+    type: 'bar' | 'pie' | 'line',
+    title: 'Hebrew chart title',
+    labels: ['label1', 'label2', ...],
+    datasets: [{
+      label: 'מספר החלטות',
+      data: [10, 20, ...],
+      backgroundColor: ['#4e79a7', '#f28e2c', ...]
+    }],
+    options: {
+      indexAxis: 'y',  // RTL-friendly horizontal bars
+      responsive: true,
+      plugins: { legend: {...}, title: {...} }
+    }
+  },
+  trendChartData: { /* line chart for year trends */ },
+  hasChartData: true
+}
+```
+
+### Color Palette
+
+Uses Tableau 10 colors for accessibility and clarity:
+- #4e79a7 (blue), #f28e2c (orange), #e15759 (red), #76b7b2 (teal)
+- #59a14f (green), #edc949 (yellow), #af7aa1 (purple), #ff9da7 (pink)
+- #9c755f (brown), #bab0ab (gray)
+
+### Learnings for Next Cycles
+
+- Chart.js `indexAxis: 'y'` creates horizontal bar charts which work better with Hebrew RTL labels
+- Pie charts work well for ≤5 categories, bar charts for more
+- Year distributions benefit from additional line chart showing trend
+- Comparison queries need special handling with `comparison` object in chartConfig
+- Frontend can check `hasChartData` before attempting to render chart
+- Validation errors for Code nodes returning objects (not arrays) are false positives in n8n
+
+---
