@@ -85,7 +85,7 @@ OpenAI:
 **Acceptance Criteria:**
 - [x] Map existing n8n workflows (IDs: oqihIkB7Ur9WVJZG, kTZqcClvtUspeC28, McOa9j15PRy8AZ8v)
 - [x] Document current Pinecone schema and data
-- [ ] Identify what documents are already indexed
+- [x] Identify what documents are already indexed
 - [ ] List current frontend features
 - [ ] Document current hallucination detection flow
 

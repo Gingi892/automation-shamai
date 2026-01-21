@@ -209,3 +209,55 @@ Based on workflow analysis:
 - contentHash is generated in scraper's `toDecision()` method - can reuse
 
 ---
+
+## Iteration 3 — Identify What Documents Are Already Indexed
+- **Date**: 2026-01-21
+- **Task**: US-P1-001 - Identify what documents are already indexed
+
+### Pinecone Index Stats (Direct API Query)
+
+| Metric | Value |
+|--------|-------|
+| Namespace | gov-il-decisions |
+| Total Vector Count | **73 vectors** |
+| Dimension | 1024 |
+| Index Fullness | 0% |
+
+### Critical Finding: Very Low Coverage
+
+The Pinecone index contains only **73 vectors** in the `gov-il-decisions` namespace.
+
+Based on PRD targets:
+- **Target**: ~20,000+ decisions across 3 databases
+- **Current**: 73 vectors
+- **Coverage**: ~0.4% (73 / 20,000)
+
+### Vector Distribution Analysis
+
+From the Document Processor workflow (kTZqcClvtUspeC28):
+- Documents are split into ~2000 char chunks (multiple vectors per document)
+- This means actual unique documents indexed is likely ~10-20 (assuming 3-7 vectors per document)
+- Only `decisive_appraiser` database is being indexed
+
+### Databases Coverage
+
+| Database | Hebrew Name | Estimated Docs | Indexed | Coverage |
+|----------|-------------|----------------|---------|----------|
+| decisive_appraiser | שמאי מכריע | ~10,000 | ~10-20 | <0.2% |
+| appeals_committee | ועדת השגות | ~5,000 | 0 | 0% |
+| appeals_board | ועדת ערעורים | ~5,000 | 0 | 0% |
+
+### Root Causes
+
+1. **Scraper workflow issue**: Uses `premium=true` instead of required `ultra_premium=true`
+2. **Limited execution**: Only 10 executions of scraper workflow with 90% success rate
+3. **No appeals data**: Only decisive_appraiser is connected
+4. **Chunking reduces unique docs**: Multiple vectors per document reduces actual coverage
+
+### Learnings for Next Cycles
+- Pinecone has barely any data - full reindex required
+- Fix ScraperAPI settings before running full index
+- Must connect appeals_committee and appeals_board databases
+- PRD requirement "one doc = one vector" not yet implemented
+
+---
