@@ -3536,3 +3536,70 @@ Results: 10 passed, 0 failed, 0 skipped
 7. **Process.exit removal**: Removed process.exit(1) from all test functions to allow full test suite to run
 
 ---
+
+## Iteration 43 — US-P5-003 test_error_handling()
+- **Date**: 2026-01-21
+- **Task**: US-P5-003 - E2E test for error handling (invalid input graceful fail)
+
+### What Was Done
+
+Implemented comprehensive error handling E2E test for the Legal Chatbot. The test verifies that the chatbot gracefully handles various types of invalid inputs without crashing.
+
+### Files Modified
+
+1. **chatbot/tests/test_e2e.ts**
+   - Added `test_error_handling()` function with 10 test cases:
+     1. Empty message - server should respond without crashing
+     2. Whitespace-only message - handles leading/trailing whitespace
+     3. Very long message (18,000+ chars) - processes or returns appropriate error
+     4. Special characters/injection attempts - prevents XSS, SQL injection, n8n expression injection
+     5. Unicode edge cases - handles emoji, RTL override, Japanese, BOM, null chars
+     6. Missing 'message' field - rejects or handles malformed requests
+     7. Invalid JSON body - returns appropriate error status
+     8. Conversation history edge cases - handles empty/invalid roles
+     9. Numeric message (type coercion) - handles number instead of string
+     10. Array message (wrong type) - handles array instead of string
+   - Updated `runTests()` to include test_error_handling
+
+2. **chatbot/PRD.md**
+   - Marked `test_error_handling()` as complete [x]
+   - Updated Phase 5 implementation order to show E2E tests complete [x]
+
+### Test Cases
+
+| Test Case | Description | Acceptance |
+|-----------|-------------|------------|
+| Empty message | `message: ""` | Server responds (success or error) |
+| Whitespace-only | `message: "   \n\t  "` | Server handles gracefully |
+| Long message | 18,000+ chars | Processes, truncates, or returns error |
+| Injection attempts | XSS, SQL, n8n expressions | No leaked data or execution |
+| Unicode edge cases | Emoji, RTL, Japanese, null | Server handles without crashing |
+| Missing field | `{ query: "test" }` | Accepts or rejects appropriately |
+| Invalid JSON | `'{invalid json'` | Returns 4xx error |
+| Invalid history | Empty/invalid roles | Handles gracefully |
+| Numeric message | `message: 12345` | Coerces or rejects |
+| Array message | `message: ['מה']` | Handles type mismatch |
+
+### Injection Prevention Tests
+
+```typescript
+const maliciousInputs = [
+  '{{$env.OPENAI_API_KEY}}',  // n8n expression
+  '<script>alert("xss")</script>',  // XSS
+  '"; DROP TABLE decisions; --',  // SQL injection
+  '${process.env.SECRET}',  // Template literal
+  '\x00\x01\x02',  // Null/control chars
+];
+```
+
+### Learnings for Next Cycles
+
+1. **Graceful degradation**: Tests accept both success and error responses - the key is server doesn't crash
+2. **Network resilience**: Tests handle `response === null` for network issues (skipped tests)
+3. **Type coercion**: n8n/JavaScript may auto-coerce numeric messages to strings
+4. **Injection safety**: Check response doesn't contain injected values, not just doesn't execute them
+5. **Unicode handling**: Hebrew + emoji + RTL override + BOM all must be handled
+6. **Timeout considerations**: Long message test uses extended timeout (90s)
+7. **Running all E2E tests**: `cd mcp-server && node --import tsx ../chatbot/tests/test_e2e.ts`
+
+---

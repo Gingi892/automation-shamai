@@ -583,7 +583,7 @@ function showError(type) {
 - [x] `test_analytical_query()` - "כמה החלטות בתל אביב?"
 - [x] `test_citation_format()` - Response contains [S0]
 - [x] `test_hallucination_detection()` - Grounding badge present
-- [ ] `test_error_handling()` - Invalid input graceful fail
+- [x] `test_error_handling()` - Invalid input graceful fail
 
 ---
 
@@ -624,7 +624,7 @@ Phase 4: Frontend (EXISTING + NEW ITEMS)
 Phase 5: Testing
   └─► US-P5-001: Scraper tests [x]
   └─► US-P5-002: Pinecone tests (partial)
-  └─► US-P5-003: E2E tests [ ]
+  └─► US-P5-003: E2E tests [x]
 ```
 
 ---
