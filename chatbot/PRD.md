@@ -120,7 +120,7 @@ OpenAI:
 - [x] Creates embeddings via OpenAI text-embedding-3-small (1024 dimensions)
 - [x] Upserts to Pinecone with metadata
 - [x] **CRITICAL: One document = one vector** (no splitting)
-- [ ] Progress tracking with resume capability
+- [x] Progress tracking with resume capability
 - [x] Rate limiting: 1 request/second to ScraperAPI
 
 **Implementation Notes:**

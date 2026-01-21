@@ -827,3 +827,85 @@ Created n8n workflow "Full Indexer - All Databases" that:
 - ScraperAPI URL is built in Code node to ensure proper encoding
 
 ---
+
+## Iteration 9 — US-P2-001 Progress Tracking with Resume Capability
+- **Date**: 2026-01-21
+- **Task**: US-P2-001 - Progress tracking with resume capability
+
+### What Was Done
+
+Implemented progress tracking with resume capability for the Full Indexer workflow using n8n's staticData feature.
+
+### New Nodes Added
+
+1. **Load Progress State** (load-progress)
+   - Position: [0, 300] - Between triggers and Set Config
+   - Purpose: Load saved progress from staticData on workflow start
+   - Handles `resume=true` and `restart=true` webhook parameters
+   - Returns startSkip, startDatabase, processedIds for Set Config
+
+2. **Save Progress State** (save-progress)
+   - Position: [1700, 200] - After Rate Limit Wait, before Update Skip
+   - Purpose: Save current progress to staticData after each page
+   - Stores: database, lastSkip, totalProcessed, processedIds (last 5000), timestamp
+
+3. **Mark Indexing Complete** (mark-complete)
+   - Position: [2500, 400] - After Final Summary
+   - Purpose: Update staticData to mark indexing as complete
+   - Sets status='completed' and completedAt timestamp
+
+### Updated Nodes
+
+- **Set Config**: Now reads startSkip, startDatabase, processedIds from Load Progress State
+  - Added `processedIds` and `isResume` fields
+
+### Connection Flow
+
+```
+Triggers → Load Progress State → Set Config → ... → Rate Limit Wait → Save Progress State → Update Skip → Loop
+                                                                                                     ↓
+Final Summary → Mark Indexing Complete
+```
+
+### API Usage
+
+```bash
+# Fresh start (default)
+POST /full-indexer
+{"database": "decisive_appraiser"}
+
+# Resume from last saved state
+POST /full-indexer
+{"resume": true}
+
+# Force restart (clear progress)
+POST /full-indexer
+{"restart": true, "database": "appeals_committee"}
+```
+
+### staticData Schema
+
+```javascript
+{
+  indexerProgress: {
+    database: "decisive_appraiser",
+    lastSkip: 150,
+    totalProcessed: 150,
+    processedIds: ["decisive_appraiser-abc123...", ...], // Last 5000 IDs
+    lastUpdated: "2026-01-21T12:00:00.000Z",
+    status: "in_progress" | "completed",
+    completedAt: "..." // Only when completed
+  }
+}
+```
+
+### Learnings for Next Cycles
+
+- n8n staticData is accessed via `$getWorkflowStaticData('global')` in Code nodes
+- staticData persists across workflow executions - ideal for progress tracking
+- Keep processedIds limited (5000) to prevent memory issues with large datasets
+- addConnection/removeConnection don't require sourceOutput/targetInput if using defaults
+- updateNode requires `nodeId` parameter, not `name` parameter with quotes
+- Workflow validation reports "cycle" as error but pagination loops are intentional
+
+---
