@@ -1023,6 +1023,28 @@
             color: #666;
         }
 
+        /* US-P4-009: Clear History Button */
+        .clear-history-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #f5f5f5;
+            color: #666;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .clear-history-btn:hover {
+            background: #ffebee;
+            color: #c62828;
+            border-color: #ef9a9a;
+        }
+
         .error-message {
             background: #ffebee;
             color: #c62828;
@@ -1385,6 +1407,10 @@
             <input type="text" id="webhookUrl" class="config-input"
                    placeholder="https://your-n8n-instance.com/webhook/chat"
                    value="">
+            <!-- US-P4-009: Clear History Button -->
+            <button class="clear-history-btn" onclick="clearConversationHistory()" title="נקה היסטוריית שיחה">
+                🗑️ נקה היסטוריה
+            </button>
         </div>
 
         <div class="chat-messages" id="chatMessages">
@@ -1423,6 +1449,104 @@
         let isLoading = false;
         let abortController = null;
         let lastUserMessages = []; // Store recent user messages for Arrow Up editing
+
+        // ===== US-P4-009: Message History & Export =====
+        const STORAGE_KEY = 'chatbot_conversation_history';
+        const MAX_STORED_MESSAGES = 100; // Limit to prevent localStorage overflow
+
+        // Save conversation to localStorage
+        function saveConversationToStorage() {
+            try {
+                const dataToSave = {
+                    conversationHistory: conversationHistory.slice(-MAX_STORED_MESSAGES),
+                    lastUserMessages: lastUserMessages,
+                    savedAt: new Date().toISOString()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+            } catch (e) {
+                console.warn('Failed to save conversation to localStorage:', e);
+            }
+        }
+
+        // Load conversation from localStorage
+        function loadConversationFromStorage() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (!saved) return null;
+
+                const data = JSON.parse(saved);
+                return data;
+            } catch (e) {
+                console.warn('Failed to load conversation from localStorage:', e);
+                return null;
+            }
+        }
+
+        // Restore conversation history on page load
+        function restoreConversation() {
+            const savedData = loadConversationFromStorage();
+            if (!savedData || !savedData.conversationHistory || savedData.conversationHistory.length === 0) {
+                return;
+            }
+
+            // Restore state
+            conversationHistory = savedData.conversationHistory;
+            lastUserMessages = savedData.lastUserMessages || [];
+
+            // Clear the default welcome message before restoring
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.innerHTML = '';
+
+            // Restore messages to UI
+            conversationHistory.forEach((msg, index) => {
+                // For assistant messages, we don't have sources/hallucination data after reload
+                // Show them as plain messages
+                if (msg.role === 'user') {
+                    addMessage(msg.content, 'user');
+                } else if (msg.role === 'assistant') {
+                    // Restore assistant messages without sources (they weren't stored)
+                    addMessage(msg.content, 'assistant', [], null, null, null, null);
+                }
+            });
+
+            // Scroll to bottom after restoration
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Clear conversation history from storage and UI
+        function clearConversationHistory() {
+            if (!confirm('האם אתה בטוח שברצונך למחוק את כל ההיסטוריה?')) {
+                return;
+            }
+
+            conversationHistory = [];
+            lastUserMessages = [];
+            currentSources = [];
+
+            // Clear localStorage
+            localStorage.removeItem(STORAGE_KEY);
+
+            // Clear any chart instances
+            Object.keys(chartInstances).forEach(key => {
+                if (chartInstances[key]) {
+                    chartInstances[key].destroy();
+                    delete chartInstances[key];
+                }
+            });
+
+            // Clear UI and show fresh welcome message
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-bubble">
+                        שלום! אני העוזר שלך בנושא שמאות מכריעה.
+                        אני יכול לעזור לך למצוא מידע על החלטות שמאי מכריע, להסביר מושגים, ולספק מידע רלוונטי מהמאגר.
+
+איך אוכל לעזור לך היום?
+                    </div>
+                </div>
+            `;
+        }
 
         // Handle keyboard shortcuts in the input textarea
         function handleKeyDown(event) {
@@ -2450,6 +2574,8 @@
 
             addMessage(message, 'user');
             conversationHistory.push({ role: 'user', content: message });
+            // US-P4-009: Save conversation after user message
+            saveConversationToStorage();
 
             input.value = '';
             input.style.height = 'auto'; // Reset textarea height
@@ -2512,6 +2638,8 @@
                         data.trendChartData || null
                     );
                     conversationHistory.push({ role: 'assistant', content: data.response });
+                    // US-P4-009: Save conversation after assistant response
+                    saveConversationToStorage();
                 } else {
                     // Empty or error response from API
                     showError(null, 'empty');
@@ -2601,6 +2729,9 @@
 
         // Initialize disclaimer on page load
         initDisclaimer();
+
+        // US-P4-009: Restore conversation from localStorage on page load
+        restoreConversation();
 
         // Focus on input when page loads (only if popup not visible)
         if (hasAcceptedDisclaimer()) {

@@ -519,11 +519,11 @@ function showError(type) {
 **So that** I can reference it later
 
 **Acceptance Criteria:**
-- [ ] Local storage saves conversation
+- [x] Local storage saves conversation
 - [ ] Export as PDF button
 - [ ] Export as plain text button
-- [ ] Clear history button with confirmation
-- [ ] Session persists across browser refresh
+- [x] Clear history button with confirmation
+- [x] Session persists across browser refresh
 
 ---
 

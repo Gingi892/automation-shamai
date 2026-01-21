@@ -2841,3 +2841,77 @@ Implemented keyboard shortcuts for the chatbot frontend to improve power user ex
 7. **Hebrew keyboard hint**: Use kbd tags with Hebrew descriptions for localization
 
 ---
+
+## Iteration 33 — US-P4-009 Local Storage Saves Conversation
+- **Date**: 2026-01-21
+- **Task**: US-P4-009 - Message History & Export (first 3 acceptance criteria)
+
+### What Was Done
+
+Implemented local storage persistence for conversation history in `workflows/chatbot-frontend.html` with:
+1. **Local storage saves conversation** - Conversations saved after each message (user and assistant)
+2. **Session persists across browser refresh** - Restored on page load
+3. **Clear history button with confirmation** - Button in config panel with Hebrew confirmation dialog
+
+### Implementation Details
+
+1. **Storage Functions**
+   - `saveConversationToStorage()` - Saves conversationHistory and lastUserMessages to localStorage
+   - `loadConversationFromStorage()` - Loads saved data from localStorage
+   - `restoreConversation()` - Restores UI on page load, clears welcome message if history exists
+   - `clearConversationHistory()` - Clears storage, resets state, shows fresh welcome message
+
+2. **localStorage Schema**
+   ```javascript
+   {
+     conversationHistory: [{role: 'user'|'assistant', content: '...'}],
+     lastUserMessages: ['...'], // For Arrow Up editing
+     savedAt: 'ISO date string'
+   }
+   ```
+
+3. **Integration Points**
+   - Save after user message in `sendMessage()`
+   - Save after assistant response in `sendMessage()`
+   - Restore on page load (after initDisclaimer)
+   - Clear button in config panel
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Local storage saves conversation | ✅ Complete |
+| Export as PDF button | ❌ Pending (not in this iteration) |
+| Export as plain text button | ❌ Pending (not in this iteration) |
+| Clear history button with confirmation | ✅ Complete |
+| Session persists across browser refresh | ✅ Complete |
+
+### Files Modified
+
+1. **workflows/chatbot-frontend.html**
+   - Lines 1019-1046: Added `.clear-history-btn` CSS styles
+   - Lines 1410-1413: Added clear history button in config panel
+   - Lines 1469-1538: Added storage functions (save, load, restore, clear)
+   - Lines 2560-2561: Save after user message
+   - Lines 2620-2621: Save after assistant response
+   - Lines 2733-2734: Call restoreConversation() on page load
+
+2. **chatbot/PRD.md** - Marked 3 of 5 US-P4-009 items as complete
+
+### Technical Details
+
+- **Storage key**: `chatbot_conversation_history`
+- **Max messages**: Limited to 100 to prevent localStorage overflow (~5MB limit)
+- **Restored without sources**: Sources/hallucination data not stored, only text content
+- **Welcome message handling**: Cleared on restore, shown fresh after clear
+
+### Learnings for Next Cycles
+
+1. **localStorage limits**: ~5MB limit requires message count cap (100 max)
+2. **Sources not persisted**: Complex source/chart objects not stored, only text content
+3. **Welcome message logic**: Must clear default HTML welcome when restoring history
+4. **Confirmation pattern**: Use confirm() for destructive actions with Hebrew text
+5. **Try-catch for localStorage**: Storage can fail (private browsing, full storage)
+6. **Initialization order**: Restore after DOM ready but before focus handling
+
+---
