@@ -1064,7 +1064,8 @@ async function handleListCommittees(params: { limit?: number }): Promise<MCPTool
   const dbError = checkDatabaseAvailable();
   if (dbError) return dbError;
 
-  const committees = db!.getDistinctValues('committee', params.limit || 100);
+  // US-005: Returns committees with decision counts, sorted alphabetically
+  const committees = db!.getDistinctValuesWithCounts('committee', params.limit || 100);
 
   return {
     content: [{

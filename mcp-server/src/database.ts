@@ -279,6 +279,35 @@ export class DecisionDatabase {
   }
 
   /**
+   * Get distinct values for a column with counts
+   * US-005: Returns committee/appraiser names with decision counts, sorted alphabetically
+   */
+  getDistinctValuesWithCounts(column: string, limit: number = 100): Array<{ name: string; count: number }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Validate column name to prevent SQL injection
+    const allowedColumns = ['committee', 'appraiser', 'case_type', 'block'];
+    if (!allowedColumns.includes(column)) {
+      throw new Error(`Invalid column: ${column}`);
+    }
+
+    const result = this.db.exec(
+      `SELECT ${column}, COUNT(*) as count FROM decisions
+       WHERE ${column} IS NOT NULL AND ${column} != ''
+       GROUP BY ${column}
+       ORDER BY ${column}
+       LIMIT ?`,
+      [limit]
+    );
+
+    if (result.length === 0) return [];
+    return result[0].values.map(v => ({
+      name: String(v[0]),
+      count: Number(v[1])
+    }));
+  }
+
+  /**
    * Search decisions with filtering
    */
   search(params: SearchParams): SearchResult {

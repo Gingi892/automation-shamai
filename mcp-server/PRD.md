@@ -155,9 +155,9 @@ const scraperUrl = buildScraperUrl(pdfUrl);
 **So that** users can see which areas have decisions
 
 **Acceptance Criteria:**
-- [ ] MCP tool `list_committees`
-- [ ] Returns all unique committee names with decision counts
-- [ ] Sorted alphabetically
+- [x] MCP tool `list_committees`
+- [x] Returns all unique committee names with decision counts
+- [x] Sorted alphabetically
 
 ---
 

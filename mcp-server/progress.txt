@@ -92,3 +92,16 @@
   - Used SQL GROUP BY with ORDER BY for efficient aggregations
   - Extended stats type defined inline to avoid touching types.ts
 ---
+
+## Iteration 5 — US-005: List Committees (IMPLEMENTED)
+- **What was done:** Updated `list_committees` to return decision counts with each committee
+- **Files modified:**
+  - `src/database.ts` - Added `getDistinctValuesWithCounts()` method that returns `{name, count}` objects sorted alphabetically
+  - `src/index.ts` - Updated `handleListCommittees()` to use new method
+- **Technical notes:**
+  - Uses GROUP BY with ORDER BY for alphabetical sorting
+  - Returns array of `{name: string, count: number}` objects
+  - TypeScript type check passes
+- **Learnings for next cycles:**
+  - Added new method instead of modifying existing `getDistinctValues` for backwards compatibility
+---
