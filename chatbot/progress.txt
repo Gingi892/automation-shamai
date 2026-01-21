@@ -4215,3 +4215,66 @@ Tested chatbot endpoint with query "מה זה היטל השבחה?" and confirme
 
 4. **n8n partial update**: Use `n8n_update_partial_workflow` with `updateNode` operation to surgically fix individual nodes without affecting the rest of the workflow structure.
 
+---
+
+## Iteration 34 — US-P7-002 Add Source Deduplication to RAG Pipeline
+- **Date**: 2026-01-21
+- **Task**: US-P7-002 - Add source deduplication to RAG pipeline
+
+### What Was Done
+
+Implemented URL-based deduplication in the `Build RAG Context` node (id: `build-context`) of workflow `McOa9j15PRy8AZ8v`. This prevents showing duplicate document chunks from the same source.
+
+### Problem
+
+Pinecone returns multiple chunks from the same document when documents are split into pages. This caused:
+- All 5 search results being from the same document
+- No diverse sources shown to users
+- Wasted context window on duplicate content
+
+### Solution
+
+Added deduplication logic before processing matches:
+
+```javascript
+// Deduplicate sources by URL
+const seenUrls = new Set();
+const uniqueMatches = [];
+
+for (const match of matches) {
+  const url = match.metadata?.url || '';
+  if (!url || !seenUrls.has(url)) {
+    if (url) seenUrls.add(url);
+    uniqueMatches.push(match);
+  }
+  if (uniqueMatches.length >= 5) break; // Max 5 unique sources
+}
+```
+
+### Key Changes to Build RAG Context Node
+
+1. **Deduplication logic**: Uses Set to track seen URLs, keeps first (highest score) chunk per document
+2. **uniqueSourceCount field**: Added to response to distinguish from `matchCount`
+3. **Enhanced source metadata**: Added `sourceId`, `databaseSource`, `databaseLabel`, `decisionDate` to `relevantDocs` array
+4. **Database labels**: Added Hebrew labels mapping for all 3 databases
+
+### Test Results
+
+- Query: `"מצא החלטה בגוש 6573"`
+  - Before: 5 identical sources (same URL)
+  - After: `matchCount: 5`, `sources: 1` (deduplicated)
+  - Response includes new metadata fields ✅
+
+### Files Modified
+
+1. **n8n Workflow McOa9j15PRy8AZ8v** - Updated `Build RAG Context` node via `n8n_update_partial_workflow`
+2. **chatbot/PRD.md** - Marked all US-P7-002 acceptance criteria as complete
+
+### Learnings for Next Cycles
+
+1. **Deduplication must be early**: Apply deduplication BEFORE mapping matches to rawDocuments to ensure consistent indexing
+2. **Handle empty URLs**: Documents without URLs should still be included (first condition: `!url`)
+3. **Highest score preserved**: Since Pinecone returns matches sorted by score, first occurrence is always highest-scored chunk
+4. **Validation false positives**: Code nodes returning single objects (not arrays) show validation errors but work correctly at runtime
+5. **matchCount vs uniqueSourceCount**: Expose both so frontend can show "Found 5 chunks from 2 unique documents" if desired
+

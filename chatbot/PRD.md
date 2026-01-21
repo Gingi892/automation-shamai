@@ -848,10 +848,10 @@ return {
 **Root Cause:** Pinecone returns multiple chunks from same document
 
 **Acceptance Criteria:**
-- [ ] Modify `Build RAG Context` node to deduplicate by source URL
-- [ ] Keep only first (highest score) chunk per unique document
-- [ ] Limit to 5 UNIQUE documents
-- [ ] Test: Query returns diverse sources
+- [x] Modify `Build RAG Context` node to deduplicate by source URL
+- [x] Keep only first (highest score) chunk per unique document
+- [x] Limit to 5 UNIQUE documents
+- [x] Test: Query returns diverse sources
 
 **Fix Location:** `Build RAG Context` node in workflow McOa9j15PRy8AZ8v
 
