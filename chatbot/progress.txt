@@ -2260,3 +2260,65 @@ The test validates these critical settings that were learned through painful deb
 5. **Running the tests**: Use `cd mcp-server && node --import tsx ../chatbot/tests/test_scraper.ts`
 
 ---
+
+## Iteration 30 — US-P5-002 test_upsert_single_document()
+- **Date**: 2026-01-21
+- **Task**: US-P5-002 - Integration Tests - Pinecone: test_upsert_single_document()
+
+### What Was Done
+
+Created the first Pinecone integration test for basic upsert operations.
+
+### Files Created
+
+1. **chatbot/tests/test_pinecone.ts**
+   - Created new test file for Pinecone integration tests
+   - Defined `PineconeVector` and `PineconeMetadata` interfaces matching PRD US-P2-003 schema
+   - Implemented helper functions:
+     - `generateContentHash()` - SHA256 hash for deduplication
+     - `buildVectorId()` - PRD format: `{database}-{contentHash.slice(0,12)}`
+     - `buildUpsertRequest()` - Constructs upsert API request
+     - `validateVector()` - Validates vector against PRD schema
+     - `buildPineconeVector()` - Builds complete vector from document data
+     - `generateMockEmbedding()` - Generates 1024-dimension test vectors
+   - Added 8 test cases:
+     1. Basic upsert with minimal required fields
+     2. Vector ID follows PRD format
+     3. All required metadata fields present
+     4. Upsert response structure correct
+     5. Description truncated to 35KB limit
+     6. Database prefixes produce unique IDs
+     7. indexedAt timestamp is set correctly
+     8. Wrong dimension validation works
+
+### Test Coverage
+
+| Test Case | Description |
+|-----------|-------------|
+| Basic upsert | Verifies request structure with namespace and single vector |
+| ID format | Confirms `{database}-{hash12}` format per PRD |
+| Metadata fields | Validates all required fields from PRD schema |
+| Response structure | Checks upsertedCount in response |
+| Description truncation | Ensures >35KB content is truncated |
+| Database prefixes | Different databases produce unique IDs |
+| indexedAt timestamp | Timestamp is set to current time |
+| Dimension validation | Rejects vectors with wrong dimension (not 1024) |
+
+### Pinecone Configuration Used
+
+| Setting | Value |
+|---------|-------|
+| Host | https://gov-il-decisions-k1iqa9s.svc.aped-4627-b74a.pinecone.io |
+| Namespace | gov-il-decisions |
+| Dimension | 1024 (text-embedding-3-small) |
+
+### Learnings for Next Cycles
+
+1. **Test approach**: Integration tests validate local logic without API calls, ensuring tests can run without credentials
+2. **PRD schema compliance**: Vector ID format `{database}-{contentHash.slice(0,12)}` is critical for deduplication
+3. **Metadata size limits**: Description must be truncated to 35KB to stay within Pinecone's 40KB metadata limit
+4. **Content hash**: Using SHA256 of `title + description` ensures deterministic IDs for deduplication
+5. **Running tests**: Use `cd mcp-server && node --import tsx ../chatbot/tests/test_pinecone.ts`
+6. **Dimension validation**: Always check vector dimension (1024) before upsert to catch embedding errors
+
+---

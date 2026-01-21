@@ -369,7 +369,7 @@ interface DecisionMetadata {
 **So that** vectors are stored correctly
 
 **Test Cases:**
-- [ ] `test_upsert_single_document()` - Basic upsert
+- [x] `test_upsert_single_document()` - Basic upsert
 - [ ] `test_upsert_with_metadata()` - All fields
 - [ ] `test_query_by_filter()` - committee filter
 - [ ] `test_query_semantic()` - Embedding similarity
