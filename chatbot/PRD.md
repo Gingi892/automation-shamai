@@ -626,7 +626,7 @@ Phase 4: Frontend (EXISTING + NEW ITEMS)
 
 Phase 5: Testing
   └─► US-P5-001: Scraper tests [x]
-  └─► US-P5-002: Pinecone tests (partial)
+  └─► US-P5-002: Pinecone tests [x]
   └─► US-P5-003: E2E tests [x]
 ```
 
@@ -915,9 +915,9 @@ const rawDocuments = uniqueMatches.map((match, index) => {
   └─► US-P6-005: Verify full coverage [ ]
 
 🔧 Phase 7: QUALITY FIXES
-  └─► US-P7-001: Fix UTF-8 encoding [ ]
-  └─► US-P7-002: Add source deduplication [ ]
-  └─► US-P7-003: Improve query relevance [ ]
+  └─► US-P7-001: Fix UTF-8 encoding [x]
+  └─► US-P7-002: Add source deduplication [x]
+  └─► US-P7-003: Improve query relevance [x]
 ```
 
 ---
@@ -1333,14 +1333,14 @@ Day 4: Verify and test
   └─► Now part of US-P8-006
 
 🔧 Phase 7: QUALITY FIXES (After Phase 8)
-  └─► US-P7-001: Fix UTF-8 encoding [ ]
-  └─► US-P7-002: Add source deduplication [ ]
-  └─► US-P7-003: Improve query relevance [ ]
+  └─► US-P7-001: Fix UTF-8 encoding [x]
+  └─► US-P7-002: Add source deduplication [x]
+  └─► US-P7-003: Improve query relevance [x]
 ```
 
 ---
 
-*PRD Version: 2.1*
+*PRD Version: 2.2*
 *Updated: 2026-01-21*
 *CRITICAL FIX: Phase 8 added - PDF content extraction is the root cause of chatbot not answering content questions*
 *Target: Extract and index actual PDF content for all 20,000+ documents*

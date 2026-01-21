@@ -4352,3 +4352,59 @@ Restored full Hebrew filter parsing in the `Parse Query Filters` node of workflo
 5. **Hebrew year conversion**: Support both with and without geresh (תשפ"ד and תשפד)
 6. **Connection flow**: Remove parallel connections that bypass filter parsing to ensure consistent data flow
 
+---
+
+## Iteration 32 — Fix PRD Documentation Inconsistencies
+- **Date**: 2026-01-21
+- **Task**: Documentation cleanup - Fix PRD checkboxes that were inconsistent
+
+### What Was Done
+
+Fixed documentation inconsistencies in PRD.md where acceptance criteria were marked complete [x] but implementation order sections showed them as incomplete [ ].
+
+### Issues Found
+
+1. **US-P5-002 (Pinecone tests)**: All 5 test cases marked [x], but implementation order showed "(partial)"
+2. **US-P7-001, US-P7-002, US-P7-003**: All acceptance criteria marked [x], but implementation order showed [ ]
+
+### Verification Performed
+
+1. **Ran Pinecone tests**: All 48 tests passed (8+8+10+10+12 across 5 test functions)
+2. **Confirmed Phase 7 implementation notes**: PRD contains detailed implementation notes showing work was completed on 2026-01-21
+
+### Files Modified
+
+1. **chatbot/PRD.md**:
+   - Line 629: Changed `US-P5-002: Pinecone tests (partial)` → `US-P5-002: Pinecone tests [x]`
+   - Lines 918-920: Changed Phase 7 items from `[ ]` to `[x]`
+   - Lines 1336-1338: Changed Phase 7 items from `[ ]` to `[x]`
+   - Updated PRD version from 2.1 to 2.2
+
+### Current State After Fix
+
+All completed phases now correctly show [x]:
+- Phase 1: Discovery [x] (all items)
+- Phase 2: Indexing [x] (all items)
+- Phase 3: RAG Refinement [x] (all items)
+- Phase 4: Frontend [x] (all items)
+- Phase 5: Testing [x] (all items)
+- Phase 7: Quality Fixes [x] (all items)
+- Phase 8: Items 1-5 complete [x], items 6-7 pending [ ]
+
+### Remaining Unchecked Tasks
+
+**US-P8-006: Re-index all 20K documents** - BLOCKED
+- Status: WORKFLOW READY - AWAITING MANUAL EXECUTION
+- Requires human approval due to ~$102 cost
+- Technical implementation is complete
+
+**US-P8-007: Verify content indexing works** - BLOCKED
+- Depends on US-P8-006 completion
+- Cannot verify until documents are re-indexed
+
+### Learnings for Next Cycles
+
+1. **Maintain consistency**: When marking acceptance criteria complete, also update implementation order sections
+2. **Run tests to verify**: Before marking test tasks complete, actually run the tests to confirm they pass
+3. **PRD has two implementation order sections**: One in Phase 6/7 area (~line 907) and one at the end (~line 1320) - both must be updated
+
