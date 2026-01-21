@@ -2915,3 +2915,67 @@ Implemented local storage persistence for conversation history in `workflows/cha
 6. **Initialization order**: Restore after DOM ready but before focus handling
 
 ---
+
+## Iteration 37 — US-P4-009 Export as PDF and Export as Plain Text Buttons
+- **Date**: 2026-01-21
+- **Task**: US-P4-009 - Export as PDF button and Export as plain text button
+
+### What Was Done
+
+Implemented the two remaining export buttons for US-P4-009 (Message History & Export):
+1. **Export as PDF button** - Opens a print dialog with styled HTML for PDF export
+2. **Export as Plain Text button** - Downloads conversation as .txt file
+
+### Files Modified
+
+1. **workflows/chatbot-frontend.html**
+   - Lines 1048-1097: Added CSS styles for `.history-actions`, `.export-btn`, `.export-btn.pdf`, `.export-btn.text`
+   - Lines 1466-1476: Added history actions container with export buttons in config panel
+   - Lines 1614-1648: Added `exportConversationAsText()` function
+   - Lines 1649-1745: Added `exportConversationAsPDF()` function
+
+2. **chatbot/PRD.md** - Marked Export as PDF and Export as plain text as complete [x]
+
+### Implementation Details
+
+#### Export as Plain Text (`exportConversationAsText()`)
+- Creates formatted text with header, timestamp, and messages
+- Uses role labels: 👤 משתמש / 🤖 עוזר
+- Includes message count and legal disclaimer
+- Downloads as `.txt` file with Hebrew filename
+
+#### Export as PDF (`exportConversationAsPDF()`)
+- Creates styled HTML document with RTL layout
+- Uses print-friendly CSS with @page rules
+- Color-coded messages (blue for user, gray for assistant)
+- Opens print dialog via `window.open()` + `window.print()`
+- Includes legal disclaimer at bottom
+
+### CSS Styling
+
+- `.history-actions` - Flex container for action buttons
+- `.export-btn` - Base button style (blue theme)
+- `.export-btn.pdf` - Pink/red theme for PDF export
+- `.export-btn.text` - Green theme for text export
+- All buttons have hover states and consistent sizing
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Local storage saves conversation | ✅ Complete |
+| Export as PDF button | ✅ Complete |
+| Export as plain text button | ✅ Complete |
+| Clear history button with confirmation | ✅ Complete |
+| Session persists across browser refresh | ✅ Complete |
+
+### Learnings for Next Cycles
+
+1. **PDF export via print dialog**: More reliable than libraries like jsPDF for complex RTL content
+2. **Hebrew filename handling**: Modern browsers handle Hebrew filenames in download attribute
+3. **Blob for text export**: `new Blob([content], {type: 'text/plain;charset=utf-8'})` preserves Hebrew encoding
+4. **Print-friendly CSS**: Use `@page` rules and `print-color-adjust: exact` for consistent print output
+5. **Button grouping**: Using `display: flex` with `gap` provides clean button layout
+6. **Color coding**: Different button colors help users distinguish actions (delete=red, export PDF=pink, export text=green)
+
+---

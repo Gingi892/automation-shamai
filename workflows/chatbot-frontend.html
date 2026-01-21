@@ -1045,6 +1045,60 @@
             border-color: #ef9a9a;
         }
 
+        /* US-P4-009: Export Buttons */
+        .history-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .export-btn {
+            padding: 8px 16px;
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #90caf9;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .export-btn:hover {
+            background: #bbdefb;
+            border-color: #64b5f6;
+        }
+
+        .export-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .export-btn.pdf {
+            background: #fce4ec;
+            color: #c2185b;
+            border-color: #f48fb1;
+        }
+
+        .export-btn.pdf:hover {
+            background: #f8bbd9;
+            border-color: #f06292;
+        }
+
+        .export-btn.text {
+            background: #e8f5e9;
+            color: #388e3c;
+            border-color: #a5d6a7;
+        }
+
+        .export-btn.text:hover {
+            background: #c8e6c9;
+            border-color: #81c784;
+        }
+
         .error-message {
             background: #ffebee;
             color: #c62828;
@@ -1407,10 +1461,18 @@
             <input type="text" id="webhookUrl" class="config-input"
                    placeholder="https://your-n8n-instance.com/webhook/chat"
                    value="">
-            <!-- US-P4-009: Clear History Button -->
-            <button class="clear-history-btn" onclick="clearConversationHistory()" title="נקה היסטוריית שיחה">
-                🗑️ נקה היסטוריה
-            </button>
+            <!-- US-P4-009: History Actions (Clear, Export PDF, Export Text) -->
+            <div class="history-actions">
+                <button class="clear-history-btn" onclick="clearConversationHistory()" title="נקה היסטוריית שיחה">
+                    🗑️ נקה היסטוריה
+                </button>
+                <button class="export-btn pdf" onclick="exportConversationAsPDF()" title="ייצא כ-PDF">
+                    📄 ייצוא PDF
+                </button>
+                <button class="export-btn text" onclick="exportConversationAsText()" title="ייצא כטקסט">
+                    📝 ייצוא טקסט
+                </button>
+            </div>
         </div>
 
         <div class="chat-messages" id="chatMessages">
@@ -1546,6 +1608,159 @@
                     </div>
                 </div>
             `;
+        }
+
+        // US-P4-009: Export conversation as plain text
+        function exportConversationAsText() {
+            if (conversationHistory.length === 0) {
+                alert('אין היסטוריית שיחה לייצוא');
+                return;
+            }
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            let textContent = `צ'אטבוט שמאות מכריעה - היסטוריית שיחה\n`;
+            textContent += `תאריך ייצוא: ${new Date().toLocaleString('he-IL')}\n`;
+            textContent += `${'='.repeat(50)}\n\n`;
+
+            conversationHistory.forEach((msg, index) => {
+                const role = msg.role === 'user' ? '👤 משתמש' : '🤖 עוזר';
+                textContent += `${role}:\n`;
+                textContent += `${msg.content}\n`;
+                textContent += `${'-'.repeat(40)}\n\n`;
+            });
+
+            textContent += `\n${'='.repeat(50)}\n`;
+            textContent += `סה"כ הודעות: ${conversationHistory.length}\n`;
+            textContent += `⚠️ הכלי מספק מידע לצורכי מחקר בלבד. אין להסתמך על התשובות כייעוץ משפטי.\n`;
+
+            // Create and download the file
+            const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `שיחת-שמאות-${timestamp}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // US-P4-009: Export conversation as PDF
+        function exportConversationAsPDF() {
+            if (conversationHistory.length === 0) {
+                alert('אין היסטוריית שיחה לייצוא');
+                return;
+            }
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+            // Create HTML content for PDF
+            const htmlContent = `
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>היסטוריית שיחה - צ'אטבוט שמאות מכריעה</title>
+    <style>
+        @page { margin: 2cm; size: A4; }
+        body {
+            font-family: 'David', 'Arial', sans-serif;
+            line-height: 1.6;
+            direction: rtl;
+            text-align: right;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #1a1a2e;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .header-info {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+        .message {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 10px;
+        }
+        .user-message {
+            background: #e3f2fd;
+            border-right: 4px solid #2196f3;
+        }
+        .assistant-message {
+            background: #f5f5f5;
+            border-right: 4px solid #667eea;
+        }
+        .role-label {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            font-size: 0.85em;
+            color: #666;
+        }
+        .disclaimer {
+            background: #fff3e0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        @media print {
+            body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <h1>📋 היסטוריית שיחה - צ'אטבוט שמאות מכריעה</h1>
+    <div class="header-info">
+        <p>תאריך ייצוא: ${new Date().toLocaleString('he-IL')}</p>
+        <p>מספר הודעות: ${conversationHistory.length}</p>
+    </div>
+
+    ${conversationHistory.map((msg, index) => `
+        <div class="message ${msg.role === 'user' ? 'user-message' : 'assistant-message'}">
+            <div class="role-label">${msg.role === 'user' ? '👤 משתמש' : '🤖 עוזר'}</div>
+            <div class="content">${escapeHtml(msg.content)}</div>
+        </div>
+    `).join('')}
+
+    <div class="footer">
+        <p>סה"כ הודעות: ${conversationHistory.length}</p>
+        <div class="disclaimer">
+            ⚠️ הכלי מספק מידע לצורכי מחקר בלבד. אין להסתמך על התשובות כייעוץ משפטי.
+            יש לאמת כל מידע מול המקורות המצוינים.
+        </div>
+    </div>
+</body>
+</html>`;
+
+            // Open print dialog with styled HTML
+            const printWindow = window.open('', '_blank');
+            if (printWindow) {
+                printWindow.document.write(htmlContent);
+                printWindow.document.close();
+
+                // Wait for content to load then trigger print
+                printWindow.onload = function() {
+                    setTimeout(() => {
+                        printWindow.print();
+                    }, 250);
+                };
+            } else {
+                alert('לא ניתן לפתוח חלון להדפסה. אנא בדוק את הגדרות חסימת החלונות הקופצים.');
+            }
         }
 
         // Handle keyboard shortcuts in the input textarea

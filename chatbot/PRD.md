@@ -520,8 +520,8 @@ function showError(type) {
 
 **Acceptance Criteria:**
 - [x] Local storage saves conversation
-- [ ] Export as PDF button
-- [ ] Export as plain text button
+- [x] Export as PDF button
+- [x] Export as plain text button
 - [x] Clear history button with confirmation
 - [x] Session persists across browser refresh
 
@@ -614,11 +614,11 @@ Phase 4: Frontend (EXISTING + NEW ITEMS)
   └─► US-P4-002: Source display [x]
   └─► US-P4-003: Interactive citations [x]
   └─► US-P4-004: Analytics dashboard [x]
-  └─► US-P4-005: Enhanced Error Handling [ ] NEW
-  └─► US-P4-006: Loading State Improvements [ ] NEW
+  └─► US-P4-005: Enhanced Error Handling [x] NEW
+  └─► US-P4-006: Loading State Improvements [x] NEW
   └─► US-P4-007: Disclaimer Banner [x] NEW - CRITICAL FOR LEGAL
   └─► US-P4-008: Keyboard Shortcuts [x] NEW
-  └─► US-P4-009: Message History & Export [ ] NEW
+  └─► US-P4-009: Message History & Export [x] NEW
   └─► US-P4-010: Mobile Responsive Fixes [ ] NEW
 
 Phase 5: Testing
