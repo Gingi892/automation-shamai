@@ -112,16 +112,16 @@ OpenAI:
 **So that** Pinecone contains complete data
 
 **Acceptance Criteria:**
-- [ ] n8n workflow: "Full Indexer - All Databases"
-- [ ] Fetches pages via ScraperAPI with `ultra_premium=true`, `wait_for=5000`
-- [ ] Pagination: `?skip=0`, `?skip=10`, `?skip=20`, ... until no results
-- [ ] Parses Hebrew decision titles correctly
-- [ ] Extracts metadata: title, url, database, block, plot, committee, appraiser, caseType, decisionDate
-- [ ] Creates embeddings via OpenAI text-embedding-3-small (1024 dimensions)
-- [ ] Upserts to Pinecone with metadata
-- [ ] **CRITICAL: One document = one vector** (no splitting)
+- [x] n8n workflow: "Full Indexer - All Databases"
+- [x] Fetches pages via ScraperAPI with `ultra_premium=true`, `wait_for=5000`
+- [x] Pagination: `?skip=0`, `?skip=10`, `?skip=20`, ... until no results
+- [x] Parses Hebrew decision titles correctly
+- [x] Extracts metadata: title, url, database, block, plot, committee, appraiser, caseType, decisionDate
+- [x] Creates embeddings via OpenAI text-embedding-3-small (1024 dimensions)
+- [x] Upserts to Pinecone with metadata
+- [x] **CRITICAL: One document = one vector** (no splitting)
 - [ ] Progress tracking with resume capability
-- [ ] Rate limiting: 1 request/second to ScraperAPI
+- [x] Rate limiting: 1 request/second to ScraperAPI
 
 **Implementation Notes:**
 ```javascript

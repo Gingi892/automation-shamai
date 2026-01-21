@@ -752,3 +752,78 @@ Implemented the PRD-specified Pinecone schema to ensure all vectors follow a con
 - Next task: US-P2-001 Full Indexer Workflow
 
 ---
+
+## Iteration 8 — US-P2-001 Create Full Indexer Workflow
+- **Date**: 2026-01-21
+- **Task**: US-P2-001 - Create Full Indexer Workflow
+
+### What Was Done
+
+Created n8n workflow "Full Indexer - All Databases" that:
+1. Fetches documents from all 3 gov.il databases (decisive_appraiser, appeals_committee, appeals_board)
+2. Uses correct ScraperAPI settings: `ultra_premium=true`, `wait_for=5000`, `render=true`
+3. Implements pagination with skip parameter
+4. Parses Hebrew titles using database-specific regex patterns
+5. Extracts structured metadata: title, url, database, block, plot, committee, appraiser, caseType, decisionDate, year
+6. Creates embeddings via OpenAI text-embedding-3-small (1024 dimensions)
+7. Upserts to Pinecone with PRD-compliant metadata schema
+8. Rate limits at 1 request/second via Wait node
+9. Creates one vector per document (no chunking)
+
+### Workflow Details
+
+| Attribute | Value |
+|-----------|-------|
+| Workflow ID | `1zYlIK6VnynTHiHl` |
+| Workflow Name | Full Indexer - All Databases |
+| Webhook Path | `/full-indexer` (POST) |
+| Node Count | 16 nodes |
+| Status | Created (inactive) |
+
+### Key Nodes
+
+1. **Webhook Start** / **Manual Start** - Triggers
+2. **Set Config** - Initialize ScraperAPI key, Pinecone host, pagination
+3. **Build ScraperAPI URL** - Constructs URL with ultra_premium=true
+4. **Fetch Page via ScraperAPI** - HTTP GET with 120s timeout
+5. **Extract Documents** - Regex-based title/PDF/date extraction per database
+6. **Create Document Records** - PRD schema compliance with contentHash deduplication
+7. **Has More Pages?** - Loop control for pagination
+8. **Rate Limit Wait** - 1 second delay between pages
+9. **Update Skip** - Increment skip for next page
+10. **Process Batch for Embedding** - Prepare docs for OpenAI
+11. **Create Embedding** - OpenAI text-embedding-3-small
+12. **Prepare Pinecone Vector** - Format for Pinecone upsert
+13. **Upsert to Pinecone** - POST to Pinecone with namespace
+14. **Aggregate Batch Results** - Count success/errors
+15. **Final Summary** - Output indexing statistics
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| n8n workflow created | ✅ |
+| ScraperAPI ultra_premium=true | ✅ |
+| Pagination with skip | ✅ |
+| Hebrew title parsing | ✅ |
+| Metadata extraction | ✅ |
+| OpenAI embeddings (1024d) | ✅ |
+| Pinecone upsert | ✅ |
+| One doc = one vector | ✅ |
+| Progress tracking/resume | ❌ (not implemented) |
+| Rate limiting 1 req/sec | ✅ |
+
+### Remaining Work
+
+- Progress tracking with resume capability not yet implemented
+- Would require storing lastSkip/database to external storage (n8n staticData or external DB)
+
+### Learnings for Next Cycles
+
+- n8n partial update requires `nodeId` not `name` for updateNode operations
+- Validation "cycle" error is expected for pagination loops - it's intentional
+- Code nodes must return array format `[{json: {...}}]`
+- Optional chaining `?.` not supported in n8n expressions - use ternary instead
+- ScraperAPI URL is built in Code node to ensure proper encoding
+
+---
