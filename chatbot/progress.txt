@@ -1,0 +1,116 @@
+# Ralph Loop Progress - Legal Chatbot
+
+## Learnings (Read This First)
+
+### ScraperAPI Settings (CRITICAL)
+- Gov.il requires `ultra_premium=true` - premium alone returns 500 errors
+- Must use `wait_for=5000` for Angular to render
+- Always use `render=true`
+- Rate limit: 1 request per second
+
+### Decision Title Patterns
+
+**Decisive Appraiser (שמאי מכריע):**
+```regex
+/הכרעת שמאי מכריע מיום (\d{2}-\d{2}-\d{4}) בעניין ([^נ]+)נ ([^ג]+)ג (\d+) ח (\d+)\s*-?\s*(.+)?/
+```
+
+**Appeals Committee (ועדת השגות):**
+```regex
+/החלטה ב?השגה(?:\s+מס['׳]?\s*|\s+)(\d+)?\s*([^גג]+)?[גג](?:וש)?\s*(\d+)\s*[חח](?:לקה)?\s*(\d+)/
+```
+
+### Pinecone
+- Host: https://gov-il-decisions-k1iqa9s.svc.aped-4627-b74a.pinecone.io
+- Namespace: gov-il-decisions
+- Dimension: 1024 (text-embedding-3-small)
+- Max metadata size: 40KB per vector
+
+### PDF URLs
+- Format: `https://free-justice.openapi.gov.il/free/moj/portal/rest/searchpredefinedapi/v1/SearchPredefinedApi/Documents/DecisiveAppraiser/{docId}`
+- NO .pdf extension needed
+
+### Existing Components
+- `workflows/chatbot-frontend.html` - Existing Hebrew UI with citations
+- `workflows/3-rag-chatbot.json` - RAG workflow with hallucination detection
+- `mcp-server/` - SQLite-based MCP server (separate from Pinecone)
+
+### n8n Workflow IDs to Analyze
+- oqihIkB7Ur9WVJZG
+- kTZqcClvtUspeC28
+- McOa9j15PRy8AZ8v
+
+---
+
+## Iteration Log
+
+## Iteration 1 — Map Existing n8n Workflows
+- **Date**: 2026-01-21
+- **Task**: US-P1-001 - Map existing n8n workflows
+
+### Workflow Analysis Results
+
+#### Workflow 1: `oqihIkB7Ur9WVJZG` - "Gov.il Decisive Appraisal Scraper - HTML ALL PAGES"
+- **Status**: Active
+- **Purpose**: Scrapes decisive appraisal decisions from gov.il
+- **Trigger**: Webhook (POST `/run-scraper`) + Manual
+- **Flow**:
+  1. Set Config (ScraperAPI key, currentSkip=0)
+  2. Fetch page via ScraperAPI (uses `premium=true`, NOT `ultra_premium`)
+  3. Extract Documents from HTML (regex for titles, PDF URLs, dates)
+  4. Merge with Config (accumulates documents)
+  5. Has More Pages? → Loop back or Send to Processor
+  6. Send to Document Processor (webhook call)
+- **Stats**: 10 executions, 90% success rate
+- **ISSUE**: Uses `premium=true` instead of required `ultra_premium=true`
+- **Nodes**: 10 nodes total
+
+#### Workflow 2: `kTZqcClvtUspeC28` - "Document Processor - Embeddings & Pinecone"
+- **Status**: Active
+- **Purpose**: Processes documents, creates embeddings, upserts to Pinecone
+- **Trigger**: Webhook (POST `/process-documents`)
+- **Flow**:
+  1. Webhook Trigger → Prepare Documents
+  2. Fetch PDF (direct URL, handles special char encoding)
+  3. Extract PDF Text (uses extractFromFile node)
+  4. Split Into Pages (~2000 char chunks)
+  5. Create Embedding (OpenAI text-embedding-3-small, 1024 dimensions)
+  6. Combine Results → Upsert to Pinecone
+  7. Aggregate Results → Return Result → Respond
+- **Stats**: 10 executions, 100% success rate
+- **Pinecone**: Uses namespace `gov-il-decisions`, metadata includes title, url, committee, block, plot, appraiser
+- **Nodes**: 11 nodes total
+
+#### Workflow 3: `McOa9j15PRy8AZ8v` - "RAG Chatbot - Decisive Appraisal (with Hallucination Detection)"
+- **Status**: Active
+- **Purpose**: RAG chatbot with Strawberry/Pythea hallucination detection
+- **Trigger**: Webhook (POST `/chat`)
+- **Flow**:
+  1. Chat Webhook → Extract User Message
+  2. Embed User Query (OpenAI text-embedding-3-small)
+  3. Query Pinecone (topK=5)
+  4. Build RAG Context (includes citation instructions [S0], [S1])
+  5. Generate AI Response (GPT-4o)
+  6. Extract Claims & Citations
+  7. Build Verification Prompts
+  8. Verify Posterior (Full Context) + Verify Prior (Scrubbed Context) [PARALLEL]
+  9. Merge Verification Results
+  10. Compute Budget Gaps (KL Divergence)
+  11. Format Response with Flags → Respond
+- **Stats**: 10 executions, 50% success rate (needs investigation)
+- **Hallucination Detection**: Implements Strawberry/Pythea KL-divergence algorithm
+- **Nodes**: 14 nodes total
+
+### Key Findings
+1. **Scraper uses wrong ScraperAPI setting**: `premium=true` should be `ultra_premium=true`
+2. **Document Processor works well**: 100% success rate
+3. **RAG Chatbot has issues**: 50% success rate needs debugging
+4. **PDF chunking**: Splits into ~2000 char chunks (not whole doc vectors as PRD specifies)
+5. **Citation format**: Uses [S0], [S1], etc. as intended
+
+### Learnings for Next Cycles
+- ScraperAPI settings are critical - always verify `ultra_premium=true`
+- The existing hallucination detection flow is complete but may need tuning
+- Document chunking approach differs from PRD "one doc = one vector" requirement
+
+---
