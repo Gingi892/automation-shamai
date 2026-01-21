@@ -469,14 +469,14 @@ function showError(type) {
 **So that** I know the system is working
 
 **Acceptance Criteria:**
-- [ ] Animated typing indicator (3 dots)
-- [ ] Progress text changes every 3 seconds:
+- [x] Animated typing indicator (3 dots)
+- [x] Progress text changes every 3 seconds:
   1. "מעבד את השאלה..." (Processing question)
   2. "מחפש במאגר ההחלטות..." (Searching decisions)
   3. "מנתח את התוצאות..." (Analyzing results)
   4. "מכין תשובה מבוססת מקורות..." (Preparing sourced answer)
-- [ ] Subtle pulse animation on chat container
-- [ ] Estimated time indicator (optional)
+- [x] Subtle pulse animation on chat container
+- [x] Estimated time indicator (optional)
 
 ---
 

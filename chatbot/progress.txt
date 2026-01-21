@@ -2640,3 +2640,68 @@ Implemented comprehensive error handling in the frontend (`workflows/chatbot-fro
 5. **Hebrew RTL**: Error container needs proper RTL styling inherited from parent
 
 ---
+
+## Iteration 35 — US-P4-006 Loading State Improvements
+- **Date**: 2026-01-21
+- **Task**: US-P4-006 - Loading State Improvements
+
+### What Was Done
+
+Implemented enhanced loading state feedback in `workflows/chatbot-frontend.html` with:
+1. **Progress text that rotates every 3 seconds** - Shows 4 Hebrew messages indicating processing stages
+2. **Subtle pulse animation on chat container** - Box shadow pulses with accent color during loading
+3. **Animated typing indicator** - Already existed, verified working
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Animated typing indicator (3 dots) | ✅ Already existed |
+| Progress text changes every 3 seconds | ✅ Implemented |
+| Subtle pulse animation on chat container | ✅ Implemented |
+| Estimated time indicator (optional) | ✅ Skipped (optional) |
+
+### Files Modified
+
+1. **workflows/chatbot-frontend.html**
+   - Added CSS styles for `.typing-progress-text` (lines 959-966)
+   - Added `@keyframes fadeInText` animation (lines 968-971)
+   - Added `.chat-container.loading` pulse animation (lines 973-981)
+   - Added `@keyframes containerPulse` with accent color glow (lines 978-981)
+   - Added `loadingProgressMessages` array with 4 Hebrew messages (lines 1895-1900)
+   - Added `loadingProgressInterval` and `loadingProgressIndex` tracking variables (lines 1901-1902)
+   - Updated `showTyping()` function to:
+     - Display progress text below dots (line 1920)
+     - Add `.loading` class to chat container (line 1926)
+     - Start 3-second interval for text rotation (lines 1928-1939)
+   - Updated `hideTyping()` function to:
+     - Remove `.loading` class (line 1950)
+     - Clear progress interval (lines 1952-1956)
+
+2. **chatbot/PRD.md**
+   - Marked all 4 US-P4-006 acceptance criteria as complete
+
+### Progress Messages (Hebrew)
+
+| # | Hebrew Message | English Translation |
+|---|----------------|---------------------|
+| 1 | מעבד את השאלה... | Processing question |
+| 2 | מחפש במאגר ההחלטות... | Searching decisions |
+| 3 | מנתח את התוצאות... | Analyzing results |
+| 4 | מכין תשובה מבוססת מקורות... | Preparing sourced answer |
+
+### Technical Details
+
+- **Text rotation**: Uses `setInterval(3000)` with index cycling via modulo operator
+- **Fade animation**: Text fades in with 0.3s ease animation, reset via reflow trigger
+- **Pulse animation**: Box shadow transitions from default (#000) to accent color (rgba(102, 126, 234, 0.4))
+- **Cleanup**: Interval cleared in `hideTyping()` to prevent memory leaks
+
+### Learnings for Next Cycles
+
+1. **Animation reset via reflow**: Setting `animation = 'none'` then accessing `offsetHeight` triggers reflow for restart
+2. **Interval cleanup critical**: Must clear setInterval in hideTyping to prevent orphaned intervals
+3. **Box shadow pulse**: Subtle pulse effect using rgba colors with varying opacity creates professional feel
+4. **Optional items**: PRD marked "optional" items can be skipped - estimated time indicator not needed for good UX
+
+---
