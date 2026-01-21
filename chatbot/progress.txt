@@ -1270,3 +1270,84 @@ Verified and completed all US-P3-002 acceptance criteria for source attribution 
 - Frontend already has interactive citation features - backend just needs to provide correct data
 
 ---
+
+## Iteration 15 — US-P3-003 Pinecone Filter Counting for Analytical Queries
+- **Date**: 2026-01-21
+- **Task**: US-P3-003 - For counting: use Pinecone filter queries, not AI generation
+
+### What Was Done
+
+Implemented direct Pinecone counting for analytical queries like "כמה החלטות יש בתל אביב ב-2024?" to prevent AI hallucination of statistics.
+
+### Workflow Changes (McOa9j15PRy8AZ8v)
+
+Added 3 new nodes to create a branching flow:
+
+1. **Check Counting Query** (check-counting-query)
+   - Position: [500, 0]
+   - Type: If node
+   - Purpose: Routes queries based on `isCountingQuery` flag
+   - True branch → Direct Pinecone count
+   - False branch → Standard RAG flow
+
+2. **Query Pinecone Count** (query-pinecone-count)
+   - Position: [680, 150]
+   - Type: HTTP Request
+   - URL: Pinecone query endpoint
+   - Uses zero vector with topK=10000 and metadata filters
+   - Returns all matching vector IDs (no embeddings needed for counting)
+
+3. **Build Counting Response** (build-counting-response)
+   - Position: [880, 150]
+   - Type: Code node
+   - Purpose: Formats count result into Hebrew response
+   - Returns factual count with 100% grounding confidence
+
+### Updated Node
+
+**Parse Query Filters** - Added counting query detection:
+```javascript
+const countingPatterns = [
+  /כמה\s+החלטות/i,    // כמה החלטות
+  /כמה\s+מסמכים/i,    // כמה מסמכים
+  /כמה\s+תיקים/i,     // כמה תיקים
+  /כמה\s+פסקי?\s*דין/i, // כמה פסקי דין
+  /מספר\s+ההחלטות/i,  // מספר ההחלטות
+  /ספירת?\s+החלטות/i  // ספירת החלטות
+];
+const isCountingQuery = countingPatterns.some(p => p.test(userMessage)) && Object.keys(filters).length > 0;
+```
+
+### Connection Flow
+
+```
+Parse Query Filters → Check Counting Query
+    ├─ (true)  → Query Pinecone Count → Build Counting Response → Respond with Chat
+    └─ (false) → Embed User Query → Query Pinecone → Build RAG Context → ... → Respond with Chat
+```
+
+### Technical Approach
+
+1. **Zero Vector Query**: Uses `new Array(1024).fill(0)` as the query vector since we only need filter matching, not semantic similarity
+2. **High TopK**: Uses `topK: 10000` to get all matching documents for accurate count
+3. **No Metadata**: Uses `includeMetadata: false` for performance - we only need the count
+4. **100% Grounding**: Returns `grounding_ratio: 1.0` since count is factual from Pinecone
+5. **Hebrew Response**: Builds natural Hebrew sentences with bold count numbers
+
+### Example Behavior
+
+| Query | Result |
+|-------|--------|
+| "כמה החלטות יש בתל אביב ב-2024?" | "נמצאו **15 החלטות** עבור ועדה מקומית תל אביב ושנת 2024." |
+| "כמה החלטות יש בגוש 6158?" | "נמצאו **3 החלטות** עבור גוש 6158." |
+
+### Learnings for Next Cycles
+
+- Pinecone filter-only queries work with zero vectors - no embedding needed for counting
+- If node output ports are "0" (true) and "1" (false) as strings
+- For counting queries, `includeMetadata: false` is faster and sufficient
+- Response must match expected frontend format (success, response, sources, hallucination_check)
+- Counting queries bypass hallucination detection entirely (factual data)
+- Must have at least one filter for counting query to activate (prevents counting entire index)
+
+---
