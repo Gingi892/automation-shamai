@@ -286,12 +286,12 @@ interface DecisionMetadata {
 **So that** I can work efficiently
 
 **Acceptance Criteria:**
-- [ ] Hebrew RTL layout
-- [ ] Dark header with title: "צ'אטבוט שמאות מכריעה"
-- [ ] Clean chat bubbles (user right, assistant left)
-- [ ] Typing indicator while loading
-- [ ] Error handling with Hebrew messages
-- [ ] Mobile responsive
+- [x] Hebrew RTL layout
+- [x] Dark header with title: "צ'אטבוט שמאות מכריעה"
+- [x] Clean chat bubbles (user right, assistant left)
+- [x] Typing indicator while loading
+- [x] Error handling with Hebrew messages
+- [x] Mobile responsive
 
 ---
 
