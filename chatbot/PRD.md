@@ -256,7 +256,7 @@ interface DecisionMetadata {
 - [x] For counting: use Pinecone filter queries, not AI generation
 - [x] For statistics: aggregate results before sending to AI
 - [x] Return structured data for charts when appropriate
-- [ ] AI synthesizes the data into Hebrew narrative
+- [x] AI synthesizes the data into Hebrew narrative
 
 ---
 

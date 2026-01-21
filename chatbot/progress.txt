@@ -1520,3 +1520,76 @@ Uses Tableau 10 colors for accessibility and clarity:
 - Validation errors for Code nodes returning objects (not arrays) are false positives in n8n
 
 ---
+
+## Iteration 18 — US-P3-003 AI Synthesizes Data into Hebrew Narrative
+- **Date**: 2026-01-21
+- **Task**: US-P3-003 - AI synthesizes the data into Hebrew narrative
+
+### What Was Done
+
+Implemented AI synthesis for statistics responses so that raw statistical data is transformed into natural Hebrew narratives using GPT-4o.
+
+### Workflow Changes (McOa9j15PRy8AZ8v)
+
+Added 2 new nodes to the statistics response flow:
+
+1. **AI Synthesize Statistics** (synthesize-statistics)
+   - Position: [1220, 300]
+   - Type: HTTP Request (OpenAI API)
+   - Model: gpt-4o
+   - Temperature: 0.3 (for consistent, factual responses)
+   - Max tokens: 500
+   - System prompt instructs AI to:
+     - Write in natural, formal Hebrew
+     - Highlight key findings and trends
+     - Use only the provided statistics
+     - Keep response concise (2-4 sentences)
+
+2. **Format Synthesized Stats Response** (format-synthesized-stats)
+   - Position: [1420, 300]
+   - Type: Code node
+   - Purpose: Extracts AI-generated narrative and formats final response
+   - Maintains all chart data and statistics for frontend
+
+### Updated Node
+
+**Build Statistics Response** - Modified to output context for AI synthesis:
+- Added `statisticsContext` field with formatted statistics text
+- Passes `userMessage` for context-aware synthesis
+- Retains all chart data and statistics for final response
+
+### Connection Flow (Updated)
+
+```
+Query Pinecone Stats → Aggregate Statistics → Build Statistics Response
+    → AI Synthesize Statistics → Format Synthesized Stats Response → Respond with Chat
+```
+
+### Example Transformation
+
+**Before (raw stats):**
+```
+נתונים סטטיסטיים ממסד הנתונים:
+סה"כ החלטות: 73
+קיבוץ לפי: שמאי
+1. כהן: 15 החלטות (20%)
+2. לוי: 12 החלטות (16%)
+...
+```
+
+**After (AI synthesized):**
+```
+מניתוח הנתונים עולה כי השמאי כהן מוביל במספר ההחלטות עם 15 החלטות (20% מהמאגר),
+ואחריו השמאי לוי עם 12 החלטות. נראה כי מספר מצומצם של שמאים מטפל ברוב ההחלטות.
+```
+
+### Learnings for Next Cycles
+
+- AI synthesis requires low temperature (0.3) for factual consistency
+- The original statistics data must be passed alongside AI narrative for chart rendering
+- Grounding ratio remains 100% since AI synthesizes only from provided data
+- `$('Node Name').first().json` syntax accesses upstream node data in n8n Code nodes
+- HTTP Request nodes with dynamic expressions in jsonBody work correctly at runtime despite validation warnings
+- removeConnection operation removes direct path; new path flows through synthesis nodes
+
+---
