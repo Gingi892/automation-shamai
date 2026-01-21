@@ -114,12 +114,12 @@ function buildScraperUrl(targetUrl) {
 **So that** I can answer detailed questions about specific cases
 
 **Acceptance Criteria:**
-- [ ] MCP tool `read_pdf` with `id` parameter
-- [ ] Fetches PDF from free-justice API via ScraperAPI
-- [ ] Extracts Hebrew text using pdf-parse
-- [ ] Caches extracted text in database (`pdf_text` column)
-- [ ] Returns cached text on subsequent calls
-- [ ] Handles right-to-left Hebrew text properly
+- [x] MCP tool `read_pdf` with `id` parameter
+- [x] Fetches PDF from free-justice API via ScraperAPI
+- [x] Extracts Hebrew text using pdf-parse
+- [x] Caches extracted text in database (`pdf_text` column)
+- [x] Returns cached text on subsequent calls
+- [x] Handles right-to-left Hebrew text properly
 
 **Implementation Notes:**
 ```javascript

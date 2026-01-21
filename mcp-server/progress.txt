@@ -57,3 +57,19 @@
   - The search uses LIKE for text matching since sql.js doesn't support FTS5
   - Results include totalCount, hasMore for pagination
 ---
+
+## Iteration 3 — US-003: Read PDF Content (VERIFIED COMPLETE)
+- **What was done:** Verified all 6 acceptance criteria for US-003 are already fully implemented
+- **Files verified:**
+  - `src/index.ts` - MCP tool `read_pdf` with `id` parameter (lines 274-311), handler (lines 928-1019)
+  - `src/pdf-extractor.ts` - Complete PDF extraction module with:
+    - ScraperAPI integration (lines 210-269)
+    - pdf-parse for text extraction (line 287)
+    - Hebrew RTL text processing (lines 154-173)
+    - Database caching support (lines 329-362)
+  - `src/database.ts` - `pdf_text` column (line 83), `savePdfText()` method (line 565)
+- **Learnings for next cycles:**
+  - Extensive Hebrew RTL handling: final letter normalization, directional control removal
+  - PDF caching uses decision ID as key
+  - Estimates page count from cached text length (~3000 chars/page)
+---
