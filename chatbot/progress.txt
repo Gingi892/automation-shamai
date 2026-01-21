@@ -2322,3 +2322,68 @@ Created the first Pinecone integration test for basic upsert operations.
 6. **Dimension validation**: Always check vector dimension (1024) before upsert to catch embedding errors
 
 ---
+
+## Iteration 31 — US-P5-002 test_upsert_with_metadata()
+- **Date**: 2026-01-21
+- **Task**: US-P5-002 - Integration Tests - Pinecone: test_upsert_with_metadata()
+
+### What Was Done
+
+Created comprehensive unit tests to verify ALL metadata fields are properly included in Pinecone upsert operations, ensuring PRD US-P2-003 schema compliance.
+
+### Files Modified
+
+1. **chatbot/tests/test_pinecone.ts**
+   - Added `test_upsert_with_metadata()` function with 8 test cases:
+     1. All metadata fields present for decisive_appraiser (15 fields verified)
+     2. All metadata fields present for appeals_committee
+     3. All metadata fields present for appeals_board
+     4. Null handling for optional fields (8 optional fields must be null, not undefined)
+     5. Hebrew content preserved in all text fields
+     6. Metadata field types are correct (string vs string|null)
+     7. PRD schema field completeness validated (all 15 PRD fields exist)
+     8. Upsert request includes all metadata correctly
+
+### Test Coverage
+
+| Test Case | Description |
+|-----------|-------------|
+| decisive_appraiser fields | All 15 metadata fields verified including appraiser |
+| appeals_committee fields | Database-specific testing, appraiser can be null |
+| appeals_board fields | Complete metadata for third database type |
+| Null handling | Optional fields are null (not undefined) when omitted |
+| Hebrew preservation | Hebrew strings preserved in title, description, committee, appraiser, caseType |
+| Type validation | Required fields are string, optional are string|null |
+| PRD completeness | All 15 fields from PRD US-P2-003 schema exist |
+| Request structure | Metadata preserved correctly in upsert request |
+
+### PRD US-P2-003 Schema Fields Verified
+
+| Field | Type | Required |
+|-------|------|----------|
+| id | string | ✓ |
+| database | enum | ✓ |
+| title | string | ✓ |
+| url | string | ✓ |
+| block | string|null | optional |
+| plot | string|null | optional |
+| committee | string|null | optional |
+| appraiser | string|null | optional |
+| caseType | string|null | optional |
+| decisionDate | string|null | optional |
+| year | string|null | optional |
+| description | string | ✓ |
+| contentHash | string | ✓ |
+| indexedAt | string | ✓ |
+| publishDate | string|null | optional |
+
+### Learnings for Next Cycles
+
+1. **Null vs undefined**: Pinecone metadata fields should be explicitly `null` when not provided, not `undefined` - this ensures consistent query behavior
+2. **Type consistency**: All optional fields follow the `string | null` type pattern for predictable filtering
+3. **Field completeness**: The 15-field schema matches PRD US-P2-003 exactly
+4. **Hebrew preservation**: Hebrew characters are preserved correctly in metadata - no encoding issues
+5. **Running tests**: `cd mcp-server && node --import tsx ../chatbot/tests/test_pinecone.ts` runs both test functions
+6. **Test isolation**: Each test case creates fresh vectors to avoid state pollution
+
+---
