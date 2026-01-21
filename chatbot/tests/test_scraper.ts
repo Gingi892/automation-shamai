@@ -187,7 +187,190 @@ function test_parse_decisive_appraiser_title(): void {
   }
 }
 
+// ============================================================
+// Appeals Committee Title Parsing Tests
+// ============================================================
+
+// Appeals committee pattern (from scraper.ts line 941)
+// Format: החלטה בהשגה [number] [committee] גוש [block] חלקה [plot]
+const APPEALS_COMMITTEE_PATTERN = /החלטה ב?השגה(?:\s+מס['׳]?\s*|\s+)(\d+)?\s*([^גג]+)?[גג](?:וש)?\s*(\d+)\s*[חח](?:לקה)?\s*(\d+)/;
+
+interface ParsedAppealsCommitteeMetadata {
+  caseNumber?: string;
+  committee?: string;
+  block?: string;
+  plot?: string;
+  caseType: string;
+}
+
+/**
+ * Parse an appeals committee title and extract metadata
+ */
+function parseAppealsCommitteeTitle(title: string): ParsedAppealsCommitteeMetadata | null {
+  const match = title.match(APPEALS_COMMITTEE_PATTERN);
+  if (!match) return null;
+
+  return {
+    caseNumber: match[1] || undefined,
+    committee: match[2]?.trim().replace(/ועדה מקומית\s*/i, '').trim() || undefined,
+    block: match[3],
+    plot: match[4],
+    caseType: 'השגה'
+  };
+}
+
+// Test data - real examples from gov.il appeals committee database
+const APPEALS_COMMITTEE_TEST_CASES = [
+  {
+    name: 'Standard format with case number',
+    title: 'החלטה בהשגה מס\' 12345 ועדה מקומית תל אביב גוש 6158 חלקה 25',
+    expected: {
+      caseNumber: '12345',
+      committee: 'תל אביב',
+      block: '6158',
+      plot: '25',
+      caseType: 'השגה'
+    }
+  },
+  {
+    name: 'Format without case number',
+    title: 'החלטה בהשגה ועדה מקומית ירושלים גוש 1234 חלקה 56',
+    expected: {
+      caseNumber: undefined,
+      committee: 'ירושלים',
+      block: '1234',
+      plot: '56',
+      caseType: 'השגה'
+    }
+  },
+  {
+    name: 'Short form with ג and ח (no גוש/חלקה)',
+    title: 'החלטה בהשגה מס\' 9999 ועדה מקומית חיפה ג 7890 ח 12',
+    expected: {
+      caseNumber: '9999',
+      committee: 'חיפה',
+      block: '7890',
+      plot: '12',
+      caseType: 'השגה'
+    }
+  },
+  {
+    name: 'Hebrew geresh in case number (׳)',
+    title: 'החלטה בהשגה מס׳ 54321 ועדה מקומית באר שבע גוש 38 חלקה 1',
+    expected: {
+      caseNumber: '54321',
+      committee: 'באר שבע',
+      block: '38',
+      plot: '1',
+      caseType: 'השגה'
+    }
+  },
+  {
+    name: 'Without ב prefix (השגה instead of בהשגה)',
+    title: 'החלטה השגה מס\' 11111 ועדה מקומית נתניה גוש 500 חלקה 10',
+    expected: {
+      caseNumber: '11111',
+      committee: 'נתניה',
+      block: '500',
+      plot: '10',
+      caseType: 'השגה'
+    }
+  },
+  {
+    name: 'Committee with full prefix',
+    title: 'החלטה בהשגה מס\' 77777 ועדה מקומית לתכנון ובניה הרצליה גוש 6500 חלקה 100',
+    expected: {
+      caseNumber: '77777',
+      committee: 'לתכנון ובניה הרצליה',
+      block: '6500',
+      plot: '100',
+      caseType: 'השגה'
+    }
+  }
+];
+
+// Negative test cases - titles that should NOT match appeals committee pattern
+const APPEALS_COMMITTEE_NEGATIVE_CASES = [
+  {
+    name: 'Decisive appraiser format',
+    title: 'הכרעת שמאי מכריע מיום 15-03-2024 בעניין היטל השבחה נ ועדה מקומית תל אביב ג 6158 ח 25'
+  },
+  {
+    name: 'Appeals board format',
+    title: 'ערעור מס\' 98765 על החלטת ועדה מקומית'
+  },
+  {
+    name: 'Missing block/plot',
+    title: 'החלטה בהשגה מס\' 12345 ועדה מקומית תל אביב'
+  },
+  {
+    name: 'Random Hebrew text',
+    title: 'מסמך כללי בעברית'
+  },
+  {
+    name: 'Empty string',
+    title: ''
+  }
+];
+
+/**
+ * Test: test_parse_appeals_committee_title
+ * Verifies that Hebrew decision titles from appeals committee database are parsed correctly
+ */
+function test_parse_appeals_committee_title(): void {
+  console.log('Running: test_parse_appeals_committee_title()');
+  let passed = 0;
+  let failed = 0;
+
+  // Test positive cases
+  for (const testCase of APPEALS_COMMITTEE_TEST_CASES) {
+    try {
+      const result = parseAppealsCommitteeTitle(testCase.title);
+
+      assert.notStrictEqual(result, null, `Should parse title: ${testCase.name}`);
+
+      assert.strictEqual(result!.caseNumber, testCase.expected.caseNumber,
+        `${testCase.name}: caseNumber mismatch`);
+      assert.strictEqual(result!.committee, testCase.expected.committee,
+        `${testCase.name}: committee mismatch`);
+      assert.strictEqual(result!.block, testCase.expected.block,
+        `${testCase.name}: block mismatch`);
+      assert.strictEqual(result!.plot, testCase.expected.plot,
+        `${testCase.name}: plot mismatch`);
+      assert.strictEqual(result!.caseType, testCase.expected.caseType,
+        `${testCase.name}: caseType mismatch`);
+
+      console.log(`  ✓ ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  // Test negative cases
+  for (const testCase of APPEALS_COMMITTEE_NEGATIVE_CASES) {
+    try {
+      const result = parseAppealsCommitteeTitle(testCase.title);
+      assert.strictEqual(result, null, `Should NOT parse: ${testCase.name}`);
+      console.log(`  ✓ Negative: ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ Negative: ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+}
+
 // Run tests
 console.log('===== Scraper Unit Tests =====\n');
 test_parse_decisive_appraiser_title();
+console.log('');
+test_parse_appeals_committee_title();
 console.log('\n✓ All tests passed!');

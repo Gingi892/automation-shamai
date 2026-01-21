@@ -355,7 +355,7 @@ interface DecisionMetadata {
 
 **Test Cases:**
 - [x] `test_parse_decisive_appraiser_title()` - Hebrew title parsing
-- [ ] `test_parse_appeals_committee_title()` - Different format
+- [x] `test_parse_appeals_committee_title()` - Different format
 - [ ] `test_extract_block_plot()` - גוש/חלקה extraction
 - [ ] `test_extract_committee()` - ועדה name extraction
 - [ ] `test_handle_pagination()` - Multiple pages
