@@ -505,11 +505,11 @@ function showError(type) {
 **So that** I can work faster
 
 **Acceptance Criteria:**
-- [ ] Enter → Send message
-- [ ] Shift+Enter → New line in message
-- [ ] Ctrl+K → Focus search input
-- [ ] Escape → Cancel loading / close modals
-- [ ] Arrow Up → Edit last message (optional)
+- [x] Enter → Send message
+- [x] Shift+Enter → New line in message
+- [x] Ctrl+K → Focus search input
+- [x] Escape → Cancel loading / close modals
+- [x] Arrow Up → Edit last message (optional)
 
 ---
 
@@ -616,8 +616,8 @@ Phase 4: Frontend (EXISTING + NEW ITEMS)
   └─► US-P4-004: Analytics dashboard [x]
   └─► US-P4-005: Enhanced Error Handling [ ] NEW
   └─► US-P4-006: Loading State Improvements [ ] NEW
-  └─► US-P4-007: Disclaimer Banner [ ] NEW - CRITICAL FOR LEGAL
-  └─► US-P4-008: Keyboard Shortcuts [ ] NEW
+  └─► US-P4-007: Disclaimer Banner [x] NEW - CRITICAL FOR LEGAL
+  └─► US-P4-008: Keyboard Shortcuts [x] NEW
   └─► US-P4-009: Message History & Export [ ] NEW
   └─► US-P4-010: Mobile Responsive Fixes [ ] NEW
 

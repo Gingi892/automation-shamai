@@ -892,10 +892,32 @@
             font-size: 1rem;
             outline: none;
             transition: border-color 0.3s;
+            resize: none;
+            min-height: 50px;
+            max-height: 150px;
+            line-height: 1.4;
+            font-family: inherit;
         }
 
         .chat-input:focus {
             border-color: #667eea;
+        }
+
+        /* Keyboard shortcuts hint */
+        .keyboard-hint {
+            font-size: 0.7rem;
+            color: #999;
+            text-align: center;
+            padding: 4px 0 0 0;
+        }
+
+        .keyboard-hint kbd {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            padding: 1px 4px;
+            font-family: monospace;
+            font-size: 0.65rem;
         }
 
         .send-button {
@@ -1379,10 +1401,13 @@
         <div id="errorContainer"></div>
 
         <div class="chat-input-container">
-            <input type="text" id="userInput" class="chat-input"
-                   placeholder="הקלד את השאלה שלך כאן..."
-                   onkeypress="handleKeyPress(event)">
+            <textarea id="userInput" class="chat-input" rows="1"
+                      placeholder="הקלד את השאלה שלך כאן..."
+                      onkeydown="handleKeyDown(event)"></textarea>
             <button class="send-button" id="sendButton" onclick="sendMessage()">שלח</button>
+        </div>
+        <div class="keyboard-hint">
+            <kbd>Enter</kbd> שליחה · <kbd>Shift+Enter</kbd> שורה חדשה · <kbd>Ctrl+K</kbd> פוקוס · <kbd>Esc</kbd> ביטול
         </div>
     </div>
 
@@ -1394,11 +1419,76 @@
         let currentSources = [];
         let activeTooltipTimeout = null;
 
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
+        // Track loading state for Escape cancellation
+        let isLoading = false;
+        let abortController = null;
+        let lastUserMessages = []; // Store recent user messages for Arrow Up editing
+
+        // Handle keyboard shortcuts in the input textarea
+        function handleKeyDown(event) {
+            // Enter without Shift → Send message
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
                 sendMessage();
+                return;
+            }
+
+            // Shift+Enter → New line (default behavior for textarea, no action needed)
+
+            // Arrow Up → Edit last message (when input is empty)
+            if (event.key === 'ArrowUp' && !event.shiftKey) {
+                const input = document.getElementById('userInput');
+                if (input.value.trim() === '' && lastUserMessages.length > 0) {
+                    event.preventDefault();
+                    input.value = lastUserMessages[lastUserMessages.length - 1];
+                    // Move cursor to end
+                    setTimeout(() => {
+                        input.selectionStart = input.selectionEnd = input.value.length;
+                    }, 0);
+                }
             }
         }
+
+        // Global keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            // Ctrl+K → Focus search input
+            if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+                event.preventDefault();
+                const input = document.getElementById('userInput');
+                input.focus();
+                input.select();
+            }
+
+            // Escape → Cancel loading or close modals
+            if (event.key === 'Escape') {
+                // Close disclaimer popup if visible
+                const overlay = document.getElementById('disclaimerOverlay');
+                if (overlay && overlay.classList.contains('visible')) {
+                    // Don't close disclaimer popup with Escape - user must accept
+                    return;
+                }
+
+                // Cancel loading if in progress
+                if (isLoading && abortController) {
+                    abortController.abort();
+                    hideTyping();
+                    isLoading = false;
+                    document.getElementById('sendButton').disabled = false;
+                    showSimpleError('הבקשה בוטלה');
+                }
+            }
+        });
+
+        // Auto-resize textarea as user types
+        document.addEventListener('DOMContentLoaded', function() {
+            const textarea = document.getElementById('userInput');
+            if (textarea) {
+                textarea.addEventListener('input', function() {
+                    this.style.height = 'auto';
+                    this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+                });
+            }
+        });
 
         function escapeHtml(text) {
             const div = document.createElement('div');
@@ -2352,20 +2442,24 @@
                 return;
             }
 
-            // Store message for retry functionality
+            // Store message for retry functionality and Arrow Up editing
             lastUserMessage = message;
+            lastUserMessages.push(message);
+            if (lastUserMessages.length > 10) lastUserMessages.shift(); // Keep last 10
             hideError();
 
             addMessage(message, 'user');
             conversationHistory.push({ role: 'user', content: message });
 
             input.value = '';
+            input.style.height = 'auto'; // Reset textarea height
             sendButton.disabled = true;
+            isLoading = true;
             showTyping();
 
-            // Create AbortController for timeout handling
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+            // Create AbortController for timeout and Escape cancellation
+            abortController = new AbortController();
+            const timeoutId = setTimeout(() => abortController.abort(), 120000); // 2 minute timeout
 
             try {
                 const response = await fetch(webhookUrl, {
@@ -2377,7 +2471,7 @@
                         message: message,
                         history: conversationHistory.slice(-10)
                     }),
-                    signal: controller.signal
+                    signal: abortController.signal
                 });
 
                 clearTimeout(timeoutId);
@@ -2385,6 +2479,7 @@
                 // Check for server errors (500 range)
                 if (response.status >= 500) {
                     hideTyping();
+                    isLoading = false;
                     showError(new Error(`HTTP error! status: ${response.status}`), 'server');
                     console.error('Server error:', response.status);
                     return;
@@ -2396,6 +2491,7 @@
 
                 const data = await response.json();
                 hideTyping();
+                isLoading = false;
 
                 // Check for empty response
                 if (!data.response || data.response.trim() === '') {
@@ -2424,10 +2520,15 @@
             } catch (error) {
                 clearTimeout(timeoutId);
                 hideTyping();
+                isLoading = false;
 
                 // Detect and show appropriate error type
                 if (error.name === 'AbortError') {
-                    showError(error, 'timeout');
+                    // Check if user cancelled vs timeout
+                    if (!abortController.signal.reason) {
+                        showError(error, 'timeout');
+                    }
+                    // If user cancelled, showSimpleError was already called in Escape handler
                 } else if (error instanceof TypeError || error.message.includes('Failed to fetch')) {
                     showError(error, 'network');
                 } else {
@@ -2436,6 +2537,7 @@
                 console.error('Error:', error);
             } finally {
                 sendButton.disabled = false;
+                abortController = null;
                 input.focus();
             }
         }

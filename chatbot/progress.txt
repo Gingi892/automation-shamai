@@ -2774,3 +2774,70 @@ Implemented legal disclaimer banner and first-time popup in `workflows/chatbot-f
 5. **Focus management**: Don't focus input until popup is dismissed for accessibility
 
 ---
+
+## Iteration 32 — US-P4-008 Keyboard Shortcuts
+- **Date**: 2026-01-21
+- **Task**: US-P4-008 - Keyboard Shortcuts
+
+### What Was Done
+
+Implemented keyboard shortcuts for the chatbot frontend to improve power user experience.
+
+### Changes to Frontend (workflows/chatbot-frontend.html)
+
+1. **Converted input to textarea**
+   - Changed from input type text to textarea for multi-line support
+   - Added auto-resize functionality on input
+   - Reset height after sending message
+
+2. **New CSS Styles** (lines 907-921)
+   - .keyboard-hint - Hint bar below input showing available shortcuts
+   - .keyboard-hint kbd - Styled keyboard key badges
+
+3. **New JavaScript Functions** (lines 1423-1488)
+   - isLoading - Global state tracking for Escape cancellation
+   - abortController - Global AbortController for request cancellation
+   - lastUserMessages - Array storing last 10 user messages for Arrow Up
+   - handleKeyDown(event) - Main keyboard handler for textarea
+   - Global keydown event listener for Ctrl+K and Escape
+
+### Keyboard Shortcuts Implemented
+
+| Shortcut | Action | Implementation |
+|----------|--------|----------------|
+| Enter | Send message | handleKeyDown() - prevents default, calls sendMessage() |
+| Shift+Enter | New line | Default textarea behavior (no code needed) |
+| Ctrl+K / Cmd+K | Focus input | Global listener, prevents default, focuses and selects |
+| Escape | Cancel loading | Aborts fetch request, hides typing indicator, shows message |
+| Arrow Up | Edit last message | When input empty, loads last message from lastUserMessages |
+
+### Technical Details
+
+- **AbortController**: Replaced local controller with global abortController for Escape access
+- **isLoading state**: Tracks when a request is in progress for conditional cancellation
+- **Message history**: Stores up to 10 recent messages, shifts oldest when exceeded
+- **Auto-resize**: Textarea grows up to 150px max-height based on content
+- **Keyboard hint**: Hebrew text showing shortcuts below input
+
+### Files Modified
+
+1. **workflows/chatbot-frontend.html**
+   - Lines 887-921: Added .chat-input textarea styles and .keyboard-hint styles
+   - Lines 1402-1410: Changed input to textarea with keyboard hint
+   - Lines 1423-1488: New keyboard handling code with global listeners
+   - Lines 2446-2455: Updated sendMessage() to use global abortController and track isLoading
+   - Lines 2471-2540: Updated fetch call and error handling for cancellation
+
+2. **chatbot/PRD.md** - Marked all US-P4-008 items as complete
+
+### Learnings for Next Cycles
+
+1. **Textarea for multi-line**: Converting input to textarea enables Shift+Enter naturally
+2. **Global keyboard listeners**: Use document.addEventListener keydown for shortcuts that work everywhere
+3. **AbortController for cancellation**: Must be global (or accessible) for Escape to cancel requests
+4. **State tracking**: isLoading flag prevents cancellation when not loading
+5. **Cmd+K for Mac**: Use event.ctrlKey or event.metaKey for cross-platform support
+6. **Auto-resize pattern**: Set height to auto then to scrollHeight for proper calculation
+7. **Hebrew keyboard hint**: Use kbd tags with Hebrew descriptions for localization
+
+---
