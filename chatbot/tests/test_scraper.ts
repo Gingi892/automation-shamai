@@ -368,9 +368,191 @@ function test_parse_appeals_committee_title(): void {
   }
 }
 
+// ============================================================
+// Block/Plot (גוש/חלקה) Extraction Tests
+// ============================================================
+
+interface ExtractedBlockPlot {
+  block: string | null;
+  plot: string | null;
+}
+
+/**
+ * Extract block (גוש) and plot (חלקה) numbers from Hebrew text
+ * Implements the same patterns as scraper.ts lines 968-990
+ */
+function extractBlockPlot(text: string): ExtractedBlockPlot {
+  const result: ExtractedBlockPlot = { block: null, plot: null };
+
+  // Pattern 1: ג XXXX ח YYYY (short form)
+  const blockPlotShort = text.match(/[גג]\s*(\d+)\s*[חח]\s*(\d+)/);
+  if (blockPlotShort) {
+    result.block = blockPlotShort[1];
+    result.plot = blockPlotShort[2];
+    return result;
+  }
+
+  // Pattern 2: גוש XXXX חלקה YYYY (long form)
+  const blockPlotLong = text.match(/גוש\s*(\d+)\s*(?:,?\s*)?חלקה\s*(\d+)/);
+  if (blockPlotLong) {
+    result.block = blockPlotLong[1];
+    result.plot = blockPlotLong[2];
+    return result;
+  }
+
+  // Pattern 3: Block/Plot with comma (גוש 1234, חלקה 56)
+  const blockPlotParen = text.match(/גוש\s*(\d+)\s*,\s*חלקה\s*(\d+)/);
+  if (blockPlotParen) {
+    result.block = blockPlotParen[1];
+    result.plot = blockPlotParen[2];
+    return result;
+  }
+
+  return result;
+}
+
+// Test data for block/plot extraction
+const BLOCK_PLOT_TEST_CASES = [
+  {
+    name: 'Short form: ג XXXX ח YYYY',
+    text: 'מסמך כלשהו ג 6158 ח 25 בעניין היטל השבחה',
+    expected: { block: '6158', plot: '25' }
+  },
+  {
+    name: 'Short form: without spaces',
+    text: 'מסמך כלשהו ג6158 ח25',
+    expected: { block: '6158', plot: '25' }
+  },
+  {
+    name: 'Short form: extra spaces',
+    text: 'מסמך כלשהו ג  1234  ח  56',
+    expected: { block: '1234', plot: '56' }
+  },
+  {
+    name: 'Long form: גוש XXXX חלקה YYYY',
+    text: 'ועדה מקומית תל אביב גוש 7890 חלקה 12',
+    expected: { block: '7890', plot: '12' }
+  },
+  {
+    name: 'Long form: without spaces',
+    text: 'גוש1234חלקה56',
+    expected: { block: '1234', plot: '56' }
+  },
+  {
+    name: 'Long form: with comma separator',
+    text: 'ועדה מקומית חיפה גוש 500, חלקה 10',
+    expected: { block: '500', plot: '10' }
+  },
+  {
+    name: 'With comma: formal format',
+    text: 'בגוש 38, חלקה 1 בתחום',
+    expected: { block: '38', plot: '1' }
+  },
+  {
+    name: 'Large block and plot numbers',
+    text: 'גוש 123456 חלקה 9999',
+    expected: { block: '123456', plot: '9999' }
+  },
+  {
+    name: 'Single digit numbers',
+    text: 'ג 1 ח 2',
+    expected: { block: '1', plot: '2' }
+  },
+  {
+    name: 'Embedded in full title (decisive appraiser)',
+    text: 'הכרעת שמאי מכריע מיום 15-03-2024 בעניין היטל השבחה נ ועדה מקומית תל אביב ג 6158 ח 25 - כהן',
+    expected: { block: '6158', plot: '25' }
+  },
+  {
+    name: 'Embedded in full title (appeals committee)',
+    text: 'החלטה בהשגה מס\' 12345 ועדה מקומית ירושלים גוש 1234 חלקה 56',
+    expected: { block: '1234', plot: '56' }
+  }
+];
+
+// Negative test cases - should return null for both block and plot
+const BLOCK_PLOT_NEGATIVE_CASES = [
+  {
+    name: 'No block/plot numbers',
+    text: 'מסמך כללי בעברית ללא מספרי גוש וחלקה'
+  },
+  {
+    name: 'Only block, no plot',
+    text: 'גוש 1234 בתל אביב'
+  },
+  {
+    name: 'Only plot, no block',
+    text: 'חלקה 56 ברחוב הרצל'
+  },
+  {
+    name: 'Empty string',
+    text: ''
+  },
+  {
+    name: 'Numbers without Hebrew markers',
+    text: '1234 5678'
+  },
+  {
+    name: 'Block/plot with letters instead of numbers',
+    text: 'גוש אב חלקה גד'
+  }
+];
+
+/**
+ * Test: test_extract_block_plot
+ * Verifies that גוש (block) and חלקה (plot) numbers are correctly extracted from various Hebrew text formats
+ */
+function test_extract_block_plot(): void {
+  console.log('Running: test_extract_block_plot()');
+  let passed = 0;
+  let failed = 0;
+
+  // Test positive cases
+  for (const testCase of BLOCK_PLOT_TEST_CASES) {
+    try {
+      const result = extractBlockPlot(testCase.text);
+
+      assert.strictEqual(result.block, testCase.expected.block,
+        `${testCase.name}: block mismatch - expected "${testCase.expected.block}", got "${result.block}"`);
+      assert.strictEqual(result.plot, testCase.expected.plot,
+        `${testCase.name}: plot mismatch - expected "${testCase.expected.plot}", got "${result.plot}"`);
+
+      console.log(`  ✓ ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  // Test negative cases
+  for (const testCase of BLOCK_PLOT_NEGATIVE_CASES) {
+    try {
+      const result = extractBlockPlot(testCase.text);
+      assert.strictEqual(result.block, null,
+        `${testCase.name}: block should be null, got "${result.block}"`);
+      assert.strictEqual(result.plot, null,
+        `${testCase.name}: plot should be null, got "${result.plot}"`);
+      console.log(`  ✓ Negative: ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ Negative: ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+}
+
 // Run tests
 console.log('===== Scraper Unit Tests =====\n');
 test_parse_decisive_appraiser_title();
 console.log('');
 test_parse_appeals_committee_title();
+console.log('');
+test_extract_block_plot();
 console.log('\n✓ All tests passed!');

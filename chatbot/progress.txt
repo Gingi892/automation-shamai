@@ -2039,3 +2039,46 @@ The decisive appraiser pattern from scraper.ts:
    - Group 7: appraiser name (optional)
 
 ---
+
+## Iteration 26 — US-P5-001 test_extract_block_plot()
+- **Date**: 2026-01-21
+- **Task**: US-P5-001 - Unit Tests - Scraper: test_extract_block_plot()
+
+### What Was Done
+
+Created unit tests for גוש (block) and חלקה (plot) extraction from various Hebrew text formats.
+
+### Files Modified
+
+1. **chatbot/tests/test_scraper.ts**
+   - Added `extractBlockPlot()` function implementing the same patterns as scraper.ts lines 968-990
+   - Added 11 positive test cases:
+     - Short form: ג XXXX ח YYYY (with/without spaces)
+     - Long form: גוש XXXX חלקה YYYY (with/without spaces)
+     - With comma separator: גוש XXXX, חלקה YYYY
+     - Large numbers, single digits
+     - Embedded in full titles (both decisive appraiser and appeals committee formats)
+   - Added 6 negative test cases:
+     - No block/plot numbers
+     - Only block OR only plot (both should return null)
+     - Empty string
+     - Numbers without Hebrew markers
+     - Letters instead of numbers
+
+### Test Patterns Implemented
+
+| Pattern | Example | Regex |
+|---------|---------|-------|
+| Short form | ג 6158 ח 25 | `/[גג]\s*(\d+)\s*[חח]\s*(\d+)/` |
+| Long form | גוש 1234 חלקה 56 | `/גוש\s*(\d+)\s*(?:,?\s*)?חלקה\s*(\d+)/` |
+| With comma | גוש 38, חלקה 1 | `/גוש\s*(\d+)\s*,\s*חלקה\s*(\d+)/` |
+
+### Learnings for Next Cycles
+
+1. **Pattern priority matters**: The short form pattern (`ג X ח Y`) matches more broadly and should be tried first
+2. **Spacing variations**: The regex `\s*` handles zero or more spaces, making it flexible for various input formats
+3. **Both values required**: The extraction should return `{block: null, plot: null}` if either value is missing - this prevents partial matches from causing issues downstream
+4. **Running tests**: Use `node --import tsx` from mcp-server directory (not `npx tsx` which runs silently on Windows)
+5. **Test cases should include real-world examples**: Using actual title formats from decisive appraiser and appeals committee ensures patterns work in context
+
+---
