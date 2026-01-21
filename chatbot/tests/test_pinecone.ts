@@ -1201,9 +1201,338 @@ function test_query_by_filter(): void {
   }
 }
 
+// ============================================================
+// Test: test_query_semantic
+// ============================================================
+
+/**
+ * Calculate cosine similarity between two vectors
+ * Returns a value between -1 and 1 (1 = identical, 0 = orthogonal, -1 = opposite)
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) {
+    throw new Error(`Vector dimension mismatch: ${a.length} vs ${b.length}`);
+  }
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  normA = Math.sqrt(normA);
+  normB = Math.sqrt(normB);
+
+  if (normA === 0 || normB === 0) {
+    return 0;
+  }
+
+  return dotProduct / (normA * normB);
+}
+
+/**
+ * Generate a semantically similar embedding by adding small noise
+ * The smaller the noise, the more similar the embedding
+ */
+function generateSimilarEmbedding(base: number[], noiseLevel: number): number[] {
+  return base.map(v => v + (Math.random() * 2 - 1) * noiseLevel);
+}
+
+/**
+ * Generate a semantically different embedding (random direction)
+ */
+function generateDifferentEmbedding(): number[] {
+  return generateMockEmbedding();
+}
+
+/**
+ * Simulate semantic query with cosine similarity scoring
+ * Returns matches sorted by similarity (highest first)
+ */
+function simulateSemanticQuery(
+  vectors: PineconeVector[],
+  queryVector: number[],
+  topK: number,
+  includeMetadata: boolean = true
+): QueryResponse {
+  // Calculate similarity scores for all vectors
+  const scoredMatches: QueryMatch[] = vectors.map(v => ({
+    id: v.id,
+    score: cosineSimilarity(queryVector, v.values),
+    metadata: includeMetadata ? v.metadata : undefined
+  }));
+
+  // Sort by score descending (most similar first)
+  scoredMatches.sort((a, b) => b.score - a.score);
+
+  // Return top K results
+  return {
+    matches: scoredMatches.slice(0, topK),
+    namespace: PINECONE_CONFIG.namespace
+  };
+}
+
+/**
+ * Test Pinecone query with semantic/embedding similarity
+ * Verifies that similar embeddings return higher scores than different ones
+ */
+function test_query_semantic(): void {
+  console.log('\nRunning: test_query_semantic()');
+  let passed = 0;
+  let failed = 0;
+
+  // Create a base embedding that we'll use for similarity tests
+  const baseEmbedding = generateMockEmbedding();
+
+  // Create test vectors with varying similarity to base embedding
+  const testVectors: PineconeVector[] = [];
+
+  // Vector 0: Very similar to base (low noise)
+  const similarEmbedding = generateSimilarEmbedding(baseEmbedding, 0.1);
+  testVectors.push(buildPineconeVector(
+    'decisive_appraiser',
+    'הכרעה דומה מאוד',
+    'https://example.com/similar.pdf',
+    'תוכן דומה מאוד לשאילתה',
+    similarEmbedding,
+    { committee: 'תל אביב', year: '2024' }
+  ));
+
+  // Vector 1: Somewhat similar (medium noise)
+  const somewhatSimilar = generateSimilarEmbedding(baseEmbedding, 0.5);
+  testVectors.push(buildPineconeVector(
+    'decisive_appraiser',
+    'הכרעה דומה במידה',
+    'https://example.com/somewhat.pdf',
+    'תוכן דומה במידה מסוימת',
+    somewhatSimilar,
+    { committee: 'ירושלים', year: '2024' }
+  ));
+
+  // Vector 2: Less similar (higher noise)
+  const lessSimilar = generateSimilarEmbedding(baseEmbedding, 1.0);
+  testVectors.push(buildPineconeVector(
+    'decisive_appraiser',
+    'הכרעה פחות דומה',
+    'https://example.com/less.pdf',
+    'תוכן פחות דומה',
+    lessSimilar,
+    { committee: 'חיפה', year: '2023' }
+  ));
+
+  // Vector 3: Random/different embedding
+  const differentEmbedding = generateDifferentEmbedding();
+  testVectors.push(buildPineconeVector(
+    'decisive_appraiser',
+    'הכרעה שונה לגמרי',
+    'https://example.com/different.pdf',
+    'תוכן שונה לחלוטין',
+    differentEmbedding,
+    { committee: 'באר שבע', year: '2022' }
+  ));
+
+  // Vector 4: Another random embedding
+  const anotherDifferent = generateDifferentEmbedding();
+  testVectors.push(buildPineconeVector(
+    'appeals_committee',
+    'החלטת ועדת השגות',
+    'https://example.com/appeals.pdf',
+    'החלטה בנושא אחר',
+    anotherDifferent,
+    { committee: 'נתניה', year: '2024' }
+  ));
+
+  // Test case 1: Most similar vector should have highest score
+  try {
+    const response = simulateSemanticQuery(testVectors, baseEmbedding, 5);
+
+    assert.ok(response.matches.length === 5,
+      'Should return all 5 vectors');
+
+    // The very similar vector (index 0) should be first
+    const topMatch = response.matches[0];
+    assert.strictEqual(topMatch.metadata?.title, 'הכרעה דומה מאוד',
+      'Most similar vector should be ranked first');
+    assert.ok(topMatch.score > 0.9,
+      `Top match should have score > 0.9, got ${topMatch.score.toFixed(4)}`);
+
+    console.log('  ✓ Most similar vector ranked first');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Most similar vector ranked first: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 2: Scores should be in descending order
+  try {
+    const response = simulateSemanticQuery(testVectors, baseEmbedding, 5);
+
+    for (let i = 1; i < response.matches.length; i++) {
+      assert.ok(response.matches[i - 1].score >= response.matches[i].score,
+        `Scores should be descending: ${response.matches[i - 1].score} >= ${response.matches[i].score}`);
+    }
+
+    console.log('  ✓ Scores are in descending order');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Scores are in descending order: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 3: Identical embedding should have score ~1.0
+  try {
+    // Query with the exact same embedding as vector 0
+    const response = simulateSemanticQuery(testVectors, similarEmbedding, 1);
+
+    assert.ok(response.matches[0].score > 0.99,
+      `Identical embedding should have score ~1.0, got ${response.matches[0].score.toFixed(4)}`);
+
+    console.log('  ✓ Identical embedding has score ~1.0');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Identical embedding has score ~1.0: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 4: topK limits results correctly
+  try {
+    const response = simulateSemanticQuery(testVectors, baseEmbedding, 2);
+
+    assert.strictEqual(response.matches.length, 2,
+      'Should return exactly topK results');
+
+    // Both should still be the most similar
+    assert.ok(response.matches[0].score >= response.matches[1].score,
+      'First result should have higher or equal score');
+
+    console.log('  ✓ topK limits results correctly');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ topK limits results correctly: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 5: Random vectors have low correlation (score near 0)
+  try {
+    // Two independent random vectors in high dimensions will have score near 0
+    // due to the concentration of measure phenomenon
+    const random1 = generateMockEmbedding();
+    const random2 = generateMockEmbedding();
+
+    const score = cosineSimilarity(random1, random2);
+
+    // In high dimensions (1024), random vectors are nearly orthogonal
+    // Expected score is approximately 0 with standard deviation ~1/sqrt(1024) ≈ 0.03
+    // We use a generous threshold of 0.15 to account for randomness
+    assert.ok(Math.abs(score) < 0.15,
+      `Random vectors should have low correlation, got ${score.toFixed(4)}`);
+
+    console.log('  ✓ Random vectors have low correlation (near orthogonal)');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Random vectors have low correlation: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 6: Negative embedding gives negative score
+  try {
+    const negativeEmbedding = baseEmbedding.map(v => -v);
+    const score = cosineSimilarity(baseEmbedding, negativeEmbedding);
+
+    assert.ok(score < -0.99,
+      `Negative embedding should have score ~-1.0, got ${score.toFixed(4)}`);
+
+    console.log('  ✓ Negative embedding has score ~-1.0');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Negative embedding has score ~-1.0: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 7: Metadata included in semantic query results
+  try {
+    const response = simulateSemanticQuery(testVectors, baseEmbedding, 3, true);
+
+    for (const match of response.matches) {
+      assert.ok(match.metadata, 'Match should include metadata');
+      assert.ok(match.metadata.title, 'Metadata should have title');
+      assert.ok(match.metadata.database, 'Metadata should have database');
+      assert.ok(match.metadata.url, 'Metadata should have url');
+    }
+
+    console.log('  ✓ Metadata included in semantic query results');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Metadata included in semantic query results: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 8: Metadata excluded when includeMetadata=false
+  try {
+    const response = simulateSemanticQuery(testVectors, baseEmbedding, 3, false);
+
+    for (const match of response.matches) {
+      assert.strictEqual(match.metadata, undefined,
+        'Match should not include metadata when includeMetadata=false');
+    }
+
+    console.log('  ✓ Metadata excluded when includeMetadata=false');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Metadata excluded when includeMetadata=false: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 9: Score values are between -1 and 1
+  try {
+    const response = simulateSemanticQuery(testVectors, baseEmbedding, 5);
+
+    for (const match of response.matches) {
+      assert.ok(match.score >= -1 && match.score <= 1,
+        `Score should be between -1 and 1, got ${match.score}`);
+    }
+
+    console.log('  ✓ Score values are between -1 and 1');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Score values are between -1 and 1: ${(error as Error).message}`);
+    failed++;
+  }
+
+  // Test case 10: Dimension mismatch throws error
+  try {
+    const wrongDimension = Array.from({ length: 512 }, () => Math.random());
+
+    try {
+      cosineSimilarity(baseEmbedding, wrongDimension);
+      assert.fail('Should have thrown an error for dimension mismatch');
+    } catch (e) {
+      assert.ok((e as Error).message.includes('dimension'),
+        'Error should mention dimension mismatch');
+    }
+
+    console.log('  ✓ Dimension mismatch throws error');
+    passed++;
+  } catch (error) {
+    console.log(`  ✗ Dimension mismatch throws error: ${(error as Error).message}`);
+    failed++;
+  }
+
+  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+}
+
 // Run tests
 console.log('===== Pinecone Integration Tests =====\n');
 test_upsert_single_document();
 test_upsert_with_metadata();
 test_query_by_filter();
+test_query_semantic();
 console.log('\n✓ All tests passed!');
