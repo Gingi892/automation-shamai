@@ -94,7 +94,7 @@ function buildScraperUrl(targetUrl) {
 **So that** I can find relevant decisions for user queries
 
 **Acceptance Criteria:**
-- [ ] MCP tool `search_decisions` with parameters:
+- [x] MCP tool `search_decisions` with parameters:
   - `query`: Free text search (Hebrew)
   - `committee`: Filter by local committee name
   - `block`: Filter by block number (גוש)
@@ -103,8 +103,8 @@ function buildScraperUrl(targetUrl) {
   - `caseType`: Filter by case type (היטל השבחה, פיצויים, ירידת ערך)
   - `fromDate`, `toDate`: Date range filters
   - `limit`, `offset`: Pagination
-- [ ] Returns decisions with all metadata
-- [ ] Fast response (<100ms) from local SQLite
+- [x] Returns decisions with all metadata
+- [x] Fast response (<100ms) from local SQLite
 
 ---
 

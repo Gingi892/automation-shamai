@@ -44,3 +44,16 @@
   - The codebase has a robust multi-strategy fallback system for scraping
   - TypeScript type check passes cleanly
 ---
+
+## Iteration 2 — US-002: Search Decisions (VERIFIED COMPLETE)
+- **What was done:** Verified all 3 acceptance criteria for US-002 are already fully implemented
+- **Files verified:**
+  - `src/index.ts` - MCP tool `search_decisions` defined (lines 82-189) with all parameters
+  - `src/index.ts` - Handler `handleSearchDecisions` (lines 786-844)
+  - `src/database.ts` - `search()` method (lines 284-376) implementing all filters
+- **Parameters verified:** query, committee, block, plot, appraiser, caseType, fromDate, toDate, limit, offset
+- **Learnings for next cycles:**
+  - US-002 was already implemented before this iteration began
+  - The search uses LIKE for text matching since sql.js doesn't support FTS5
+  - Results include totalCount, hasMore for pagination
+---
