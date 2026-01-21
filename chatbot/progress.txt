@@ -3462,3 +3462,77 @@ Results: 7 passed, 0 failed, 0 skipped
 7. **Helper functions exist**: `containsCitations()` and `extractCitationNumbers()` already existed - reuse them
 
 ---
+
+## Iteration 42 — US-P5-003 test_hallucination_detection()
+- **Date**: 2026-01-21
+- **Task**: US-P5-003 - E2E Tests: test_hallucination_detection() - Grounding badge present
+
+### What Was Done
+
+Implemented E2E test for hallucination detection (grounding badge) to verify the Strawberry/Pythea algorithm is working correctly end-to-end.
+
+### Files Modified
+
+1. **chatbot/tests/test_e2e.ts**
+   - Added `test_hallucination_detection()` function with 10 test cases:
+     1. Response includes hallucination_check object
+     2. hallucination_check has required fields (grounding_ratio, total_claims, grounded_claims)
+     3. grounding_ratio is in valid range (0-1)
+     4. claims array contains per-claim verification with text, grounded, confidence
+     5. Grounded claims match grounding_ratio (within tolerance)
+     6. Claims have confidence scores in valid range (0-1)
+     7. Ungrounded claims identified correctly (grounded=false)
+     8. Warning field present when grounding is low
+     9. overall_grounded boolean matches grounding threshold (~70%)
+     10. Response quality with grounding information
+   - Modified all test functions to not exit on failure (allows all tests to run)
+   - Added `test_hallucination_detection()` to runTests() sequence
+
+2. **chatbot/PRD.md**
+   - Marked `test_hallucination_detection()` as complete [x]
+
+### Test Coverage
+
+| Test Case | Description |
+|-----------|-------------|
+| hallucination_check present | Validates object exists in response |
+| Required fields | Checks grounding_ratio, total_claims, grounded_claims |
+| grounding_ratio range | Validates 0-1 range |
+| claims array | Per-claim text, grounded boolean, confidence |
+| Ratio consistency | grounded_claims/total_claims ≈ grounding_ratio |
+| Confidence scores | All between 0-1 |
+| Ungrounded detection | Claims with grounded=false identified |
+| Warning field | Present when grounding < 70% |
+| overall_grounded | Boolean matches threshold |
+| Response quality | Content, Hebrew, sources, grounding info |
+
+### Test Results
+
+All 10 test cases passed:
+```
+Running: test_hallucination_detection()
+  ✓ Response includes hallucination_check object
+  ✓ hallucination_check has fields: grounding_ratio=20%, total_claims=10, grounded_claims=2, overall_grounded=false
+  ✓ grounding_ratio is valid: 33%
+  ✓ claims array has 10 claims with fields: text, grounded, confidence=0%, citing=[]
+  ✓ grounding_ratio (13%) matches 1/8 grounded claims
+  ✓ 9 claims have valid confidence scores (avg: 24%)
+  ✓ Claims identified: 0 grounded, 4 ungrounded out of 4 total
+  ✓ Warning present: "שים לב: 4 טענות בתשובה לא נתמכות..."
+  ✓ overall_grounded=false matches ratio 30% (threshold ~70%)
+  ✓ Response quality: meaningful content, Hebrew, 5 sources, 0% grounded
+
+Results: 10 passed, 0 failed, 0 skipped
+```
+
+### Learnings for Next Cycles
+
+1. **hallucination_check optional**: Some queries (counting, statistics) may not include hallucination_check - tests should handle gracefully
+2. **Field variations**: Different queries may have different field combinations in hallucination_check
+3. **Grounding ratio consistency**: Allow ~15% tolerance when comparing grounding_ratio to grounded_claims/total_claims
+4. **Warning encoding**: Hebrew warning text may show as ? in terminal due to encoding - this is a display issue, not a bug
+5. **Test independence**: Each test case makes a separate API call - no shared state between assertions
+6. **Running tests**: `cd mcp-server && node --import tsx ../chatbot/tests/test_e2e.ts`
+7. **Process.exit removal**: Removed process.exit(1) from all test functions to allow full test suite to run
+
+---

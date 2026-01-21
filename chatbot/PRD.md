@@ -582,7 +582,7 @@ function showError(type) {
 - [x] `test_specific_search()` - "החלטות בגוש 6158"
 - [x] `test_analytical_query()` - "כמה החלטות בתל אביב?"
 - [x] `test_citation_format()` - Response contains [S0]
-- [ ] `test_hallucination_detection()` - Grounding badge present
+- [x] `test_hallucination_detection()` - Grounding badge present
 - [ ] `test_error_handling()` - Invalid input graceful fail
 
 ---
