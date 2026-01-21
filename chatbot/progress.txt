@@ -261,3 +261,105 @@ From the Document Processor workflow (kTZqcClvtUspeC28):
 - PRD requirement "one doc = one vector" not yet implemented
 
 ---
+
+## Iteration 4 — List Current Frontend Features
+- **Date**: 2026-01-21
+- **Task**: US-P1-001 - List current frontend features
+
+### File Analyzed
+- `workflows/chatbot-frontend.html` (1097 lines)
+
+### Current Frontend Features
+
+#### 1. Layout & Design
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Hebrew RTL layout | ✅ Implemented | `dir="rtl"` on html element |
+| Dark header | ✅ Implemented | Gradient #1a1a2e → #16213e |
+| Title "צ'אטבוט שמאות מכריעה" | ✅ Implemented | Header h1 |
+| Clean chat bubbles | ✅ Implemented | User (right, purple) / Assistant (left, white) |
+| Typing indicator | ✅ Implemented | 3-dot animated loader |
+| Error handling | ✅ Implemented | Hebrew error messages with auto-dismiss |
+| Mobile responsive | ✅ Implemented | @media query for ≤600px |
+
+#### 2. Interactive Citation System
+| Feature | Status | Notes |
+|---------|--------|-------|
+| [S#] tags converted to badges | ✅ Implemented | Blue badges with numbers |
+| Hover → tooltip | ✅ Implemented | Shows title, relevance bar, actions |
+| Click → highlights source | ✅ Implemented | Yellow glow animation + scroll |
+| Open PDF button | ✅ Implemented | In tooltip and source list |
+| Multiple citation grouping | ⚠️ Partial | Consecutive [S0][S1] render separately |
+
+#### 3. Sources Section
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Collapsible section | ✅ Implemented | Toggle with ▼ icon |
+| Numbered badges | ✅ Implemented | 1-indexed, matches inline citations |
+| Color-coded relevance | ✅ Implemented | Green (≥80%), Yellow (50-79%), Red (<50%) |
+| Click → source highlight | ✅ Implemented | 2-second yellow glow animation |
+| Clickable PDF links | ✅ Implemented | Opens in new tab |
+
+#### 4. Grounding Indicator (Hallucination Detection UI)
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Overall grounding badge | ✅ Implemented | Shows ✓/⚠/✗ with percentage |
+| Green badge (≥90%) | ✅ "מבוסס" | |
+| Yellow badge (70-89%) | ✅ "מבוסס חלקית" | |
+| Red badge (<70%) | ✅ "דורש בדיקה" | |
+| Expandable per-claim breakdown | ✅ Implemented | Click badge to expand |
+| Per-claim confidence % | ✅ Implemented | Shows ✓/✗ icon + percentage |
+| Warning banner | ✅ Implemented | Orange banner for ungrounded claims |
+
+#### 5. Configuration
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Webhook URL input | ✅ Implemented | User configures n8n endpoint |
+| Conversation history | ✅ Implemented | Maintains last 10 messages |
+
+#### 6. UX Details
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Send on Enter | ✅ Implemented | |
+| Auto-focus input | ✅ Implemented | On page load |
+| Button disabled during send | ✅ Implemented | Prevents double-submit |
+| Auto-scroll to bottom | ✅ Implemented | On new messages |
+| XSS protection | ✅ Implemented | escapeHtml() function |
+
+### Gap Analysis vs PRD Requirements
+
+| PRD Requirement | Current State |
+|-----------------|---------------|
+| US-P4-001: Professional Hebrew UI | ✅ Complete |
+| US-P4-002: Source display panel | ✅ Complete |
+| US-P4-003: Interactive citations | ✅ Complete |
+| US-P4-004: Analytics dashboard/charts | ❌ Not implemented |
+
+### Expected API Response Format (Frontend Expects)
+```json
+{
+  "success": true,
+  "response": "לפי ההחלטה [S0], השמאי קבע...",
+  "sources": [
+    {"title": "...", "url": "...", "score": 0.92}
+  ],
+  "hallucination_check": {
+    "grounding_ratio": 0.75,
+    "total_claims": 4,
+    "grounded_claims": 3,
+    "claims": [
+      {"text": "...", "grounded": true, "confidence": 0.88}
+    ]
+  },
+  "warning": "שים לב: 1 טענות לא נתמכות"
+}
+```
+
+### Learnings for Next Cycles
+- Frontend is feature-complete for citation display and hallucination UI
+- Phase 4 frontend tasks (US-P4-001 to US-P4-003) already largely implemented
+- Only US-P4-004 (Analytics Dashboard with charts) is missing
+- The frontend expects a specific API response format - RAG workflow must match
+- Tooltip positioning has mobile-specific behavior (bottom sheet vs floating)
+
+---
