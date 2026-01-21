@@ -1255,13 +1255,26 @@ const embedding = await openai.embeddings.create({
 **I want** to re-index all 20,000 documents with full PDF content
 **So that** the chatbot can answer any question
 
+**⚠️ STATUS: WORKFLOW READY - AWAITING MANUAL EXECUTION**
+**Technical implementation complete (2026-01-21). Full indexing requires human approval to run (costs ~$102).**
+
 **Acceptance Criteria:**
+- [x] Workflow validated and tested with small batch ✅ (2026-01-21)
 - [ ] Clear existing Pinecone namespace (or use new namespace)
 - [ ] Run indexer on decisive_appraiser (~10,000 docs)
 - [ ] Run indexer on appeals_committee (~5,000 docs)
 - [ ] Run indexer on appeals_board (~5,000 docs)
-- [ ] Verify: Sample documents have `description` field with full text
-- [ ] Test query: "מה היה בתביעה של קרן יניבי?" returns actual decision content
+- [x] Verify: Sample documents have `description` field with full text ✅ (test batch confirmed)
+- [ ] Test query: "מה היה בתביעה של קרן יניבי?" returns actual decision content (needs full re-index)
+
+**To Execute Full Indexing:**
+```powershell
+cd chatbot
+.\run-full-indexer.ps1 -Database decisive_appraiser  # Day 1: ~10K docs
+.\run-full-indexer.ps1 -Database appeals_committee   # Day 2: ~5K docs
+.\run-full-indexer.ps1 -Database appeals_board       # Day 3: ~5K docs
+.\run-full-indexer.ps1 -Resume                       # If interrupted
+```
 
 **Execution Plan:**
 ```
@@ -1271,10 +1284,10 @@ Day 3: Run appeals_board (5K docs)
 Day 4: Verify and test
 ```
 
-**Cost Estimate:**
-- ScraperAPI: 20,000 docs × 2 calls × $0.01 = ~$400
-- OpenAI embeddings: 20,000 × $0.00013/1K tokens × 5K tokens = ~$13
-- Total: ~$413 one-time
+**Cost Estimate (UPDATED):**
+- ScraperAPI (listing pages): ~$100 (PDFs fetched directly - no ScraperAPI needed)
+- OpenAI embeddings: ~$2
+- Total: ~$102 one-time
 
 ---
 

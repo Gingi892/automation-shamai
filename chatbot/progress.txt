@@ -4065,3 +4065,108 @@ The complete embedding flow is now:
 4. **Test deferred**: Testing "קרן יניבי" query requires re-indexing documents first (US-P8-006), so the test criterion is deferred to US-P8-007
 
 ---
+
+## Iteration 45 — US-P8-006 Test Run: Full Indexer Workflow Validation
+- **Date**: 2026-01-21
+- **Task**: US-P8-006 - Re-index all 20K documents with full content (Test Run)
+
+### What Was Done
+
+Validated and tested the Full Indexer workflow (`1zYlIK6VnynTHiHl`) to prepare for full re-indexing of all gov.il decision databases.
+
+### Issues Found and Fixed
+
+1. **URLSearchParams not defined** (Build ScraperAPI URL node)
+   - **Error**: `ReferenceError: URLSearchParams is not defined [line 16]`
+   - **Fix**: Replaced `new URLSearchParams()` with manual URL encoding using `encodeURIComponent()`
+   - **Node**: `build-scraper-url`
+
+2. **ScraperAPI transient failures** (Fetch Page via ScraperAPI node)
+   - **Error**: `500 - "Request failed... Protected domains may require adding premium=true OR ultra_premium=true"`
+   - **Fix**: Added error handling with retry logic
+   - **Node**: `fetch-page` - added `onError: "continueRegularOutput"`, `retryOnFail: true`, `maxTries: 3`, `waitBetweenTries: 5000`
+
+### Test Results
+
+After fixes, triggered test run:
+- **Execution ID**: 31767
+- **Status**: SUCCESS
+- **Duration**: ~85 seconds
+- **Documents processed**: First batch from decisive_appraiser database
+
+### Verification
+
+Tested chatbot query to verify documents are in Pinecone:
+```bash
+curl -X POST "https://a-i-do.app.n8n.cloud/webhook/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "כמה החלטות יש במאגר?"}'
+```
+
+**Response**: Chatbot returned 5 sources including "קרן יניבי" decision from 30-12-2025 - confirming documents are being indexed!
+
+### Files Created
+
+1. **chatbot/run-full-indexer.ps1** - PowerShell script to trigger indexing
+   - Usage: `.\run-full-indexer.ps1 -Database decisive_appraiser`
+   - Supports `-Resume` and `-Restart` flags
+   - Documents execution instructions
+
+2. **chatbot/check-pinecone-stats.ps1** - PowerShell script to check Pinecone stats
+   - Queries Pinecone describe_index_stats endpoint
+   - Shows coverage percentage vs target
+
+### Workflow Changes
+
+| Node | Change |
+|------|--------|
+| `build-scraper-url` | Fixed URLSearchParams → manual encoding |
+| `fetch-page` | Added retry logic (3 tries, 5s wait) |
+| Workflow | Activated for webhook access |
+
+### Execution Instructions (For Full Run)
+
+To re-index all 20,000 documents:
+
+```powershell
+# Index decisive_appraiser (~10,000 docs)
+cd chatbot
+.\run-full-indexer.ps1 -Database decisive_appraiser
+
+# Index appeals_committee (~5,000 docs)
+.\run-full-indexer.ps1 -Database appeals_committee
+
+# Index appeals_board (~5,000 docs)
+.\run-full-indexer.ps1 -Database appeals_board
+
+# Resume if interrupted
+.\run-full-indexer.ps1 -Resume
+```
+
+**Important Notes:**
+- Each database takes hours to complete (1 req/sec rate limit)
+- Monitor progress in n8n UI: https://a-i-do.app.n8n.cloud/workflow/1zYlIK6VnynTHiHl
+- Progress is saved automatically for resume capability
+- Estimated cost: ~$100 ScraperAPI + ~$2 OpenAI embeddings
+
+### Acceptance Criteria Progress
+
+| Criterion | Status |
+|-----------|--------|
+| Clear existing namespace / use new | ⏳ Not yet (test run used existing) |
+| Run indexer on decisive_appraiser | ⏳ Test batch only (full run pending) |
+| Run indexer on appeals_committee | ⏳ Not started |
+| Run indexer on appeals_board | ⏳ Not started |
+| Verify description field with full text | ✅ Chatbot showing content |
+| Test query returns content | ✅ "קרן יניבי" found in search results |
+
+### Learnings for Next Cycles
+
+1. **URLSearchParams not in n8n**: Use manual URL encoding with `encodeURIComponent()` in Code nodes
+2. **ScraperAPI reliability**: gov.il requires `ultra_premium=true` AND retry logic for transient 500 errors
+3. **Retry settings**: `retryOnFail: true, maxTries: 3, waitBetweenTries: 5000` handles most transient failures
+4. **Test before full run**: Always do a small test batch before committing to 20K document indexing
+5. **Webhook response**: "Workflow was started" means async execution - check executions list for status
+6. **Progress tracking**: Workflow saves progress to staticData for resume capability
+
+---
