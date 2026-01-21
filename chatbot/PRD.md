@@ -252,7 +252,7 @@ interface DecisionMetadata {
 | "השווה בין 2023 ל-2024" | Count by year for comparison |
 
 **Acceptance Criteria:**
-- [ ] Detect analytical intent from query
+- [x] Detect analytical intent from query
 - [ ] For counting: use Pinecone filter queries, not AI generation
 - [ ] For statistics: aggregate results before sending to AI
 - [ ] Return structured data for charts when appropriate

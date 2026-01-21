@@ -1149,6 +1149,57 @@ Chat Webhook → Extract User Message → Parse Query Filters → Embed User Que
 
 ---
 
+## Iteration 14 — US-P3-003 Detect Analytical Intent from Query
+- **Date**: 2026-01-21
+- **Task**: US-P3-003 - Detect analytical intent from query
+
+### What Was Done
+
+Verified that analytical intent detection was already implemented in the Parse Query Filters node (id: `parse-query-filters`) of workflow `McOa9j15PRy8AZ8v`. Marked the task complete in PRD.md.
+
+### Implementation Details (Already Existing)
+
+The Parse Query Filters node already contains:
+
+```javascript
+// Determine if this is an analytical query (statistics, counting)
+const analyticalPatterns = [
+  /כמה/i,           // how many
+  /סטטיסטיקה/i,     // statistics
+  /התפלגות/i,       // distribution
+  /השווה/i,         // compare
+  /השוואה/i,        // comparison
+  /ממוצע/i,         // average
+  /סה"כ/i,          // total
+  /סך הכל/i,        // grand total
+  /מספר/i           // number
+];
+
+const isAnalytical = analyticalPatterns.some(p => p.test(userMessage));
+```
+
+### How It Works
+
+1. **Pattern Detection**: Hebrew regex patterns detect statistical/analytical keywords
+2. **Flag Set**: `isAnalytical` boolean flag is set when patterns match
+3. **TopK Adjustment**: `topK = isAnalytical ? 20 : 5` - fetches more docs for stats queries
+4. **Passed Through Pipeline**: `isAnalytical` flag flows to Build RAG Context and beyond
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Detect analytical intent from query | ✅ Complete (was already implemented) |
+
+### Learnings for Next Cycles
+
+- Task was implemented during US-P3-001 Query Understanding but not marked complete
+- The analytical patterns cover common Hebrew statistical query terms
+- The `isAnalytical` flag is available for use in subsequent US-P3-003 tasks
+- Next task: "For counting: use Pinecone filter queries, not AI generation" - requires new aggregation logic
+
+---
+
 ## Iteration 13 — US-P3-002 Source Attribution (CRITICAL)
 - **Date**: 2026-01-21
 - **Task**: US-P3-002 - Complete source attribution with all required fields
