@@ -3603,3 +3603,160 @@ const maliciousInputs = [
 7. **Running all E2E tests**: `cd mcp-server && node --import tsx ../chatbot/tests/test_e2e.ts`
 
 ---
+
+## Iteration 35 - PDF Content Not Indexed (CRITICAL ROOT CAUSE)
+
+**Date:** 2026-01-21
+**Cycle:** 35
+**Status:** ⚠️ ROOT CAUSE IDENTIFIED
+
+### Critical Finding
+
+User reported chatbot gives poor answers despite "working":
+
+**Query:** "מה היה בתביעה של קרן יניבי?"
+**Response:** "ההכרעה... ניתנה על ידי שמאי מכריע ב-30 בדצמבר 2025. עם זאת, **המסמכים שסופקו לא כוללים פרטים נוספים**..."
+
+**Root Cause:** The chatbot found the document by TITLE match but has NO CONTENT. Current indexing pipeline only stores:
+- ✅ Metadata from listing page (title, date, committee, URL)
+- ❌ Actual PDF content (NOT INDEXED)
+
+The `description` field in Pinecone is empty or contains only the title - NOT the full decision text.
+
+### PRD Updates
+
+Added **Phase 8: PDF Content Extraction** with 7 user stories:
+1. US-P8-001: Analyze current indexing gap
+2. US-P8-002: Design PDF content extraction pipeline
+3. US-P8-003: Implement PDF fetcher node
+4. US-P8-004: Implement text extractor node
+5. US-P8-005: Update embedding to use full text
+6. US-P8-006: Re-index all 20K documents with content
+7. US-P8-007: Verify content indexing works
+
+Also marked US-P2-002 (PDF Content Extraction) as NOT DONE - it was incorrectly marked as [x] complete.
+
+### Next Actions (for Ralph Loop)
+
+1. Query Pinecone to verify `description` field is empty/short
+2. Identify PDF URL format for each database
+3. Test fetching actual PDF content
+4. Implement text extraction
+5. Re-embed using full text, not just title
+6. Re-index all 20,000 documents
+
+### Cost Estimate
+- ScraperAPI: ~$400 (20K docs × 2 calls)
+- OpenAI: ~$13 (embeddings)
+- Total: ~$413 one-time investment
+
+---
+
+## Iteration 36 — US-P8-001 Analyze Current Indexing Gap (Task 1)
+- **Date**: 2026-01-21
+- **Task**: US-P8-001 - Query Pinecone for sample documents and inspect metadata
+
+### What Was Done
+
+Analyzed the live Pinecone index and n8n workflows to identify exactly what metadata is stored vs what's missing.
+
+### Analysis Method
+
+1. Created diagnostic script `chatbot/analyze-pinecone-metadata.ps1`
+2. Queried live chatbot webhook to get sample documents
+3. Inspected Document Processor workflow (`kTZqcClvtUspeC28`) for actual indexing logic
+4. Compared stored metadata against PRD US-P2-003 schema requirements
+
+### Findings: Current Pinecone Metadata Structure
+
+From the live Document Processor "Combine Results" node:
+
+```javascript
+metadata: {
+  documentId: pageData.documentId,       // ✅ Present - 'doc_1737xxx_0'
+  title: pageData.documentTitle,          // ✅ Present - Hebrew title
+  url: pageData.documentUrl,              // ✅ Present - PDF URL
+  committee: pageData.committee || '',    // ⚠️ EMPTY in sample data
+  block: pageData.block || '',            // ⚠️ EMPTY in sample data
+  plot: pageData.plot || '',              // ⚠️ EMPTY in sample data
+  appraiser: pageData.appraiser || '',    // ⚠️ EMPTY in sample data
+  publishDate: pageData.publishDate || '',// ⚠️ EMPTY in sample data
+  pageNumber: pageData.pageNumber,        // ✅ Present (chunking)
+  totalPages: pageData.totalPages,        // ✅ Present (chunking)
+  content: pageData.content.substring(0, 10000),  // ✅ Present - 10KB chunks
+  contentLength: pageData.contentLength   // ✅ Present
+}
+```
+
+### Missing Fields (PRD US-P2-003 Schema)
+
+| Field | PRD Required | Current State |
+|-------|-------------|---------------|
+| database | ✅ Required | ❌ MISSING - No database identifier |
+| databaseSource | ✅ Required | ❌ MISSING - No Hebrew label |
+| caseType | ✅ Required | ❌ MISSING - Not extracted |
+| decisionDate | ✅ Required | ❌ MISSING - Only publishDate exists |
+| year | ✅ Required | ❌ MISSING - For filtering |
+| description | ✅ Required | ⚠️ WRONG - Uses 'content' with 10KB chunks |
+| contentHash | ✅ Required | ❌ MISSING - No deduplication |
+| indexedAt | ✅ Required | ❌ MISSING - No timestamp |
+
+### Critical Issues Discovered
+
+1. **ALL 5 SOURCES IDENTICAL**: Query returned same document 5 times (different chunks)
+   - Proves: Documents are chunked into multiple vectors
+   - Proves: Deduplication is not working
+   - Proves: PRD "one doc = one vector" NOT implemented
+
+2. **CHATBOT ONLY EXPOSES 3 FIELDS**: Build RAG Context passes only:
+   - title
+   - url
+   - score
+   All other metadata is lost in the API response!
+
+3. **PDF CONTENT IS CHUNKED**: `content` field has ~10KB chunks, NOT full PDF
+   - Documents split into ~2000 char chunks
+   - Creates multiple vectors per document
+   - Breaks citation accuracy
+
+4. **METADATA EXTRACTION NOT WORKING**: committee, block, plot, appraiser all EMPTY
+   - The scraper (oqihIkB7Ur9WVJZG) extracts these fields
+   - But they arrive empty at the Document Processor
+   - Root cause: Data flow issue between scraper → processor
+
+### Sample API Response Analysis
+
+```json
+{
+  "sources": [
+    { "title": "...", "url": "...", "score": 17 },
+    { "title": "...", "url": "...", "score": 17 },  // SAME DOCUMENT
+    { "title": "...", "url": "...", "score": 16 },  // SAME DOCUMENT
+    { "title": "...", "url": "...", "score": 16 },  // SAME DOCUMENT
+    { "title": "...", "url": "...", "score": 15 }   // SAME DOCUMENT
+  ]
+}
+```
+All 5 sources point to the SAME URL - confirming duplicate chunks issue.
+
+### Files Created
+
+1. **chatbot/analyze-pinecone-metadata.ps1** - Diagnostic script for querying and analyzing Pinecone metadata
+
+### Learnings for Next Cycles
+
+1. **Document Processor IS extracting PDF content** - The content field proves PDF text IS being fetched and stored
+2. **The problem is CHUNKING, not missing content** - Documents are split into chunks, creating many vectors per document
+3. **Metadata extraction happens in SCRAPER**, not Processor - The scraper must pass committee/block/plot fields
+4. **RAG Context DISCARDS metadata** - Build RAG Context only passes title/url/score, losing all other fields
+5. **Phase 8 scope change**: Issue is NOT "content not indexed" but "content chunked + metadata lost"
+
+### Next Steps
+
+- [x] Query Pinecone for sample documents (DONE)
+- [x] Check description field - it IS populated with content chunks (CONFIRMED)
+- [ ] Identify why metadata (committee, block, plot) arrives empty
+- [ ] Fix Build RAG Context to pass all metadata fields
+- [ ] Implement deduplication by URL before returning sources
+
+---

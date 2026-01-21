@@ -226,13 +226,16 @@ const TITLE_REGEX = /הכרעת שמאי מכריע מיום (\d{2}-\d{2}-\d{4})
 **I want** to extract full text from decision PDFs
 **So that** RAG has complete content for answers
 
+**⚠️ STATUS: NOT WORKING - Marked [x] but actual PDF content is NOT being indexed!**
+**Evidence:** Query "מה היה בתביעה של קרן יניבי?" returns metadata but says "המסמכים לא כוללים פרטים נוספים" - proving PDF content is missing.
+
 **Acceptance Criteria:**
-- [x] Fetch PDF via ScraperAPI (same settings)
-- [x] Extract text using pdf-parse
-- [x] Handle Hebrew RTL text properly
-- [x] Store full text as Pinecone metadata (max 40KB per vector)
-- [x] For large PDFs, store first 35KB + summary
-- [x] Link PDF URL in metadata for direct access
+- [ ] Fetch PDF via ScraperAPI (same settings) ← NOT DONE
+- [ ] Extract text using pdf-parse ← NOT DONE
+- [ ] Handle Hebrew RTL text properly ← NOT DONE
+- [ ] Store full text as Pinecone metadata (max 40KB per vector) ← NOT DONE
+- [ ] For large PDFs, store first 35KB + summary ← NOT DONE
+- [x] Link PDF URL in metadata for direct access ← DONE (only this works)
 
 ---
 
@@ -690,6 +693,468 @@ automation-shamai/
 
 ---
 
-*PRD Version: 1.0*
-*Created: 2026-01-21*
-*Target: Full indexing + refined chatbot for legal professionals*
+---
+
+## 🚀 PHASE 6: FULL DOCUMENT INDEXING (CRITICAL - Run Tomorrow)
+
+**Goal:** Index ALL ~20,000 documents from all 3 gov.il databases into Pinecone so the chatbot can answer any question about any decision.
+
+### US-P6-001: Analyze Existing Indexing Pipeline
+**As** Ralph Loop
+**I want** to understand the current indexing infrastructure
+**So that** I can execute full indexing efficiently
+
+**Acceptance Criteria:**
+- [ ] Identify existing n8n workflows for scraping (oqihIkB7Ur9WVJZG, kTZqcClvtUspeC28)
+- [ ] Document the scraper → processor → Pinecone pipeline
+- [ ] Count current documents in Pinecone (query for stats)
+- [ ] Identify gaps: which databases have partial/no coverage
+
+**Exploration Tasks:**
+```bash
+# Check Pinecone current stats
+curl -X POST "https://gov-il-decisions-k1iqa9s.svc.aped-4627-b74a.pinecone.io/describe_index_stats" \
+  -H "Api-Key: [PINECONE_KEY]" \
+  -H "Content-Type: application/json"
+```
+
+---
+
+### US-P6-002: Index Decisive Appraiser Database (~10,000 docs)
+**As** the system
+**I want** to scrape and index ALL decisive appraiser decisions
+**So that** users can query any שמאי מכריע decision
+
+**Database:** `https://www.gov.il/he/departments/dynamiccollectors/decisive_appraisal_decisions`
+
+**Acceptance Criteria:**
+- [ ] Configure scraper with pagination (`?skip=0`, `?skip=10`, ...)
+- [ ] Use ScraperAPI settings: `ultra_premium=true`, `render=true`, `wait_for=5000`
+- [ ] Parse Hebrew decision titles correctly
+- [ ] Extract metadata: title, url, block, plot, committee, appraiser, caseType, decisionDate
+- [ ] Create embeddings via OpenAI text-embedding-3-small (1024 dims)
+- [ ] Upsert to Pinecone with deduplication (content_hash)
+- [ ] Track progress with resume capability
+- [ ] Rate limit: 1 request/second to ScraperAPI
+- [ ] Log total documents indexed
+
+**Implementation Notes:**
+```javascript
+// Scraper URL pattern
+const baseUrl = 'https://www.gov.il/he/departments/dynamiccollectors/decisive_appraisal_decisions';
+const pageUrl = `${baseUrl}?skip=${skip}`; // skip=0, 10, 20, ...
+
+// ScraperAPI wrapper
+function buildScraperUrl(targetUrl) {
+  return `https://api.scraperapi.com?api_key=566e1370a3f3158b969f898e102c7fd0&url=${encodeURIComponent(targetUrl)}&render=true&ultra_premium=true&wait_for=5000`;
+}
+```
+
+---
+
+### US-P6-003: Index Appeals Committee Database (~5,000 docs)
+**As** the system
+**I want** to scrape and index ALL appeals committee decisions
+**So that** users can query any ועדת השגות decision
+
+**Database:** `https://www.gov.il/he/departments/dynamiccollectors/committee`
+
+**Acceptance Criteria:**
+- [ ] Configure scraper with pagination
+- [ ] Parse appeals committee title format (different regex than decisive appraiser)
+- [ ] Extract metadata with database='appeals_committee'
+- [ ] Upsert to Pinecone with unique IDs
+- [ ] Log total documents indexed
+
+---
+
+### US-P6-004: Index Appeals Board Database (~5,000 docs)
+**As** the system
+**I want** to scrape and index ALL appeals board decisions
+**So that** users can query any ועדת ערעורים decision
+
+**Database:** `https://www.gov.il/he/departments/dynamiccollectors/decisions_appeals_board`
+
+**Acceptance Criteria:**
+- [ ] Configure scraper with pagination
+- [ ] Parse appeals board title format
+- [ ] Extract metadata with database='appeals_board'
+- [ ] Upsert to Pinecone with unique IDs
+- [ ] Log total documents indexed
+
+---
+
+### US-P6-005: Verify Full Coverage
+**As** a QA process
+**I want** to verify all documents are indexed
+**So that** I can confirm 100% coverage
+
+**Acceptance Criteria:**
+- [ ] Query Pinecone stats: total vectors per namespace
+- [ ] Compare against estimated totals (~20,000)
+- [ ] Sample test: query for specific decisions from each database
+- [ ] Verify metadata is complete (no missing fields)
+- [ ] Document final counts in progress.txt
+
+---
+
+## 🔧 PHASE 7: QUALITY FIXES (Post-Indexing)
+
+**Goal:** Fix known issues with UTF-8 encoding and duplicate sources.
+
+### US-P7-001: Fix UTF-8 Encoding in Hallucination Detection
+**As** the frontend
+**I want** Hebrew text to display correctly in warning banners
+**So that** users see proper Hebrew instead of ???
+
+**Problem:** Warning banner shows `??? ??: 2 ?????` instead of Hebrew
+
+**Root Cause:** JSON serialization not using UTF-8 encoding
+
+**Acceptance Criteria:**
+- [ ] Locate the n8n Code node that generates hallucination response
+- [ ] Ensure JSON output uses UTF-8: `JSON.stringify(data)` with proper encoding
+- [ ] Verify in n8n: Respond to Webhook node is set to JSON mode
+- [ ] Test: Warning banner shows Hebrew correctly
+
+**Fix Location:** `Format Response with Flags` node in workflow McOa9j15PRy8AZ8v
+
+**Fix Code:**
+```javascript
+// In Format Response with Flags node
+// Ensure all Hebrew strings are properly encoded
+const warningMessage = hallucinationCheck.overall_grounded
+  ? null
+  : `שים לב: ${unfoundedClaims.length} טענות בתשובה לא נתמכות במלואן על ידי המקורות.`;
+
+// Return with explicit Hebrew
+return {
+  success: true,
+  response: assistantMessage,
+  warning: warningMessage, // Hebrew will serialize correctly
+  // ... rest of response
+};
+```
+
+---
+
+### US-P7-002: Add Source Deduplication to RAG Pipeline
+**As** the chatbot
+**I want** to show unique documents in search results
+**So that** users see diverse sources, not duplicates
+
+**Problem:** Query returns 5 identical sources (same document chunks)
+
+**Root Cause:** Pinecone returns multiple chunks from same document
+
+**Acceptance Criteria:**
+- [ ] Modify `Build RAG Context` node to deduplicate by source URL
+- [ ] Keep only first (highest score) chunk per unique document
+- [ ] Limit to 5 UNIQUE documents
+- [ ] Test: Query returns diverse sources
+
+**Fix Location:** `Build RAG Context` node in workflow McOa9j15PRy8AZ8v
+
+**Fix Code:**
+```javascript
+// Deduplicate sources by URL
+const seenUrls = new Set();
+const uniqueMatches = [];
+
+for (const match of matches) {
+  const url = match.metadata?.url || '';
+  if (url && !seenUrls.has(url)) {
+    seenUrls.add(url);
+    uniqueMatches.push(match);
+  }
+  if (uniqueMatches.length >= 5) break; // Max 5 unique sources
+}
+
+// Use uniqueMatches instead of matches for context building
+const rawDocuments = uniqueMatches.map((match, index) => {
+  // ... rest of mapping
+});
+```
+
+---
+
+### US-P7-003: Improve Query Relevance
+**As** a user
+**I want** search results relevant to my query location/topic
+**So that** I get Tel Aviv results when asking about Tel Aviv
+
+**Problem:** Query "החלטות בתל אביב" doesn't return Tel Aviv decisions
+
+**Root Cause:** Semantic search alone may not filter by metadata
+
+**Acceptance Criteria:**
+- [ ] Restore Hebrew filter parsing in `Parse Query Filters` node
+- [ ] Enable Pinecone metadata filters for committee, year, etc.
+- [ ] Test: "החלטות בתל אביב" returns decisions with committee="תל אביב"
+
+**Fix Location:** `Parse Query Filters` node - restore Hebrew regex patterns
+
+---
+
+## Updated Implementation Order
+
+```
+🚀 Phase 6: FULL INDEXING (PRIORITY - Run Tomorrow)
+  └─► US-P6-001: Analyze existing pipeline [ ]
+  └─► US-P6-002: Index decisive_appraiser (~10K) [ ]
+  └─► US-P6-003: Index appeals_committee (~5K) [ ]
+  └─► US-P6-004: Index appeals_board (~5K) [ ]
+  └─► US-P6-005: Verify full coverage [ ]
+
+🔧 Phase 7: QUALITY FIXES
+  └─► US-P7-001: Fix UTF-8 encoding [ ]
+  └─► US-P7-002: Add source deduplication [ ]
+  └─► US-P7-003: Improve query relevance [ ]
+```
+
+---
+
+---
+
+## 🔴 PHASE 8: PDF CONTENT EXTRACTION (CRITICAL - HIGHEST PRIORITY)
+
+**⚠️ ROOT CAUSE IDENTIFIED:** The chatbot cannot answer content questions because **PDF content is NOT indexed**. Current indexing only stores metadata (title, URL, date, committee) from listing pages - NOT the actual decision text.
+
+**Evidence:**
+```
+Query: "מה היה בתביעה של קרן יניבי?"
+Answer: "ההכרעה... ניתנה על ידי שמאי מכריע ב-30 בדצמבר 2025. עם זאת, המסמכים שסופקו לא כוללים פרטים נוספים..."
+```
+The chatbot found the document by title match but **has no content** to answer what the decision actually said.
+
+---
+
+### US-P8-001: Analyze Current Indexing Gap
+**As** Ralph Loop
+**I want** to understand exactly what's indexed vs what's missing
+**So that** I can fix the PDF extraction pipeline
+
+**Acceptance Criteria:**
+- [x] Query Pinecone for sample documents and inspect metadata
+- [x] Check `description` field - is it empty or contains only title?
+- [x] Identify the n8n workflow that SHOULD extract PDF content
+- [x] Document: Current pipeline only indexes listing page data, NOT PDF content
+- [x] List the PDF URL pattern (free-justice.openapi.gov.il/...)
+
+**Analysis Results (2026-01-21):**
+- Document Processor workflow `kTZqcClvtUspeC28` DOES extract PDF content
+- Content stored in `content` field (NOT `description`) as ~10KB chunks
+- Documents CHUNKED into multiple vectors (violates "one doc = one vector")
+- Metadata fields (committee, block, plot, appraiser) arrive EMPTY from scraper
+- Build RAG Context only passes title/url/score - LOSES all other metadata
+- All 5 search results return SAME document (different chunks) - no deduplication
+- PDF URL pattern: `https://free-justice.openapi.gov.il/free/moj/portal/rest/searchpredefinedapi/v1/SearchPredefinedApi/Documents/DecisiveAppraiser/{docId}`
+
+**Diagnostic Query:**
+```javascript
+// In n8n Code node - check what's actually in Pinecone
+const sample = await pinecone.query({
+  vector: [/* any embedding */],
+  topK: 5,
+  includeMetadata: true,
+  namespace: 'gov-il-decisions'
+});
+// Inspect: Is description field populated with full text?
+console.log(sample.matches.map(m => ({
+  title: m.metadata.title,
+  descriptionLength: m.metadata.description?.length || 0,
+  hasContent: m.metadata.description?.length > 500
+})));
+```
+
+---
+
+### US-P8-002: Design PDF Content Extraction Pipeline
+**As** the system architect
+**I want** a clear design for fetching and indexing PDF content
+**So that** implementation is straightforward
+
+**Current State:**
+```
+Listing Page Scrape → Extract Metadata → Create Embedding from TITLE → Upsert to Pinecone
+                                         ❌ Missing: PDF content
+```
+
+**Target State:**
+```
+Listing Page Scrape → Extract Metadata + PDF URL →
+                      Fetch PDF via ScraperAPI →
+                      Extract Text (pdf-parse or similar) →
+                      Create Embedding from FULL TEXT →
+                      Upsert to Pinecone with text in description field
+```
+
+**Acceptance Criteria:**
+- [ ] Design node-by-node flow for PDF extraction
+- [ ] Decide: New workflow OR modify existing indexer workflow?
+- [ ] Plan rate limiting (ScraperAPI costs, gov.il throttling)
+- [ ] Plan chunking strategy for large PDFs (>40KB limit)
+- [ ] Document estimated cost (ScraperAPI credits × 20,000 docs)
+
+---
+
+### US-P8-003: Implement PDF Fetcher Node
+**As** the n8n workflow
+**I want** a node that fetches PDF content via ScraperAPI
+**So that** I can extract text from decisions
+
+**Acceptance Criteria:**
+- [ ] Create/update n8n Code node: "Fetch PDF Content"
+- [ ] Input: document URL from listing scrape
+- [ ] Build ScraperAPI URL with `ultra_premium=true`, `render=true`
+- [ ] Handle PDF binary → text conversion
+- [ ] Output: Full Hebrew text content
+- [ ] Error handling: If PDF fails, fallback to title-only
+
+**Implementation:**
+```javascript
+// Fetch PDF Content node
+const doc = $input.first().json;
+const pdfUrl = doc.url; // e.g., https://free-justice.openapi.gov.il/pdf/...
+
+// ScraperAPI for PDFs (may need different approach)
+const scraperUrl = `https://api.scraperapi.com?api_key=566e1370a3f3158b969f898e102c7fd0&url=${encodeURIComponent(pdfUrl)}&render=true&ultra_premium=true`;
+
+// Alternative: Direct PDF fetch if not blocked
+// const pdfBuffer = await fetch(pdfUrl).then(r => r.arrayBuffer());
+
+// Extract text using external service or pdf-parse
+const text = await extractTextFromPDF(pdfContent);
+
+return {
+  ...doc,
+  fullText: text,
+  textLength: text.length
+};
+```
+
+---
+
+### US-P8-004: Implement Text Extractor Node
+**As** the n8n workflow
+**I want** to convert PDF content to searchable text
+**So that** it can be embedded and searched
+
+**Acceptance Criteria:**
+- [ ] Research: Can n8n extract PDF text directly?
+- [ ] Option A: Use pdf-parse npm package in Code node
+- [ ] Option B: Use external PDF extraction API
+- [ ] Option C: If PDFs are actually HTML pages, use Cheerio to extract text
+- [ ] Handle Hebrew RTL text encoding
+- [ ] Truncate to 35KB if larger (Pinecone metadata limit)
+- [ ] Test on sample documents from all 3 databases
+
+**Note:** Gov.il "PDFs" may actually be HTML pages with embedded content. Test actual URL:
+```bash
+curl -I "https://free-justice.openapi.gov.il/..." | grep Content-Type
+```
+
+---
+
+### US-P8-005: Update Embedding to Use Full Text
+**As** the embedding node
+**I want** to create embeddings from full document text
+**So that** semantic search finds content, not just titles
+
+**Current (WRONG):**
+```javascript
+// Current: Embedding created from TITLE only
+const textToEmbed = doc.title; // ❌ Only 50-100 chars
+```
+
+**Target (CORRECT):**
+```javascript
+// Target: Embedding created from FULL TEXT
+const textToEmbed = doc.fullText || doc.title; // ✅ Full content
+const embedding = await openai.embeddings.create({
+  model: 'text-embedding-3-small',
+  input: textToEmbed.slice(0, 8000) // Limit for API
+});
+```
+
+**Acceptance Criteria:**
+- [ ] Locate current embedding node in indexer workflow
+- [ ] Update to use full text instead of title
+- [ ] Keep title as fallback if full text extraction fails
+- [ ] Test: Query "קרן יניבי" should return content, not just metadata
+
+---
+
+### US-P8-006: Re-index All Documents with Full Content
+**As** the batch processor
+**I want** to re-index all 20,000 documents with full PDF content
+**So that** the chatbot can answer any question
+
+**Acceptance Criteria:**
+- [ ] Clear existing Pinecone namespace (or use new namespace)
+- [ ] Run indexer on decisive_appraiser (~10,000 docs)
+- [ ] Run indexer on appeals_committee (~5,000 docs)
+- [ ] Run indexer on appeals_board (~5,000 docs)
+- [ ] Verify: Sample documents have `description` field with full text
+- [ ] Test query: "מה היה בתביעה של קרן יניבי?" returns actual decision content
+
+**Execution Plan:**
+```
+Day 1: Run decisive_appraiser (10K docs × 2 API calls each = 20K calls)
+Day 2: Run appeals_committee (5K docs)
+Day 3: Run appeals_board (5K docs)
+Day 4: Verify and test
+```
+
+**Cost Estimate:**
+- ScraperAPI: 20,000 docs × 2 calls × $0.01 = ~$400
+- OpenAI embeddings: 20,000 × $0.00013/1K tokens × 5K tokens = ~$13
+- Total: ~$413 one-time
+
+---
+
+### US-P8-007: Verify Content Indexing Works
+**As** QA
+**I want** to verify the chatbot can now answer content questions
+**So that** I know the fix worked
+
+**Test Cases:**
+- [ ] Test 1: "מה היה בתביעה של קרן יניבי?" → Should return actual decision details
+- [ ] Test 2: "מהי החלטת השמאי המכריע בגוש 6573?" → Should return decision content
+- [ ] Test 3: "האם היה ערעור על החלטה בחיפה?" → Should cite specific case
+- [ ] Test 4: Compare `description` field length before/after (should be >1000 chars now)
+
+**Acceptance Criteria:**
+- [ ] All 4 test queries return substantive answers with citations
+- [ ] No more "המסמכים לא כוללים פרטים נוספים" responses
+- [ ] Chatbot can answer questions about decision CONTENT, not just metadata
+
+---
+
+## Updated Implementation Order (REVISED)
+
+```
+🔴 Phase 8: PDF CONTENT EXTRACTION (BLOCKING - Do First!)
+  └─► US-P8-001: Analyze indexing gap [ ]
+  └─► US-P8-002: Design extraction pipeline [ ]
+  └─► US-P8-003: Implement PDF fetcher [ ]
+  └─► US-P8-004: Implement text extractor [ ]
+  └─► US-P8-005: Update embedding to use full text [ ]
+  └─► US-P8-006: Re-index all 20K documents [ ]
+  └─► US-P8-007: Verify content indexing works [ ]
+
+🚀 Phase 6: FULL INDEXING (Merged with Phase 8)
+  └─► Now part of US-P8-006
+
+🔧 Phase 7: QUALITY FIXES (After Phase 8)
+  └─► US-P7-001: Fix UTF-8 encoding [ ]
+  └─► US-P7-002: Add source deduplication [ ]
+  └─► US-P7-003: Improve query relevance [ ]
+```
+
+---
+
+*PRD Version: 2.1*
+*Updated: 2026-01-21*
+*CRITICAL FIX: Phase 8 added - PDF content extraction is the root cause of chatbot not answering content questions*
+*Target: Extract and index actual PDF content for all 20,000+ documents*
