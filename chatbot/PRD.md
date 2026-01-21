@@ -224,16 +224,16 @@ interface DecisionMetadata {
 **So that** I can verify information
 
 **Acceptance Criteria:**
-- [ ] Citations use format [S0], [S1], [S2], etc.
-- [ ] Each [S#] maps to ONE complete document (not chunks)
-- [ ] Sources include:
+- [x] Citations use format [S0], [S1], [S2], etc.
+- [x] Each [S#] maps to ONE complete document (not chunks)
+- [x] Sources include:
   - Full title
   - Database source (שמאי מכריע/ועדת השגות/ועדת ערעורים)
   - Decision date
   - PDF URL (clickable)
   - Relevance score (%)
-- [ ] Hovering [S#] shows tooltip with source preview
-- [ ] Click [S#] opens PDF in new tab
+- [x] Hovering [S#] shows tooltip with source preview
+- [x] Click [S#] opens PDF in new tab
 
 ---
 

@@ -1148,3 +1148,74 @@ Chat Webhook → Extract User Message → Parse Query Filters → Embed User Que
 - Dynamic topK based on query intent improves analytical query results
 
 ---
+
+## Iteration 13 — US-P3-002 Source Attribution (CRITICAL)
+- **Date**: 2026-01-21
+- **Task**: US-P3-002 - Complete source attribution with all required fields
+
+### What Was Done
+
+Verified and completed all US-P3-002 acceptance criteria for source attribution in the RAG Chatbot workflow (`McOa9j15PRy8AZ8v`).
+
+### Implementation Details
+
+1. **Citations format [S0], [S1], [S2]** — Already implemented
+   - Build RAG Context assigns `id: \`S${index}\`` to each document
+   - System prompt instructs AI to cite using `[S0]`, `[S1]` format
+   - Extract Claims & Citations node extracts citations via regex `/\[S(\d+)\]/g`
+
+2. **One document = one vector** — Already implemented
+   - rawDocuments maps 1:1 with Pinecone matches (no chunking)
+   - Each [S#] maps to exactly one complete document
+
+3. **Sources include all required fields** — Updated Build RAG Context
+   - Added `databaseLabels` mapping for Hebrew display:
+     - `decisive_appraiser` → `שמאי מכריע`
+     - `appeals_committee` → `ועדת השגות`
+     - `appeals_board` → `ועדת ערעורים`
+   - Updated `relevantDocs` output to include:
+     - `sourceId` — [S0], [S1], etc.
+     - `title` — Full Hebrew title
+     - `databaseSource` — Hebrew database label
+     - `decisionDate` — Decision date (DD-MM-YYYY)
+     - `url` — PDF URL (clickable)
+     - `score` — Relevance score as percentage (0-100)
+
+4. **Hover tooltip with source preview** — Already implemented in frontend
+   - `chatbot-frontend.html` line ~600: `createCitationTooltip()` function
+   - Shows title, relevance bar, actions
+
+5. **Click opens PDF** — Already implemented in frontend
+   - Open PDF button in tooltip and sources list
+   - Opens in new tab via `window.open(url, '_blank')`
+
+### Files Modified
+
+1. **n8n Workflow McOa9j15PRy8AZ8v** — Updated Build RAG Context node
+   - Added `databaseLabels` mapping object
+   - Added `databaseLabel` to rawDocuments
+   - Restructured `relevantDocs` to include all PRD-required fields
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Citations format [S0], [S1], [S2] | ✅ Complete |
+| Each [S#] = ONE document | ✅ Complete |
+| Sources: Full title | ✅ Complete |
+| Sources: Database source (Hebrew) | ✅ Complete |
+| Sources: Decision date | ✅ Complete |
+| Sources: PDF URL | ✅ Complete |
+| Sources: Relevance % | ✅ Complete |
+| Hover shows tooltip | ✅ Complete (frontend) |
+| Click opens PDF | ✅ Complete (frontend) |
+
+### Learnings for Next Cycles
+
+- Validation errors for Code nodes are often false positives (n8n accepts single-object returns)
+- HTTP Request nodes with dynamic expressions for URLs show URL validation warnings - these are expected
+- Database labels should be mapped centrally for consistent Hebrew display
+- The relevantDocs structure is consumed by Format Response - changes must maintain compatibility
+- Frontend already has interactive citation features - backend just needs to provide correct data
+
+---
