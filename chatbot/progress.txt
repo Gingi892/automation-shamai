@@ -2135,3 +2135,57 @@ All 15 tests passed (10 positive + 5 negative cases).
 6. **Test cities without 'ג'**: Same limitation as other patterns - cities containing 'ג' (רמת גן) break the pattern
 
 ---
+
+## Iteration 28 — US-P5-001 test_handle_pagination()
+- **Date**: 2026-01-21
+- **Task**: US-P5-001 - Unit Tests - Scraper: test_handle_pagination()
+
+### What Was Done
+
+Created unit tests for pagination handling in the scraper workflow to verify multi-page traversal, termination conditions, and URL building.
+
+### Files Modified
+
+1. **chatbot/tests/test_scraper.ts**
+   - Added `handlePagination()` function implementing the same logic as n8n "Create Document Records" node
+   - Added `buildPaginatedUrl()` function for constructing paginated URLs for all 3 databases
+   - Added 10 pagination logic test cases:
+     - First page with full results
+     - Middle page with full results
+     - Page near end within maxPages limit
+     - Last page (would exceed total)
+     - Empty page (no results found)
+     - Near-empty page (only 2 items)
+     - Page with exactly 3 items (threshold)
+     - Max pages limit reached
+     - Small database (50 items)
+     - Large pageSize (100 per page)
+   - Added 6 URL building test cases for all 3 databases
+   - Added 3 invalid database test cases
+
+### Pagination Logic
+
+The hasMore condition from n8n workflow:
+```javascript
+const hasMore = (foundItems >= 3) &&
+                (currentPage < maxPages - 1) &&
+                (nextSkip < total);
+```
+
+Key rules:
+- **Minimum 3 items**: Continue only if page has at least 3 results (prevents infinite loops on empty pages)
+- **maxPages limit**: Default 200 pages max (~2000 documents with pageSize=10)
+- **Total check**: Stop when nextSkip would exceed total
+
+### Learnings for Next Cycles
+
+1. **Default maxPages value**: The workflow uses maxPages=200, so tests near page 998 will fail unless maxPages is explicitly set higher
+2. **Three termination conditions**: Empty page (foundItems<3), maxPages exceeded, or total exceeded - all must be tested
+3. **URL building is database-specific**: Each database has a different base URL:
+   - `decisive_appraiser` → `.../decisive_appraisal_decisions`
+   - `appeals_committee` → `.../committee`
+   - `appeals_board` → `.../decisions_appeals_board`
+4. **Running tests**: Use `cd mcp-server && node --import tsx ../chatbot/tests/test_scraper.ts`
+5. **Test case accuracy**: Test expectations must match the actual algorithm - the initial test had wrong expectation for "page near end" case
+
+---

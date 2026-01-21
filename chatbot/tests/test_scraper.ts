@@ -702,6 +702,246 @@ function test_extract_committee(): void {
   }
 }
 
+// ============================================================
+// Pagination Handling Tests
+// ============================================================
+
+interface PaginationConfig {
+  currentSkip: number;
+  pageSize: number;
+  total: number;
+  foundItems: number;
+  maxPages?: number;
+}
+
+interface PaginationResult {
+  hasMore: boolean;
+  nextSkip: number;
+  currentPage: number;
+  progress: number;
+}
+
+/**
+ * Calculate pagination state for scraper workflow
+ * Implements the same logic as n8n "Create Document Records" node
+ */
+function handlePagination(config: PaginationConfig): PaginationResult {
+  const { currentSkip, pageSize, total, foundItems, maxPages = 200 } = config;
+
+  const currentPage = Math.floor(currentSkip / pageSize);
+  const nextSkip = currentSkip + pageSize;
+
+  // Has more pages if:
+  // 1. Found at least 3 items on current page (not empty/near-empty page)
+  // 2. Haven't exceeded max pages limit
+  // 3. Next skip doesn't exceed total
+  const hasMore = (foundItems >= 3) &&
+                  (currentPage < maxPages - 1) &&
+                  (nextSkip < total);
+
+  const progress = Math.round((currentSkip / total) * 100);
+
+  return {
+    hasMore,
+    nextSkip,
+    currentPage,
+    progress
+  };
+}
+
+/**
+ * Build ScraperAPI URL with pagination skip parameter
+ * Implements the same logic as n8n "Build ScraperAPI URL" node
+ */
+function buildPaginatedUrl(database: string, skip: number): string {
+  const DATABASE_URLS: Record<string, string> = {
+    'decisive_appraiser': 'https://www.gov.il/he/departments/dynamiccollectors/decisive_appraisal_decisions',
+    'appeals_committee': 'https://www.gov.il/he/departments/dynamiccollectors/committee',
+    'appeals_board': 'https://www.gov.il/he/departments/dynamiccollectors/decisions_appeals_board'
+  };
+
+  const baseUrl = DATABASE_URLS[database];
+  if (!baseUrl) {
+    throw new Error(`Unknown database: ${database}`);
+  }
+
+  return `${baseUrl}?skip=${skip}`;
+}
+
+// Test data for pagination
+const PAGINATION_TEST_CASES = [
+  {
+    name: 'First page with full results',
+    config: { currentSkip: 0, pageSize: 10, total: 10000, foundItems: 10 },
+    expected: { hasMore: true, nextSkip: 10, currentPage: 0, progress: 0 }
+  },
+  {
+    name: 'Middle page with full results',
+    config: { currentSkip: 100, pageSize: 10, total: 10000, foundItems: 10 },
+    expected: { hasMore: true, nextSkip: 110, currentPage: 10, progress: 1 }
+  },
+  {
+    name: 'Page near end with full results (within maxPages)',
+    config: { currentSkip: 1980, pageSize: 10, total: 10000, foundItems: 10, maxPages: 200 },
+    expected: { hasMore: true, nextSkip: 1990, currentPage: 198, progress: 20 }
+  },
+  {
+    name: 'Last page - would exceed total',
+    config: { currentSkip: 9990, pageSize: 10, total: 10000, foundItems: 10 },
+    expected: { hasMore: false, nextSkip: 10000, currentPage: 999, progress: 100 }
+  },
+  {
+    name: 'Empty page - no results found',
+    config: { currentSkip: 500, pageSize: 10, total: 10000, foundItems: 0 },
+    expected: { hasMore: false, nextSkip: 510, currentPage: 50, progress: 5 }
+  },
+  {
+    name: 'Near-empty page - only 2 items',
+    config: { currentSkip: 500, pageSize: 10, total: 10000, foundItems: 2 },
+    expected: { hasMore: false, nextSkip: 510, currentPage: 50, progress: 5 }
+  },
+  {
+    name: 'Page with exactly 3 items - continues',
+    config: { currentSkip: 500, pageSize: 10, total: 10000, foundItems: 3 },
+    expected: { hasMore: true, nextSkip: 510, currentPage: 50, progress: 5 }
+  },
+  {
+    name: 'Max pages limit reached',
+    config: { currentSkip: 1990, pageSize: 10, total: 10000, foundItems: 10, maxPages: 200 },
+    expected: { hasMore: false, nextSkip: 2000, currentPage: 199, progress: 20 }
+  },
+  {
+    name: 'Small database - 50 items total',
+    config: { currentSkip: 40, pageSize: 10, total: 50, foundItems: 10 },
+    expected: { hasMore: false, nextSkip: 50, currentPage: 4, progress: 80 }
+  },
+  {
+    name: 'Large pageSize - 100 items per page',
+    config: { currentSkip: 200, pageSize: 100, total: 5000, foundItems: 100 },
+    expected: { hasMore: true, nextSkip: 300, currentPage: 2, progress: 4 }
+  }
+];
+
+// URL building test cases
+const URL_TEST_CASES = [
+  {
+    name: 'decisive_appraiser - first page',
+    database: 'decisive_appraiser',
+    skip: 0,
+    expectedUrl: 'https://www.gov.il/he/departments/dynamiccollectors/decisive_appraisal_decisions?skip=0'
+  },
+  {
+    name: 'decisive_appraiser - page 10',
+    database: 'decisive_appraiser',
+    skip: 100,
+    expectedUrl: 'https://www.gov.il/he/departments/dynamiccollectors/decisive_appraisal_decisions?skip=100'
+  },
+  {
+    name: 'appeals_committee - first page',
+    database: 'appeals_committee',
+    skip: 0,
+    expectedUrl: 'https://www.gov.il/he/departments/dynamiccollectors/committee?skip=0'
+  },
+  {
+    name: 'appeals_committee - page 50',
+    database: 'appeals_committee',
+    skip: 500,
+    expectedUrl: 'https://www.gov.il/he/departments/dynamiccollectors/committee?skip=500'
+  },
+  {
+    name: 'appeals_board - first page',
+    database: 'appeals_board',
+    skip: 0,
+    expectedUrl: 'https://www.gov.il/he/departments/dynamiccollectors/decisions_appeals_board?skip=0'
+  },
+  {
+    name: 'appeals_board - large skip',
+    database: 'appeals_board',
+    skip: 5000,
+    expectedUrl: 'https://www.gov.il/he/departments/dynamiccollectors/decisions_appeals_board?skip=5000'
+  }
+];
+
+// Invalid database test cases
+const INVALID_DATABASE_CASES = [
+  { name: 'Unknown database', database: 'unknown_db', skip: 0 },
+  { name: 'Empty database', database: '', skip: 0 },
+  { name: 'Typo in database', database: 'decisiv_appraiser', skip: 0 }
+];
+
+/**
+ * Test: test_handle_pagination
+ * Verifies that pagination logic correctly handles multiple pages, edge cases, and termination conditions
+ */
+function test_handle_pagination(): void {
+  console.log('Running: test_handle_pagination()');
+  let passed = 0;
+  let failed = 0;
+
+  // Test pagination logic
+  console.log('\n  -- Pagination Logic Tests --');
+  for (const testCase of PAGINATION_TEST_CASES) {
+    try {
+      const result = handlePagination(testCase.config);
+
+      assert.strictEqual(result.hasMore, testCase.expected.hasMore,
+        `${testCase.name}: hasMore - expected ${testCase.expected.hasMore}, got ${result.hasMore}`);
+      assert.strictEqual(result.nextSkip, testCase.expected.nextSkip,
+        `${testCase.name}: nextSkip - expected ${testCase.expected.nextSkip}, got ${result.nextSkip}`);
+      assert.strictEqual(result.currentPage, testCase.expected.currentPage,
+        `${testCase.name}: currentPage - expected ${testCase.expected.currentPage}, got ${result.currentPage}`);
+      assert.strictEqual(result.progress, testCase.expected.progress,
+        `${testCase.name}: progress - expected ${testCase.expected.progress}, got ${result.progress}`);
+
+      console.log(`  ✓ ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  // Test URL building
+  console.log('\n  -- URL Building Tests --');
+  for (const testCase of URL_TEST_CASES) {
+    try {
+      const result = buildPaginatedUrl(testCase.database, testCase.skip);
+
+      assert.strictEqual(result, testCase.expectedUrl,
+        `${testCase.name}: expected "${testCase.expectedUrl}", got "${result}"`);
+
+      console.log(`  ✓ ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  // Test invalid database handling
+  console.log('\n  -- Invalid Database Tests --');
+  for (const testCase of INVALID_DATABASE_CASES) {
+    try {
+      assert.throws(
+        () => buildPaginatedUrl(testCase.database, testCase.skip),
+        /Unknown database/,
+        `${testCase.name}: should throw for invalid database`
+      );
+      console.log(`  ✓ ${testCase.name}`);
+      passed++;
+    } catch (error) {
+      console.log(`  ✗ ${testCase.name}: ${(error as Error).message}`);
+      failed++;
+    }
+  }
+
+  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+}
+
 // Run tests
 console.log('===== Scraper Unit Tests =====\n');
 test_parse_decisive_appraiser_title();
@@ -711,4 +951,6 @@ console.log('');
 test_extract_block_plot();
 console.log('');
 test_extract_committee();
+console.log('');
+test_handle_pagination();
 console.log('\n✓ All tests passed!');

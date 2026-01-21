@@ -358,7 +358,7 @@ interface DecisionMetadata {
 - [x] `test_parse_appeals_committee_title()` - Different format
 - [x] `test_extract_block_plot()` - גוש/חלקה extraction
 - [x] `test_extract_committee()` - ועדה name extraction
-- [ ] `test_handle_pagination()` - Multiple pages
+- [x] `test_handle_pagination()` - Multiple pages
 - [ ] `test_scraper_api_settings()` - ultra_premium, wait_for
 
 ---
