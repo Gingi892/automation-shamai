@@ -4170,3 +4170,48 @@ cd chatbot
 6. **Progress tracking**: Workflow saves progress to staticData for resume capability
 
 ---
+---
+
+## Iteration 30 — US-P7-001 Fix UTF-8 Encoding in Hallucination Detection
+- **Date**: 2026-01-21
+- **Task**: US-P7-001 - Fix UTF-8 Encoding in Hallucination Detection
+
+### What Was Done
+
+Fixed Hebrew UTF-8 encoding issues in two n8n Code nodes in workflow `McOa9j15PRy8AZ8v` (RAG Chatbot).
+
+### Root Cause
+
+Hebrew text was corrupted to `???` characters in the original workflow JSON. This occurred when the nodes were saved with incorrect encoding.
+
+### Nodes Fixed
+
+1. **Format Response with Flags** (`format-response`)
+   - **Before**: `'?????, ?? ?????? ????? ?????.'` and `'??? ??: ${unfoundedClaims.length} ????? ...'`
+   - **After**: `'מצטער, לא הצלחתי לייצר תשובה.'` and `'שים לב: ${unfoundedClaims.length} טענות בתשובה לא נתמכות במלואן על ידי המקורות.'`
+
+2. **Compute Budget Gaps (KL Divergence)** (`compute-budget-gaps`)
+   - **Before**: `warning: scores.grounded ? null : '?? ???? ???? ????'`
+   - **After**: `warning: scores.grounded ? null : 'לא נמצא מקור מספק'`
+
+### Verification
+
+Tested chatbot endpoint with query "מה זה היטל השבחה?" and confirmed:
+- Main warning banner: `"warning": "שים לב: 1 טענות בתשובה לא נתמכות במלואן על ידי המקורות."` ✅
+- Per-claim warning: `"warning": "לא נמצא מקור מספק"` ✅
+
+### Files Modified
+
+1. **n8n Workflow McOa9j15PRy8AZ8v** - Updated via `n8n_update_partial_workflow` MCP tool
+2. **chatbot/PRD.md** - Marked all US-P7-001 acceptance criteria as complete
+
+### Learnings for Next Cycles
+
+1. **UTF-8 encoding in n8n**: When JavaScript Code nodes contain Hebrew, the encoding can be corrupted if saved incorrectly. Always verify Hebrew strings in node code are properly encoded.
+
+2. **Multiple nodes affected**: A single "encoding issue" can span multiple nodes. Both the node that generates per-claim warnings AND the node that formats the final response needed fixing.
+
+3. **Testing Hebrew output**: Use `n8n_test_workflow` MCP tool to trigger the workflow and verify the JSON response contains proper Hebrew characters, not `???` placeholders.
+
+4. **n8n partial update**: Use `n8n_update_partial_workflow` with `updateNode` operation to surgically fix individual nodes without affecting the rest of the workflow structure.
+

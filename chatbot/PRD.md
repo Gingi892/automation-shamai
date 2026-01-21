@@ -812,10 +812,10 @@ function buildScraperUrl(targetUrl) {
 **Root Cause:** JSON serialization not using UTF-8 encoding
 
 **Acceptance Criteria:**
-- [ ] Locate the n8n Code node that generates hallucination response
-- [ ] Ensure JSON output uses UTF-8: `JSON.stringify(data)` with proper encoding
-- [ ] Verify in n8n: Respond to Webhook node is set to JSON mode
-- [ ] Test: Warning banner shows Hebrew correctly
+- [x] Locate the n8n Code node that generates hallucination response
+- [x] Ensure JSON output uses UTF-8: `JSON.stringify(data)` with proper encoding
+- [x] Verify in n8n: Respond to Webhook node is set to JSON mode
+- [x] Test: Warning banner shows Hebrew correctly
 
 **Fix Location:** `Format Response with Flags` node in workflow McOa9j15PRy8AZ8v
 
