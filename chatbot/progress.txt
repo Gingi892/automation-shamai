@@ -1918,3 +1918,60 @@ Implemented the Analytics Dashboard feature in `workflows/chatbot-frontend.html`
 - Mobile responsive: reduce max-height, stack header elements
 
 ---
+
+## Iteration 24 — US-P5-001 test_parse_decisive_appraiser_title()
+- **Date**: 2026-01-21
+- **Task**: US-P5-001 - Unit Tests - Scraper: test_parse_decisive_appraiser_title()
+
+### What Was Done
+
+Created the first scraper unit test for Hebrew title parsing of decisive appraiser decisions.
+
+### Files Created
+
+1. **chatbot/tests/test_scraper.ts**
+   - Tests the regex pattern for parsing decisive appraiser titles
+   - 5 positive test cases covering various formats:
+     - Standard format with appraiser
+     - Format without appraiser suffix
+     - Advisory appraiser (שמאי מייעץ)
+     - Long case type description
+     - Committee with full name prefix
+   - 4 negative test cases:
+     - Appeals committee format (should not match)
+     - Appeals board format (should not match)
+     - Random Hebrew text
+     - Empty string
+   - Uses Node.js built-in `assert` module
+   - Run with: `npx tsx chatbot/tests/test_scraper.ts` from mcp-server directory
+
+### Test Pattern
+
+The decisive appraiser pattern from scraper.ts:
+```javascript
+/הכרעת שמאי (מכריע|מייעץ) מיום (\d{2}-\d{2}-\d{4}) בעניין ([^נ]+)נ ([^ג]+)ג (\d+) ח (\d+)\s*-?\s*(.+)?/
+```
+
+### Learnings for Next Cycles
+
+1. **Hebrew character limitations in regex**:
+   - `[^נ]+` stops at first 'נ' character - works for "בעניין" because it's part of literal pattern
+   - `[^ג]+` stops at first 'ג' character - PROBLEM for city names containing 'ג':
+     - Cities like רמת גן, גבעתיים, גליל cannot be parsed correctly
+     - Must use test data with cities NOT containing 'ג' (like הרצליה, תל אביב, חיפה)
+
+2. **Running TypeScript tests**:
+   - Use `node --import tsx` for Node.js v24+
+   - The `--loader tsx` flag is deprecated in recent Node versions
+   - Run from mcp-server directory where tsx is installed as devDependency
+
+3. **Pattern captures**:
+   - Group 1: appraiserType (מכריע/מייעץ)
+   - Group 2: decisionDate (DD-MM-YYYY)
+   - Group 3: caseType (until first נ)
+   - Group 4: committee (until first ג)
+   - Group 5: block number
+   - Group 6: plot number
+   - Group 7: appraiser name (optional)
+
+---

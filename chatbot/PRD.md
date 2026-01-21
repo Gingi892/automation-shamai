@@ -354,7 +354,7 @@ interface DecisionMetadata {
 **So that** parsing doesn't break
 
 **Test Cases:**
-- [ ] `test_parse_decisive_appraiser_title()` - Hebrew title parsing
+- [x] `test_parse_decisive_appraiser_title()` - Hebrew title parsing
 - [ ] `test_parse_appeals_committee_title()` - Different format
 - [ ] `test_extract_block_plot()` - גוש/חלקה extraction
 - [ ] `test_extract_committee()` - ועדה name extraction
