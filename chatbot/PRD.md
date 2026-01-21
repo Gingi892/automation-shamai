@@ -1235,10 +1235,18 @@ const embedding = await openai.embeddings.create({
 ```
 
 **Acceptance Criteria:**
-- [ ] Locate current embedding node in indexer workflow
-- [ ] Update to use full text instead of title
-- [ ] Keep title as fallback if full text extraction fails
+- [x] Locate current embedding node in indexer workflow
+- [x] Update to use full text instead of title
+- [x] Keep title as fallback if full text extraction fails
 - [ ] Test: Query "קרן יניבי" should return content, not just metadata
+
+**Implementation Notes (Completed 2026-01-21):**
+- Updated `Create Embedding` node (id: `create-embedding`) in workflow `1zYlIK6VnynTHiHl`
+- New embedding input logic: `(($json.description && $json.description.length > 100) ? ($json.description.slice(0, 8000)) : ($json.title + ' ' + ($json.description || '')).slice(0, 8000))`
+- Uses full PDF text (description field >100 chars) as primary embedding source
+- Falls back to title + description for documents without PDF content
+- Limits input to 8000 characters to stay within OpenAI token limits
+- Test criterion deferred to US-P8-007 (requires re-indexing first)
 
 ---
 
@@ -1294,9 +1302,9 @@ Day 4: Verify and test
 🔴 Phase 8: PDF CONTENT EXTRACTION (BLOCKING - Do First!)
   └─► US-P8-001: Analyze indexing gap [x]
   └─► US-P8-002: Design extraction pipeline [x]
-  └─► US-P8-003: Implement PDF fetcher [ ]
+  └─► US-P8-003: Implement PDF fetcher [x]
   └─► US-P8-004: Implement text extractor [x]
-  └─► US-P8-005: Update embedding to use full text [ ]
+  └─► US-P8-005: Update embedding to use full text [x]
   └─► US-P8-006: Re-index all 20K documents [ ]
   └─► US-P8-007: Verify content indexing works [ ]
 

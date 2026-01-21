@@ -4002,3 +4002,66 @@ This confirms gov.il serves real PDFs, not HTML pages, so `extractFromFile` is t
 5. **Hebrew RTL processing is essential**: Unicode directional chars can break text processing if not removed
 
 ---
+
+## Iteration 35 — US-P8-005 Update Embedding to Use Full Text
+- **Date**: 2026-01-21
+- **Task**: US-P8-005 - Update embedding to use full text instead of title
+
+### What Was Done
+
+Updated the `Create Embedding` node in workflow `1zYlIK6VnynTHiHl` (Full Indexer - All Databases) to use full PDF text for embedding creation instead of just the title.
+
+### Files Modified
+
+1. **n8n Workflow 1zYlIK6VnynTHiHl** - Updated `Create Embedding` node (id: `create-embedding`)
+   - Changed `jsonBody` from simple title+description concatenation to smart selection logic
+   - New logic: Uses full PDF text (description field) if it exists and is >100 chars
+   - Falls back to title+description for documents without PDF content
+   - Limits input to 8000 characters to stay within OpenAI API token limits
+
+2. **chatbot/PRD.md** - Marked US-P8-005 acceptance criteria as complete
+
+### Technical Details
+
+**Previous (WRONG):**
+```javascript
+input: $json.title + ' ' + ($json.description || '')
+```
+
+**New (CORRECT):**
+```javascript
+input: (($json.description && $json.description.length > 100)
+  ? ($json.description.slice(0, 8000))
+  : ($json.title + ' ' + ($json.description || '')).slice(0, 8000))
+```
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Locate current embedding node | ✅ Complete |
+| Update to use full text | ✅ Complete |
+| Keep title as fallback | ✅ Complete |
+| Test query returns content | ⏳ Deferred to US-P8-007 (needs re-indexing) |
+
+### Flow Verification
+
+The complete embedding flow is now:
+1. `Process Batch for Embedding` → outputs docs with empty `description`
+2. `Check PDF URL` → routes based on URL presence
+3. `Fetch PDF Content` → downloads PDF binary
+4. `Extract PDF Text` → extracts text via n8n extractFromFile
+5. `Prepare PDF Text` → cleans Hebrew RTL, truncates to 35KB, sets `description` field
+6. `Merge PDF Results` → combines PDF extraction and skip paths
+7. `Create Embedding` → **NOW uses description (full text) as primary, with 8000 char limit**
+8. `Prepare Pinecone Vector` → stores description in metadata
+9. `Upsert to Pinecone` → indexes to Pinecone
+
+### Learnings for Next Cycles
+
+1. **Embedding already used description**: The original code did `title + ' ' + (description || '')`, but description was mostly empty because PDF extraction wasn't wired up properly until Iteration 10
+2. **8000 char limit is critical**: OpenAI text-embedding-3-small has ~8192 token limit, so slicing to 8000 chars provides safety margin
+3. **100 char threshold for description**: Using >100 chars as threshold ensures we don't use short error messages or empty placeholders as the primary embedding source
+4. **Test deferred**: Testing "קרן יניבי" query requires re-indexing documents first (US-P8-006), so the test criterion is deferred to US-P8-007
+
+---
