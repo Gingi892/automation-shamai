@@ -1153,12 +1153,12 @@ function prepareText(fullText) {
 **So that** I can extract text from decisions
 
 **Acceptance Criteria:**
-- [ ] Create/update n8n Code node: "Fetch PDF Content"
-- [ ] Input: document URL from listing scrape
-- [ ] Build ScraperAPI URL with `ultra_premium=true`, `render=true`
-- [ ] Handle PDF binary → text conversion
-- [ ] Output: Full Hebrew text content
-- [ ] Error handling: If PDF fails, fallback to title-only
+- [x] Create/update n8n Code node: "Fetch PDF Content"
+- [x] Input: document URL from listing scrape
+- [x] Build ScraperAPI URL with `ultra_premium=true`, `render=true` (UPDATED: Using direct HTTP fetch per design doc - gov.il not blocked for PDFs)
+- [x] Handle PDF binary → text conversion
+- [x] Output: Full Hebrew text content
+- [x] Error handling: If PDF fails, fallback to title-only
 
 **Implementation:**
 ```javascript

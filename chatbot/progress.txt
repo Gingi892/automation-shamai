@@ -3871,3 +3871,64 @@ Marked US-P6-001 as complete because ALL its acceptance criteria were already fu
 4. **PRD should cross-reference**: When adding new phases, check for overlap with existing work
 
 ---
+
+## Iteration 36 — US-P8-003 Implement PDF Fetcher Node
+- **Date**: 2026-01-21
+- **Task**: US-P8-003 - Implement PDF Fetcher Node
+
+### What Was Done
+
+Updated the Full Indexer workflow (`1zYlIK6VnynTHiHl`) to use direct HTTP fetch for PDFs instead of ScraperAPI, per the design document analysis in US-P8-002.
+
+### Key Change
+
+**Before (ScraperAPI):**
+```javascript
+"url": "=https://api.scraperapi.com?api_key=...&url={{ encodeURIComponent($json.url) }}&premium=true"
+```
+
+**After (Direct HTTP):**
+```javascript
+"url": "={{ $json.url }}"
+```
+
+### Rationale (from US-P8-002 Design Document)
+
+The design analysis determined:
+1. Gov.il PDF URLs (`free-justice.openapi.gov.il`) are NOT blocked
+2. PDFs don't require JavaScript rendering (no need for ScraperAPI)
+3. Direct fetch reduces cost by 75% (from ~$400 to ~$100 for full indexing)
+4. Timeout set to 60 seconds for large PDFs
+
+### Acceptance Criteria Verification
+
+| Criterion | Status | Implementation |
+|-----------|--------|----------------|
+| Create/update "Fetch PDF Content" node | ✅ | Node id: `fetch-pdf-content` |
+| Input: document URL from listing scrape | ✅ | `{{ $json.url }}` from Process Batch |
+| Handle PDF binary → text conversion | ✅ | Via `Extract PDF Text` node (extractFromFile) |
+| Output: Full Hebrew text content | ✅ | Via `Prepare PDF Text` node with cleanHebrewText() |
+| Error handling: fallback to title-only | ✅ | `continueOnFail: true` + Skip PDF - No URL node |
+
+### Workflow Connection Flow
+
+```
+Process Batch for Embedding
+    → Check PDF URL
+        → (has URL) → Fetch PDF Content → Extract PDF Text → Prepare PDF Text → Merge PDF Results → Create Embedding
+        → (no URL) → Skip PDF - No URL → Merge PDF Results → Create Embedding
+```
+
+### Files Modified
+
+1. **n8n Workflow 1zYlIK6VnynTHiHl** - Updated Fetch PDF Content node URL parameter
+
+### Learnings for Next Cycles
+
+1. **Direct HTTP vs ScraperAPI for PDFs**: Gov.il PDF endpoints are accessible without ScraperAPI - saves significant cost
+2. **Design docs inform implementation**: The US-P8-002 design document correctly identified this optimization
+3. **Validation warnings are often false positives**: "URL expression appears to be missing http:// protocol" is expected when URL comes from $json
+4. **PDF workflow nodes already exist**: Iteration 10 (US-P2-002) created the PDF extraction pipeline - this iteration just optimizes the fetch URL
+5. **continueOnFail pattern**: All PDF-related nodes have this flag for graceful error handling
+
+---
