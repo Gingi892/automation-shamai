@@ -138,14 +138,14 @@ const scraperUrl = buildScraperUrl(pdfUrl);
 **So that** I can answer questions like "how many decisions in Tel Aviv?"
 
 **Acceptance Criteria:**
-- [ ] MCP tool `get_statistics`
-- [ ] Returns:
+- [x] MCP tool `get_statistics`
+- [x] Returns:
   - Total decision count
   - Breakdown by committee (top 20)
   - Breakdown by case type
   - Breakdown by year
   - Date range of indexed decisions
-- [ ] Claude can answer: "כמה החלטות יש בתל אביב ב-2024?"
+- [x] Claude can answer: "כמה החלטות יש בתל אביב ב-2024?"
 
 ---
 

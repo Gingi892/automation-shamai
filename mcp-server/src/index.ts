@@ -1041,6 +1041,17 @@ async function handleGetStatistics(): Promise<MCPToolResult> {
           name: databaseNames[key as DatabaseType],
           count
         })),
+        // US-004: Breakdown by committee (top 20)
+        byCommittee: stats.byCommittee,
+        // US-004: Breakdown by case type
+        byCaseType: stats.byCaseType,
+        // US-004: Breakdown by year
+        byYear: stats.byYear,
+        // US-004: Date range of indexed decisions
+        dateRange: {
+          oldest: stats.oldestDecision,
+          newest: stats.newestDecision
+        },
         lastIndexedAt: stats.lastIndexedAt,
         lastUpdateAt: stats.lastUpdateAt
       }, null, 2)

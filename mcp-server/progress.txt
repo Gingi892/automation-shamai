@@ -73,3 +73,22 @@
   - PDF caching uses decision ID as key
   - Estimates page count from cached text length (~3000 chars/page)
 ---
+
+## Iteration 4 — US-004: Get Statistics (IMPLEMENTED)
+- **What was done:** Enhanced `getStats()` to return all required statistics
+- **Files modified:**
+  - `src/database.ts` - Extended `getStats()` method to include:
+    - `byCommittee` (top 20 committees with counts)
+    - `byCaseType` (all case types with counts)
+    - `byYear` (yearly breakdown, extracted from decision_date)
+    - `newestDecision` (date range max)
+  - `src/index.ts` - Updated `handleGetStatistics()` to return new fields:
+    - `byCommittee`, `byCaseType`, `byYear`, `dateRange` object
+- **Technical notes:**
+  - Date format is DD-MM-YYYY, year extracted via `substr(decision_date, 7, 4)`
+  - byCommittee limited to top 20, sorted by count DESC
+  - TypeScript type check passes
+- **Learnings for next cycles:**
+  - Used SQL GROUP BY with ORDER BY for efficient aggregations
+  - Extended stats type defined inline to avoid touching types.ts
+---

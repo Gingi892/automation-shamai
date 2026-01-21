@@ -1,9 +1,9 @@
 /**
  * SQLite Database Manager for Gov.il Land Appraisal Decisions
- * Uses better-sqlite3 with FTS5 extension for Hebrew text search
+ * Uses sql.js (pure JavaScript SQLite) for cross-platform compatibility
  */
 
-import Database from 'better-sqlite3';
+import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -22,9 +22,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export class DecisionDatabase {
-  private db: Database.Database | null = null;
+  private db: SqlJsDatabase | null = null;
   private dbPath: string;
   private initialized = false;
+  private SQL: any = null;
 
   constructor(dbPath?: string) {
     // Default to ~/.gov-il-mcp/decisions.db as specified in PRD
@@ -37,30 +38,35 @@ export class DecisionDatabase {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
+    // Initialize sql.js
+    this.SQL = await initSqlJs();
+
     // Ensure directory exists
     const dir = path.dirname(this.dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    // Open or create database
-    this.db = new Database(this.dbPath);
-
-    // Enable WAL mode for better concurrent access
-    this.db.pragma('journal_mode = WAL');
+    // Load existing database or create new one
+    if (fs.existsSync(this.dbPath)) {
+      const buffer = fs.readFileSync(this.dbPath);
+      this.db = new this.SQL.Database(buffer);
+    } else {
+      this.db = new this.SQL.Database();
+    }
 
     this.createSchema();
     this.initialized = true;
   }
 
   /**
-   * Create database schema with FTS5 virtual table
+   * Create database schema
    */
   private createSchema(): void {
     if (!this.db) throw new Error('Database not initialized');
 
     // Main decisions table
-    this.db.exec(`
+    this.db.run(`
       CREATE TABLE IF NOT EXISTS decisions (
         id TEXT PRIMARY KEY,
         database TEXT NOT NULL,
@@ -80,160 +86,103 @@ export class DecisionDatabase {
     `);
 
     // Create indexes
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_database ON decisions(database)`);
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_committee ON decisions(committee)`);
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_block_plot ON decisions(block, plot)`);
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_appraiser ON decisions(appraiser)`);
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_case_type ON decisions(case_type)`);
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_decision_date ON decisions(decision_date)`);
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_content_hash ON decisions(content_hash)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_database ON decisions(database)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_committee ON decisions(committee)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_block_plot ON decisions(block, plot)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_appraiser ON decisions(appraiser)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_case_type ON decisions(case_type)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_decision_date ON decisions(decision_date)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_content_hash ON decisions(content_hash)`);
 
-    // Create FTS5 virtual table for Hebrew full-text search
-    // Uses unicode61 tokenizer which handles Hebrew text well
-    // content= specifies external content mode (saves space by not duplicating data)
-    this.db.exec(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS decisions_fts USING fts5(
-        title,
-        committee,
-        appraiser,
-        case_type,
-        content='decisions',
-        content_rowid='rowid',
-        tokenize='unicode61'
-      )
-    `);
-
-    // Create triggers to keep FTS5 index synchronized with main table
-    this.db.exec(`
-      CREATE TRIGGER IF NOT EXISTS decisions_ai AFTER INSERT ON decisions BEGIN
-        INSERT INTO decisions_fts(rowid, title, committee, appraiser, case_type)
-        VALUES (new.rowid, new.title, new.committee, new.appraiser, new.case_type);
-      END
-    `);
-
-    this.db.exec(`
-      CREATE TRIGGER IF NOT EXISTS decisions_ad AFTER DELETE ON decisions BEGIN
-        INSERT INTO decisions_fts(decisions_fts, rowid, title, committee, appraiser, case_type)
-        VALUES ('delete', old.rowid, old.title, old.committee, old.appraiser, old.case_type);
-      END
-    `);
-
-    this.db.exec(`
-      CREATE TRIGGER IF NOT EXISTS decisions_au AFTER UPDATE ON decisions BEGIN
-        INSERT INTO decisions_fts(decisions_fts, rowid, title, committee, appraiser, case_type)
-        VALUES ('delete', old.rowid, old.title, old.committee, old.appraiser, old.case_type);
-        INSERT INTO decisions_fts(rowid, title, committee, appraiser, case_type)
-        VALUES (new.rowid, new.title, new.committee, new.appraiser, new.case_type);
-      END
-    `);
-
-    // Indexer progress tracking table
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS indexer_progress (
-        database TEXT PRIMARY KEY,
-        current_page INTEGER DEFAULT 0,
-        total_pages INTEGER,
-        documents_indexed INTEGER DEFAULT 0,
-        start_time TEXT,
-        status TEXT DEFAULT 'pending',
-        error TEXT,
-        updated_at TEXT DEFAULT (datetime('now'))
-      )
-    `);
-
-    // Metadata table for stats
-    this.db.exec(`
+    // Metadata table for tracking
+    this.db.run(`
       CREATE TABLE IF NOT EXISTS metadata (
         key TEXT PRIMARY KEY,
         value TEXT,
         updated_at TEXT DEFAULT (datetime('now'))
       )
     `);
-  }
 
-  /**
-   * Rebuild FTS5 index from existing data
-   * Call this after migrating from old database or if index is corrupted
-   */
-  rebuildFtsIndex(): void {
-    if (!this.db) throw new Error('Database not initialized');
-
-    console.error('[Database] Rebuilding FTS5 index...');
-
-    // Delete all FTS data
-    this.db.exec(`DELETE FROM decisions_fts`);
-
-    // Repopulate from main table
-    this.db.exec(`
-      INSERT INTO decisions_fts(rowid, title, committee, appraiser, case_type)
-      SELECT rowid, title, committee, appraiser, case_type FROM decisions
+    // Progress tracking table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS indexer_progress (
+        database TEXT PRIMARY KEY,
+        current_page INTEGER DEFAULT 0,
+        total_pages INTEGER,
+        documents_indexed INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        error TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
+      )
     `);
 
-    console.error('[Database] FTS5 index rebuilt successfully');
+    this.save();
   }
 
   /**
-   * Insert or update a decision
+   * Save database to disk
+   */
+  private save(): void {
+    if (!this.db) return;
+    const data = this.db.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(this.dbPath, buffer);
+  }
+
+  /**
+   * Insert a single decision
    */
   insertDecision(decision: Omit<Decision, 'indexedAt'>): boolean {
     if (!this.db) throw new Error('Database not initialized');
 
-    // Check if exists with same hash
-    const existing = this.db.prepare(
-      `SELECT 1 FROM decisions WHERE id = ? AND content_hash = ?`
-    ).get(decision.id, decision.contentHash);
-
-    if (existing) {
-      return false; // Already exists with same hash
+    try {
+      this.db.run(`
+        INSERT OR REPLACE INTO decisions
+        (id, database, title, url, block, plot, committee, appraiser, case_type, decision_date, publish_date, content_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        decision.id,
+        decision.database,
+        decision.title,
+        decision.url,
+        decision.block,
+        decision.plot,
+        decision.committee,
+        decision.appraiser,
+        decision.caseType,
+        decision.decisionDate,
+        decision.publishDate,
+        decision.contentHash
+      ]);
+      this.save();
+      return true;
+    } catch (error) {
+      console.error('Error inserting decision:', error);
+      return false;
     }
-
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO decisions
-      (id, database, title, url, block, plot, committee, appraiser, case_type, decision_date, publish_date, content_hash, indexed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `);
-
-    stmt.run(
-      decision.id,
-      decision.database,
-      decision.title,
-      decision.url,
-      decision.block,
-      decision.plot,
-      decision.committee,
-      decision.appraiser,
-      decision.caseType,
-      decision.decisionDate,
-      decision.publishDate,
-      decision.contentHash
-    );
-
-    return true;
   }
 
   /**
-   * Batch insert decisions (uses transaction for efficiency)
+   * Insert multiple decisions (batch)
    */
   insertDecisions(decisions: Omit<Decision, 'indexedAt'>[]): number {
     if (!this.db) throw new Error('Database not initialized');
 
     let inserted = 0;
+    for (const decision of decisions) {
+      try {
+        // Check if already exists by hash
+        const existing = this.db.exec(
+          `SELECT 1 FROM decisions WHERE content_hash = ?`,
+          [decision.contentHash]
+        );
 
-    const checkStmt = this.db.prepare(
-      `SELECT 1 FROM decisions WHERE id = ? AND content_hash = ?`
-    );
-
-    const insertStmt = this.db.prepare(`
-      INSERT OR REPLACE INTO decisions
-      (id, database, title, url, block, plot, committee, appraiser, case_type, decision_date, publish_date, content_hash, indexed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `);
-
-    const transaction = this.db.transaction((decisions: Omit<Decision, 'indexedAt'>[]) => {
-      for (const decision of decisions) {
-        const existing = checkStmt.get(decision.id, decision.contentHash);
-        if (!existing) {
-          insertStmt.run(
+        if (existing.length === 0 || existing[0].values.length === 0) {
+          this.db.run(`
+            INSERT INTO decisions
+            (id, database, title, url, block, plot, committee, appraiser, case_type, decision_date, publish_date, content_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
             decision.id,
             decision.database,
             decision.title,
@@ -246,29 +195,18 @@ export class DecisionDatabase {
             decision.decisionDate,
             decision.publishDate,
             decision.contentHash
-          );
+          ]);
           inserted++;
         }
+      } catch (error) {
+        console.error('Error inserting decision:', error);
       }
-    });
-
-    transaction(decisions);
-    return inserted;
-  }
-
-  /**
-   * Get a decision by ID
-   */
-  getDecision(id: string): Decision | null {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const row = this.db.prepare(`SELECT * FROM decisions WHERE id = ?`).get(id) as DecisionRow | undefined;
-
-    if (!row) {
-      return null;
     }
 
-    return rowToDecision(row);
+    if (inserted > 0) {
+      this.save();
+    }
+    return inserted;
   }
 
   /**
@@ -277,181 +215,227 @@ export class DecisionDatabase {
   existsByHash(contentHash: string): boolean {
     if (!this.db) throw new Error('Database not initialized');
 
-    const result = this.db.prepare(
-      `SELECT 1 FROM decisions WHERE content_hash = ?`
-    ).get(contentHash);
-
-    return !!result;
+    const result = this.db.exec(
+      `SELECT 1 FROM decisions WHERE content_hash = ?`,
+      [contentHash]
+    );
+    return result.length > 0 && result[0].values.length > 0;
   }
 
   /**
-   * Search decisions with various filters and FTS5 full-text search
-   * Returns results with relevance ranking when using text search
+   * Get a decision by ID
+   */
+  getById(id: string): Decision | null {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec(
+      `SELECT * FROM decisions WHERE id = ?`,
+      [id]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return null;
+    }
+
+    const columns = result[0].columns;
+    const values = result[0].values[0];
+    const row = this.columnsToRow(columns, values);
+    return rowToDecision(row);
+  }
+
+  /**
+   * Alias for getById - used by MCP handlers
+   */
+  getDecision(id: string): Decision | null {
+    return this.getById(id);
+  }
+
+  /**
+   * Get database file path
+   */
+  getDbPath(): string {
+    return this.dbPath;
+  }
+
+  /**
+   * Get distinct values for a column
+   */
+  getDistinctValues(column: string, limit: number = 100): string[] {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Validate column name to prevent SQL injection
+    const allowedColumns = ['committee', 'appraiser', 'case_type', 'block'];
+    if (!allowedColumns.includes(column)) {
+      throw new Error(`Invalid column: ${column}`);
+    }
+
+    const result = this.db.exec(
+      `SELECT DISTINCT ${column} FROM decisions WHERE ${column} IS NOT NULL AND ${column} != '' ORDER BY ${column} LIMIT ?`,
+      [limit]
+    );
+
+    if (result.length === 0) return [];
+    return result[0].values.map(v => String(v[0]));
+  }
+
+  /**
+   * Search decisions with filtering
    */
   search(params: SearchParams): SearchResult {
     if (!this.db) throw new Error('Database not initialized');
 
-    const conditions: string[] = ['1=1'];
-    const values: (string | number)[] = [];
-    let useFts = false;
-    let ftsQuery = '';
+    const conditions: string[] = [];
+    const values: any[] = [];
 
-    // Database filter
+    // Build WHERE conditions
     if (params.database) {
-      conditions.push('d.database = ?');
+      conditions.push('database = ?');
       values.push(params.database);
     }
 
-    // Committee filter
+    if (params.query) {
+      // Use LIKE for text search (no FTS5 in sql.js)
+      const searchTerms = params.query.split(/\s+/).filter(t => t.length > 0);
+      const likeConditions = searchTerms.map(() =>
+        '(title LIKE ? OR committee LIKE ? OR appraiser LIKE ? OR case_type LIKE ?)'
+      );
+      conditions.push(`(${likeConditions.join(' AND ')})`);
+      for (const term of searchTerms) {
+        const likeTerm = `%${term}%`;
+        values.push(likeTerm, likeTerm, likeTerm, likeTerm);
+      }
+    }
+
     if (params.committee) {
-      conditions.push('d.committee LIKE ?');
+      conditions.push('committee LIKE ?');
       values.push(`%${params.committee}%`);
     }
 
-    // Block/plot filter
     if (params.block) {
-      conditions.push('d.block = ?');
+      conditions.push('block = ?');
       values.push(params.block);
     }
+
     if (params.plot) {
-      conditions.push('d.plot = ?');
+      conditions.push('plot = ?');
       values.push(params.plot);
     }
 
-    // Appraiser filter
     if (params.appraiser) {
-      conditions.push('d.appraiser LIKE ?');
+      conditions.push('appraiser LIKE ?');
       values.push(`%${params.appraiser}%`);
     }
 
-    // Case type filter
     if (params.caseType) {
-      conditions.push('d.case_type LIKE ?');
+      conditions.push('case_type LIKE ?');
       values.push(`%${params.caseType}%`);
     }
 
-    // Date range filter
     if (params.fromDate) {
-      conditions.push('d.decision_date >= ?');
+      conditions.push('decision_date >= ?');
       values.push(params.fromDate);
     }
+
     if (params.toDate) {
-      conditions.push('d.decision_date <= ?');
+      conditions.push('decision_date <= ?');
       values.push(params.toDate);
     }
 
-    // Text search query - use FTS5 for relevance ranking
-    if (params.query) {
-      useFts = true;
-      // Escape special FTS5 characters and wrap terms for prefix matching
-      ftsQuery = this.escapeFtsQuery(params.query);
-    }
-
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = params.limit || 50;
     const offset = params.offset || 0;
 
-    let decisions: Decision[];
-    let totalCount: number;
+    // Get total count
+    const countResult = this.db.exec(
+      `SELECT COUNT(*) as count FROM decisions ${whereClause}`,
+      values
+    );
+    const totalCount = countResult.length > 0 ? Number(countResult[0].values[0][0]) : 0;
 
-    let rankedByRelevance = false;
+    // Get results
+    const queryResult = this.db.exec(
+      `SELECT * FROM decisions ${whereClause} ORDER BY indexed_at DESC LIMIT ? OFFSET ?`,
+      [...values, limit, offset]
+    );
 
-    if (useFts && ftsQuery) {
-      // FTS5 query with relevance ranking using bm25()
-      rankedByRelevance = true;
-
-      const countSql = `
-        SELECT COUNT(*) as count
-        FROM decisions d
-        INNER JOIN decisions_fts fts ON d.rowid = fts.rowid
-        WHERE decisions_fts MATCH ?
-        AND ${conditions.join(' AND ')}
-      `;
-      const countRow = this.db.prepare(countSql).get(ftsQuery, ...values) as { count: number };
-      totalCount = countRow?.count || 0;
-
-      // bm25() returns negative scores (more negative = more relevant)
-      // So we order by bm25() ASC to get most relevant first
-      const searchSql = `
-        SELECT d.*, bm25(decisions_fts) as relevance_score
-        FROM decisions d
-        INNER JOIN decisions_fts fts ON d.rowid = fts.rowid
-        WHERE decisions_fts MATCH ?
-        AND ${conditions.join(' AND ')}
-        ORDER BY bm25(decisions_fts), d.decision_date DESC
-        LIMIT ? OFFSET ?
-      `;
-
-      const rows = this.db.prepare(searchSql).all(ftsQuery, ...values, limit + 1, offset) as (DecisionRow & { relevance_score: number })[];
-      // Pass relevance_score to rowToDecision for inclusion in Decision objects
-      decisions = rows.slice(0, limit).map(row => rowToDecision(row, row.relevance_score));
-
-    } else {
-      // Standard query without FTS - no relevance ranking
-      const countSql = `
-        SELECT COUNT(*) as count FROM decisions d WHERE ${conditions.join(' AND ')}
-      `;
-      const countRow = this.db.prepare(countSql).get(...values) as { count: number };
-      totalCount = countRow?.count || 0;
-
-      const searchSql = `
-        SELECT d.* FROM decisions d
-        WHERE ${conditions.join(' AND ')}
-        ORDER BY d.decision_date DESC, d.indexed_at DESC
-        LIMIT ? OFFSET ?
-      `;
-
-      const rows = this.db.prepare(searchSql).all(...values, limit + 1, offset) as DecisionRow[];
-      decisions = rows.slice(0, limit).map(row => rowToDecision(row));
+    const decisions: Decision[] = [];
+    if (queryResult.length > 0 && queryResult[0].values.length > 0) {
+      const columns = queryResult[0].columns;
+      for (const rowValues of queryResult[0].values) {
+        const row = this.columnsToRow(columns, rowValues);
+        decisions.push(rowToDecision(row));
+      }
     }
-
-    const hasMore = decisions.length > limit || (offset + limit) < totalCount;
 
     return {
       decisions,
       totalCount,
-      hasMore,
-      query: params,
-      rankedByRelevance
+      hasMore: offset + decisions.length < totalCount,
+      query: params
     };
   }
 
   /**
-   * Escape and prepare query string for FTS5
-   * Handles Hebrew text and special characters
+   * Convert columns and values arrays to row object
    */
-  private escapeFtsQuery(query: string): string {
-    // Remove FTS5 special operators that might cause syntax errors
-    // but preserve the search terms
-    let escaped = query
-      .replace(/["\-*()^:]/g, ' ')  // Remove special chars
-      .replace(/\s+/g, ' ')          // Normalize whitespace
-      .trim();
-
-    // Split into terms and wrap each with quotes for exact matching
-    // This handles Hebrew text better
-    const terms = escaped.split(' ').filter(t => t.length > 0);
-
-    if (terms.length === 0) {
-      return '';
-    }
-
-    // Use OR between terms for broader matching
-    // Each term is quoted to handle Hebrew properly
-    return terms.map(t => `"${t}"`).join(' OR ');
+  private columnsToRow(columns: string[], values: any[]): DecisionRow {
+    const row: any = {};
+    columns.forEach((col, idx) => {
+      row[col] = values[idx];
+    });
+    return row as DecisionRow;
   }
 
   /**
-   * Get statistics about the indexed data
+   * Get all unique committees
    */
-  getStats(): IndexerStats {
+  getCommittees(): string[] {
     if (!this.db) throw new Error('Database not initialized');
 
-    const totalRow = this.db.prepare('SELECT COUNT(*) as count FROM decisions').get() as { count: number };
-    const totalDocuments = totalRow?.count || 0;
+    const result = this.db.exec(
+      `SELECT DISTINCT committee FROM decisions WHERE committee IS NOT NULL ORDER BY committee`
+    );
 
-    const byDbRows = this.db.prepare(`
-      SELECT database, COUNT(*) as count FROM decisions GROUP BY database
-    `).all() as { database: string; count: number }[];
+    if (result.length === 0) return [];
+    return result[0].values.map(v => String(v[0]));
+  }
+
+  /**
+   * Get all unique appraisers
+   */
+  getAppraisers(): string[] {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec(
+      `SELECT DISTINCT appraiser FROM decisions WHERE appraiser IS NOT NULL ORDER BY appraiser`
+    );
+
+    if (result.length === 0) return [];
+    return result[0].values.map(v => String(v[0]));
+  }
+
+  /**
+   * Extended statistics type for US-004 compliance
+   */
+  interface ExtendedStats extends IndexerStats {
+    totalDecisions: number;
+    recentDecisions?: number;
+    oldestDecision?: string | null;
+    newestDecision?: string | null;
+    byCommittee?: Array<{ committee: string; count: number }>;
+    byCaseType?: Array<{ caseType: string; count: number }>;
+    byYear?: Array<{ year: string; count: number }>;
+  }
+
+  /**
+   * Get database statistics
+   * US-004: Returns total count, breakdown by committee/case type/year, date range
+   */
+  getStats(): ExtendedStats {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const totalResult = this.db.exec(`SELECT COUNT(*) FROM decisions`);
+    const totalDocuments = totalResult.length > 0 ? Number(totalResult[0].values[0][0]) : 0;
 
     const byDatabase: Record<DatabaseType, number> = {
       decisive_appraiser: 0,
@@ -459,52 +443,167 @@ export class DecisionDatabase {
       appeals_board: 0
     };
 
-    for (const row of byDbRows) {
-      byDatabase[row.database as DatabaseType] = row.count;
+    const byDbResult = this.db.exec(
+      `SELECT database, COUNT(*) as count FROM decisions GROUP BY database`
+    );
+    if (byDbResult.length > 0) {
+      for (const row of byDbResult[0].values) {
+        const dbType = row[0] as DatabaseType;
+        const count = Number(row[1]);
+        if (dbType in byDatabase) {
+          byDatabase[dbType] = count;
+        }
+      }
     }
 
-    const lastIndexedRow = this.db.prepare(`SELECT MAX(indexed_at) as last FROM decisions`).get() as { last: string | null };
-    const lastIndexedAt = lastIndexedRow?.last || null;
+    const lastIndexResult = this.db.exec(
+      `SELECT value FROM metadata WHERE key = 'last_full_index'`
+    );
+    const lastIndexedAt = lastIndexResult.length > 0 && lastIndexResult[0].values.length > 0
+      ? String(lastIndexResult[0].values[0][0])
+      : null;
 
-    const lastUpdateRow = this.db.prepare(`SELECT value FROM metadata WHERE key = 'last_update'`).get() as { value: string } | undefined;
-    const lastUpdateAt = lastUpdateRow?.value || null;
+    const lastUpdateResult = this.db.exec(
+      `SELECT value FROM metadata WHERE key = 'last_update'`
+    );
+    const lastUpdateAt = lastUpdateResult.length > 0 && lastUpdateResult[0].values.length > 0
+      ? String(lastUpdateResult[0].values[0][0])
+      : null;
+
+    // Get recent decisions count (last 30 days)
+    const recentResult = this.db.exec(
+      `SELECT COUNT(*) FROM decisions WHERE indexed_at >= datetime('now', '-30 days')`
+    );
+    const recentDecisions = recentResult.length > 0 ? Number(recentResult[0].values[0][0]) : 0;
+
+    // Get oldest decision date (date range min)
+    const oldestResult = this.db.exec(
+      `SELECT MIN(decision_date) FROM decisions WHERE decision_date IS NOT NULL`
+    );
+    const oldestDecision = oldestResult.length > 0 && oldestResult[0].values[0][0]
+      ? String(oldestResult[0].values[0][0])
+      : null;
+
+    // Get newest decision date (date range max)
+    const newestResult = this.db.exec(
+      `SELECT MAX(decision_date) FROM decisions WHERE decision_date IS NOT NULL`
+    );
+    const newestDecision = newestResult.length > 0 && newestResult[0].values[0][0]
+      ? String(newestResult[0].values[0][0])
+      : null;
+
+    // Breakdown by committee (top 20)
+    const byCommitteeResult = this.db.exec(
+      `SELECT committee, COUNT(*) as count FROM decisions
+       WHERE committee IS NOT NULL AND committee != ''
+       GROUP BY committee ORDER BY count DESC LIMIT 20`
+    );
+    const byCommittee: Array<{ committee: string; count: number }> = [];
+    if (byCommitteeResult.length > 0) {
+      for (const row of byCommitteeResult[0].values) {
+        byCommittee.push({
+          committee: String(row[0]),
+          count: Number(row[1])
+        });
+      }
+    }
+
+    // Breakdown by case type
+    const byCaseTypeResult = this.db.exec(
+      `SELECT case_type, COUNT(*) as count FROM decisions
+       WHERE case_type IS NOT NULL AND case_type != ''
+       GROUP BY case_type ORDER BY count DESC`
+    );
+    const byCaseType: Array<{ caseType: string; count: number }> = [];
+    if (byCaseTypeResult.length > 0) {
+      for (const row of byCaseTypeResult[0].values) {
+        byCaseType.push({
+          caseType: String(row[0]),
+          count: Number(row[1])
+        });
+      }
+    }
+
+    // Breakdown by year (extracted from decision_date)
+    const byYearResult = this.db.exec(
+      `SELECT substr(decision_date, 7, 4) as year, COUNT(*) as count FROM decisions
+       WHERE decision_date IS NOT NULL AND length(decision_date) >= 10
+       GROUP BY year ORDER BY year DESC`
+    );
+    const byYear: Array<{ year: string; count: number }> = [];
+    if (byYearResult.length > 0) {
+      for (const row of byYearResult[0].values) {
+        if (row[0]) {
+          byYear.push({
+            year: String(row[0]),
+            count: Number(row[1])
+          });
+        }
+      }
+    }
 
     return {
       totalDocuments,
+      totalDecisions: totalDocuments,  // Alias for compatibility
       byDatabase,
       lastIndexedAt,
-      lastUpdateAt
+      lastUpdateAt,
+      recentDecisions,
+      oldestDecision,
+      newestDecision,
+      byCommittee,
+      byCaseType,
+      byYear
     };
   }
 
   /**
-   * Get distinct values for a column (for autocomplete)
+   * Set metadata value
    */
-  getDistinctValues(column: 'committee' | 'appraiser' | 'case_type', limit = 100): string[] {
+  setMetadata(key: string, value: string): void {
     if (!this.db) throw new Error('Database not initialized');
 
-    const rows = this.db.prepare(`
-      SELECT DISTINCT ${column} as value
-      FROM decisions
-      WHERE ${column} IS NOT NULL AND ${column} != ''
-      ORDER BY value
-      LIMIT ?
-    `).all(limit) as { value: string }[];
+    this.db.run(`
+      INSERT OR REPLACE INTO metadata (key, value, updated_at)
+      VALUES (?, ?, datetime('now'))
+    `, [key, value]);
+    this.save();
+  }
 
-    return rows.map(row => row.value);
+  /**
+   * Get metadata value
+   */
+  getMetadata(key: string): string | null {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec(
+      `SELECT value FROM metadata WHERE key = ?`,
+      [key]
+    );
+    return result.length > 0 && result[0].values.length > 0
+      ? String(result[0].values[0][0])
+      : null;
   }
 
   /**
    * Save indexer progress
    */
-  saveProgress(database: DatabaseType, page: number, totalPages: number | null, documentsIndexed: number, status: string, error?: string): void {
+  saveProgress(
+    database: DatabaseType,
+    currentPage: number,
+    totalPages: number | null,
+    documentsIndexed: number,
+    status: string,
+    error?: string
+  ): void {
     if (!this.db) throw new Error('Database not initialized');
 
-    this.db.prepare(`
+    this.db.run(`
       INSERT OR REPLACE INTO indexer_progress
       (database, current_page, total_pages, documents_indexed, status, error, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(database, page, totalPages, documentsIndexed, status, error || null);
+    `, [database, currentPage, totalPages, documentsIndexed, status, error || null]);
+    this.save();
   }
 
   /**
@@ -513,118 +612,70 @@ export class DecisionDatabase {
   getProgress(database: DatabaseType): { currentPage: number; totalPages: number | null; documentsIndexed: number; status: string } | null {
     if (!this.db) throw new Error('Database not initialized');
 
-    const row = this.db.prepare(
-      'SELECT current_page, total_pages, documents_indexed, status FROM indexer_progress WHERE database = ?'
-    ).get(database) as { current_page: number; total_pages: number | null; documents_indexed: number; status: string } | undefined;
+    const result = this.db.exec(
+      `SELECT current_page, total_pages, documents_indexed, status FROM indexer_progress WHERE database = ?`,
+      [database]
+    );
 
-    if (!row) {
+    if (result.length === 0 || result[0].values.length === 0) {
       return null;
     }
 
+    const row = result[0].values[0];
     return {
-      currentPage: row.current_page,
-      totalPages: row.total_pages,
-      documentsIndexed: row.documents_indexed,
-      status: row.status
+      currentPage: Number(row[0]),
+      totalPages: row[1] !== null ? Number(row[1]) : null,
+      documentsIndexed: Number(row[2]),
+      status: String(row[3])
     };
   }
 
   /**
-   * Update metadata
+   * Update PDF text for a decision
    */
-  setMetadata(key: string, value: string): void {
+  updatePdfText(id: string, pdfText: string): boolean {
     if (!this.db) throw new Error('Database not initialized');
 
-    this.db.prepare(`
-      INSERT OR REPLACE INTO metadata (key, value, updated_at)
-      VALUES (?, ?, datetime('now'))
-    `).run(key, value);
+    try {
+      this.db.run(
+        `UPDATE decisions SET pdf_text = ? WHERE id = ?`,
+        [pdfText, id]
+      );
+      this.save();
+      return true;
+    } catch (error) {
+      console.error('Error updating PDF text:', error);
+      return false;
+    }
   }
 
   /**
-   * Get metadata
-   */
-  getMetadata(key: string): string | null {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const row = this.db.prepare('SELECT value FROM metadata WHERE key = ?').get(key) as { value: string } | undefined;
-
-    return row?.value || null;
-  }
-
-  /**
-   * Get cached PDF text for a decision
-   * Returns null if not cached
-   */
-  getCachedPdfText(decisionId: string): string | null {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const row = this.db.prepare(
-      `SELECT pdf_text FROM decisions WHERE id = ?`
-    ).get(decisionId) as { pdf_text: string | null } | undefined;
-
-    return row?.pdf_text || null;
-  }
-
-  /**
-   * Save extracted PDF text to database cache
-   */
-  savePdfText(decisionId: string, pdfText: string): boolean {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const result = this.db.prepare(
-      `UPDATE decisions SET pdf_text = ? WHERE id = ?`
-    ).run(pdfText, decisionId);
-
-    return result.changes > 0;
-  }
-
-  /**
-   * Check if PDF text is cached for a decision
-   */
-  hasCachedPdfText(decisionId: string): boolean {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const row = this.db.prepare(
-      `SELECT 1 FROM decisions WHERE id = ? AND pdf_text IS NOT NULL`
-    ).get(decisionId);
-
-    return !!row;
-  }
-
-  /**
-   * Close the database connection
+   * Close database connection
    */
   close(): void {
     if (this.db) {
+      this.save();
       this.db.close();
       this.db = null;
       this.initialized = false;
     }
   }
-
-  /**
-   * Get database path
-   */
-  getDbPath(): string {
-    return this.dbPath;
-  }
 }
 
 // Singleton instance
-let instance: DecisionDatabase | null = null;
+let dbInstance: DecisionDatabase | null = null;
 
 export async function getDatabase(dbPath?: string): Promise<DecisionDatabase> {
-  if (!instance) {
-    instance = new DecisionDatabase(dbPath);
-    await instance.initialize();
+  if (!dbInstance) {
+    dbInstance = new DecisionDatabase(dbPath);
+    await dbInstance.initialize();
   }
-  return instance;
+  return dbInstance;
 }
 
 export function closeDatabase(): void {
-  if (instance) {
-    instance.close();
-    instance = null;
+  if (dbInstance) {
+    dbInstance.close();
+    dbInstance = null;
   }
 }
