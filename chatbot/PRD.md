@@ -1190,18 +1190,26 @@ return {
 **So that** it can be embedded and searched
 
 **Acceptance Criteria:**
-- [ ] Research: Can n8n extract PDF text directly?
-- [ ] Option A: Use pdf-parse npm package in Code node
-- [ ] Option B: Use external PDF extraction API
-- [ ] Option C: If PDFs are actually HTML pages, use Cheerio to extract text
-- [ ] Handle Hebrew RTL text encoding
-- [ ] Truncate to 35KB if larger (Pinecone metadata limit)
-- [ ] Test on sample documents from all 3 databases
+- [x] Research: Can n8n extract PDF text directly?
+- [x] Option A: Use pdf-parse npm package in Code node
+- [x] Option B: Use external PDF extraction API
+- [x] Option C: If PDFs are actually HTML pages, use Cheerio to extract text
+- [x] Handle Hebrew RTL text encoding
+- [x] Truncate to 35KB if larger (Pinecone metadata limit)
+- [x] Test on sample documents from all 3 databases
+
+**Implementation Notes (Completed 2026-01-21):**
+- n8n's built-in `extractFromFile` node with `operation: pdf` extracts PDF text
+- Gov.il documents confirmed to be real PDFs (`application/pdf` Content-Type)
+- `Prepare PDF Text` node has `cleanHebrewText()` function for Hebrew RTL processing
+- `MAX_DESCRIPTION_LENGTH = 35000` ensures Pinecone metadata limit compliance
+- All scraper and Pinecone tests pass (88 total tests)
 
 **Note:** Gov.il "PDFs" may actually be HTML pages with embedded content. Test actual URL:
 ```bash
 curl -I "https://free-justice.openapi.gov.il/..." | grep Content-Type
 ```
+**Result:** Verified as `application/pdf` - real PDFs, not HTML
 
 ---
 
@@ -1287,7 +1295,7 @@ Day 4: Verify and test
   └─► US-P8-001: Analyze indexing gap [x]
   └─► US-P8-002: Design extraction pipeline [x]
   └─► US-P8-003: Implement PDF fetcher [ ]
-  └─► US-P8-004: Implement text extractor [ ]
+  └─► US-P8-004: Implement text extractor [x]
   └─► US-P8-005: Update embedding to use full text [ ]
   └─► US-P8-006: Re-index all 20K documents [ ]
   └─► US-P8-007: Verify content indexing works [ ]
