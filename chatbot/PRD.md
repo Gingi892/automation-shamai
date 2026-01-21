@@ -336,13 +336,13 @@ interface DecisionMetadata {
 **So that** I can understand data at a glance
 
 **Acceptance Criteria:**
-- [ ] When response contains statistics, show chart
-- [ ] Chart types:
+- [x] When response contains statistics, show chart
+- [x] Chart types:
   - Bar chart for counts by category
   - Line chart for trends over time
   - Pie chart for distribution
-- [ ] Charts are interactive (hover for values)
-- [ ] Export chart as PNG option
+- [x] Charts are interactive (hover for values)
+- [x] Export chart as PNG option
 
 ---
 

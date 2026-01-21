@@ -1813,3 +1813,108 @@ Ungrounded Claim Row
 - Orange color (#ff9800, #fff3e0) provides good visual distinction for "needs attention" state
 
 ---
+
+## Iteration 23 — US-P4-004 Analytics Dashboard Implementation
+- **Date**: 2026-01-21
+- **Task**: US-P4-004 - Analytics Dashboard
+
+### What Was Done
+
+Implemented the Analytics Dashboard feature in `workflows/chatbot-frontend.html` to display visual charts when API responses contain statistics data.
+
+### Implementation Details
+
+1. **Chart.js Integration**
+   - Added Chart.js 4.4.1 CDN script in `<head>` section
+   - Library loaded from: `https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js`
+
+2. **CSS Styles Added** (lines 722-853)
+   - `.chart-container` - Main container with white background, rounded corners, shadow
+   - `.chart-header` - Flex header with title and action buttons
+   - `.chart-title` - Styled chart title with icon
+   - `.chart-actions` - Container for chart type toggle and export button
+   - `.chart-type-toggle` / `.chart-type-btn` - Toggle buttons for bar/pie/line
+   - `.chart-export-btn` - PNG export button styled with blue theme
+   - `.chart-wrapper` - Canvas wrapper with `direction: ltr` for proper chart rendering
+   - `.trend-chart-container` - Secondary chart section for trend data
+   - Mobile responsive styles for smaller screens
+
+3. **JavaScript Functions Added** (lines 1585-1801)
+   - `chartInstances` - Object to store Chart.js instances for cleanup
+   - `chartColors` - Tableau 10 color palette for consistent chart colors
+   - `renderChart(messageId, chartData, chartType)` - Main chart rendering with:
+     - Support for bar, pie, and line chart types
+     - Custom tooltip callbacks showing values and percentages
+     - RTL-aware legend positioning
+     - Automatic dataset color assignment
+   - `renderTrendChart(messageId, trendData)` - Line chart for time series trends
+   - `switchChartType(messageId, newType)` - Chart type toggle handler
+   - `exportChart(messageId)` - PNG export using canvas.toDataURL()
+
+4. **addMessage() Updates**
+   - Added `chartData` and `trendChartData` parameters
+   - Renders chart container HTML when chartData is present
+   - Includes type toggle buttons for datasets ≤10 items
+   - Calls renderChart() after DOM insertion with setTimeout
+   - Stores chart data in window for type switching
+
+5. **sendMessage() Updates**
+   - Passes `data.chartData` and `data.trendChartData` to addMessage()
+
+### API Response Schema Expected
+
+```javascript
+{
+  success: true,
+  response: "Hebrew text...",
+  sources: [...],
+  chartData: {
+    type: 'bar' | 'pie' | 'line',
+    title: 'Hebrew chart title',
+    labels: ['label1', 'label2', ...],
+    datasets: [{
+      label: 'מספר החלטות',
+      data: [10, 20, ...],
+      backgroundColor: [...] // Optional
+    }],
+    options: { indexAxis: 'y', ... } // Optional
+  },
+  trendChartData: { ... } // Optional secondary line chart
+}
+```
+
+### Features Implemented
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Show chart when stats present | ✅ | Checks `data.chartData` in response |
+| Bar chart for counts | ✅ | Default type, horizontal option |
+| Line chart for trends | ✅ | Used for time series, trend data |
+| Pie chart for distribution | ✅ | Legend at bottom, percentage tooltip |
+| Interactive hover | ✅ | Chart.js tooltip with values/percentages |
+| Export as PNG | ✅ | Uses canvas.toDataURL() |
+| Chart type switching | ✅ | Toggle buttons for ≤10 items |
+
+### Files Modified
+
+1. **workflows/chatbot-frontend.html**
+   - Added Chart.js CDN (line 8)
+   - Added CSS styles (lines 722-853)
+   - Added JavaScript chart functions (lines 1585-1801)
+   - Updated addMessage() function signature and body
+   - Updated sendMessage() to pass chart data
+
+2. **chatbot/PRD.md** - Marked all US-P4-004 items as complete
+
+### Learnings for Next Cycles
+
+- Chart.js requires `direction: ltr` on canvas even in RTL pages for proper rendering
+- Use `maintainAspectRatio: true` for consistent chart sizing
+- Chart instance must be destroyed before re-rendering (switchChartType)
+- Store chart data in window object for access after DOM manipulation
+- setTimeout(50) needed after DOM insertion before Chart.js init
+- Tableau 10 colors provide good accessibility and visual clarity
+- Export PNG via canvas.toDataURL('image/png', 1.0) is straightforward
+- Mobile responsive: reduce max-height, stack header elements
+
+---

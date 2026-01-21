@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>צ'אטבוט שמאות מכריעה</title>
+    <!-- Chart.js for Analytics Dashboard -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -717,6 +719,139 @@
             background: #ffe0b2;
         }
 
+        /* Analytics Dashboard / Chart Styles */
+        .chart-container {
+            margin-top: 15px;
+            max-width: 80%;
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .chart-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-title-icon {
+            font-size: 1.1rem;
+        }
+
+        .chart-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-export-btn {
+            padding: 5px 12px;
+            border: 1px solid #2196F3;
+            border-radius: 6px;
+            background: #fff;
+            color: #1565C0;
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .chart-export-btn:hover {
+            background: #e3f2fd;
+            border-color: #1976D2;
+        }
+
+        .chart-type-toggle {
+            display: flex;
+            gap: 4px;
+        }
+
+        .chart-type-btn {
+            padding: 4px 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background: #fff;
+            color: #666;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .chart-type-btn:hover {
+            background: #f5f5f5;
+            border-color: #bdbdbd;
+        }
+
+        .chart-type-btn.active {
+            background: #e3f2fd;
+            border-color: #2196F3;
+            color: #1565C0;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            width: 100%;
+            max-height: 350px;
+            margin: 10px 0;
+        }
+
+        .chart-wrapper canvas {
+            direction: ltr; /* Charts render LTR even in RTL pages */
+        }
+
+        .trend-chart-container {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .trend-chart-title {
+            font-size: 0.85rem;
+            color: #555;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        /* Responsive chart styles */
+        @media (max-width: 600px) {
+            .chart-container {
+                max-width: 95%;
+                padding: 10px;
+            }
+
+            .chart-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .chart-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .chart-wrapper {
+                max-height: 250px;
+            }
+        }
+
         .warning-banner {
             background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
             color: #e65100;
@@ -1068,7 +1203,7 @@
             window['sortOrder_' + messageId] = sortBy;
         }
 
-        function addMessage(content, role, sources = [], hallucinationCheck = null, warning = null) {
+        function addMessage(content, role, sources = [], hallucinationCheck = null, warning = null, chartData = null, trendChartData = null) {
             const messagesContainer = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
@@ -1202,9 +1337,73 @@
                 `;
             }
 
+            // Add chart container if statistics/chart data is present
+            if (chartData && role === 'assistant') {
+                const chartTitle = chartData.title || 'נתונים סטטיסטיים';
+                const chartType = chartData.type || 'bar';
+                const canSwitchTypes = chartData.labels && chartData.labels.length <= 10;
+
+                messageHTML += `
+                    <div class="chart-container" id="chart-container-${messageId}">
+                        <div class="chart-header">
+                            <div class="chart-title">
+                                <span class="chart-title-icon">📊</span>
+                                <span>${escapeHtml(chartTitle)}</span>
+                            </div>
+                            <div class="chart-actions">
+                                ${canSwitchTypes ? `
+                                    <div class="chart-type-toggle">
+                                        <button class="chart-type-btn ${chartType === 'bar' ? 'active' : ''}"
+                                                onclick="switchChartType('${messageId}', 'bar')" title="עמודות">📊</button>
+                                        <button class="chart-type-btn ${chartType === 'pie' ? 'active' : ''}"
+                                                onclick="switchChartType('${messageId}', 'pie')" title="עוגה">🥧</button>
+                                        <button class="chart-type-btn ${chartType === 'line' ? 'active' : ''}"
+                                                onclick="switchChartType('${messageId}', 'line')" title="קו">📈</button>
+                                    </div>
+                                ` : ''}
+                                <button class="chart-export-btn" onclick="exportChart('${messageId}')" title="שמור כתמונה">
+                                    <span>📥</span>
+                                    <span>PNG</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="chart-${messageId}"></canvas>
+                        </div>
+                `;
+
+                // Add trend chart section if available
+                if (trendChartData) {
+                    messageHTML += `
+                        <div class="trend-chart-container">
+                            <div class="trend-chart-title">📈 מגמה לאורך זמן</div>
+                            <div class="chart-wrapper">
+                                <canvas id="trend-chart-${messageId}"></canvas>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                messageHTML += `</div>`;
+
+                // Store chart data for later rendering and type switching
+                window['chartData_' + messageId] = chartData;
+                window['trendChartData_' + messageId] = trendChartData;
+            }
+
             messageDiv.innerHTML = messageHTML;
             messagesContainer.appendChild(messageDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            // Render charts after DOM insertion
+            if (chartData && role === 'assistant') {
+                setTimeout(() => {
+                    renderChart(messageId, chartData);
+                    if (trendChartData) {
+                        renderTrendChart(messageId, trendChartData);
+                    }
+                }, 50);
+            }
         }
 
         // Show tooltip for a citation
@@ -1383,6 +1582,224 @@
             }
         }
 
+        // ===== Analytics Dashboard - Chart Functions =====
+
+        // Store active chart instances for cleanup
+        const chartInstances = {};
+
+        // Default colors for charts (Tableau 10 palette)
+        const chartColors = [
+            '#4e79a7', '#f28e2c', '#e15759', '#76b7b2', '#59a14f',
+            '#edc949', '#af7aa1', '#ff9da7', '#9c755f', '#bab0ab'
+        ];
+
+        // Render main chart
+        function renderChart(messageId, chartData, chartType = null) {
+            const canvas = document.getElementById('chart-' + messageId);
+            if (!canvas || !chartData) return;
+
+            const ctx = canvas.getContext('2d');
+            const type = chartType || chartData.type || 'bar';
+
+            // Destroy existing chart if any
+            if (chartInstances[messageId]) {
+                chartInstances[messageId].destroy();
+            }
+
+            // Prepare chart configuration
+            const config = {
+                type: type,
+                data: {
+                    labels: chartData.labels || [],
+                    datasets: chartData.datasets || [{
+                        label: 'מספר החלטות',
+                        data: chartData.data || [],
+                        backgroundColor: chartColors.slice(0, (chartData.labels || []).length),
+                        borderColor: chartColors.slice(0, (chartData.labels || []).length).map(c => c),
+                        borderWidth: type === 'line' ? 2 : 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: type === 'pie',
+                            position: 'bottom',
+                            rtl: true,
+                            labels: {
+                                font: { family: "'Segoe UI', Tahoma, sans-serif" }
+                            }
+                        },
+                        title: {
+                            display: false
+                        },
+                        tooltip: {
+                            rtl: true,
+                            titleFont: { family: "'Segoe UI', Tahoma, sans-serif" },
+                            bodyFont: { family: "'Segoe UI', Tahoma, sans-serif" },
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || context.formattedValue;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                                    if (type === 'pie') {
+                                        return `${label}: ${value} (${percentage}%)`;
+                                    }
+                                    return `${label}: ${value}`;
+                                }
+                            }
+                        }
+                    },
+                    ...(type === 'bar' ? {
+                        indexAxis: chartData.options?.indexAxis || 'x',
+                        scales: {
+                            x: {
+                                ticks: {
+                                    font: { family: "'Segoe UI', Tahoma, sans-serif" }
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    font: { family: "'Segoe UI', Tahoma, sans-serif" }
+                                }
+                            }
+                        }
+                    } : {}),
+                    ...(type === 'line' ? {
+                        scales: {
+                            x: {
+                                ticks: {
+                                    font: { family: "'Segoe UI', Tahoma, sans-serif" }
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    font: { family: "'Segoe UI', Tahoma, sans-serif" }
+                                }
+                            }
+                        },
+                        elements: {
+                            line: {
+                                tension: 0.3
+                            },
+                            point: {
+                                radius: 5,
+                                hoverRadius: 7
+                            }
+                        }
+                    } : {})
+                }
+            };
+
+            // Apply custom options if provided
+            if (chartData.options) {
+                Object.assign(config.options, chartData.options);
+            }
+
+            chartInstances[messageId] = new Chart(ctx, config);
+        }
+
+        // Render trend chart (line chart for time series)
+        function renderTrendChart(messageId, trendData) {
+            const canvas = document.getElementById('trend-chart-' + messageId);
+            if (!canvas || !trendData) return;
+
+            const ctx = canvas.getContext('2d');
+            const trendId = 'trend-' + messageId;
+
+            // Destroy existing chart if any
+            if (chartInstances[trendId]) {
+                chartInstances[trendId].destroy();
+            }
+
+            const config = {
+                type: 'line',
+                data: {
+                    labels: trendData.labels || [],
+                    datasets: trendData.datasets || [{
+                        label: 'מגמה',
+                        data: trendData.data || [],
+                        borderColor: '#4e79a7',
+                        backgroundColor: 'rgba(78, 121, 167, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            rtl: true,
+                            titleFont: { family: "'Segoe UI', Tahoma, sans-serif" },
+                            bodyFont: { family: "'Segoe UI', Tahoma, sans-serif" }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                font: { family: "'Segoe UI', Tahoma, sans-serif" }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                font: { family: "'Segoe UI', Tahoma, sans-serif" }
+                            }
+                        }
+                    },
+                    elements: {
+                        point: {
+                            radius: 4,
+                            hoverRadius: 6
+                        }
+                    }
+                }
+            };
+
+            chartInstances[trendId] = new Chart(ctx, config);
+        }
+
+        // Switch chart type (bar/pie/line)
+        function switchChartType(messageId, newType) {
+            const chartData = window['chartData_' + messageId];
+            if (!chartData) return;
+
+            // Update toggle button states
+            const container = document.getElementById('chart-container-' + messageId);
+            if (container) {
+                container.querySelectorAll('.chart-type-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                const activeBtn = container.querySelector(`.chart-type-btn[onclick*="'${newType}'"]`);
+                if (activeBtn) {
+                    activeBtn.classList.add('active');
+                }
+            }
+
+            // Re-render chart with new type
+            renderChart(messageId, chartData, newType);
+        }
+
+        // Export chart as PNG
+        function exportChart(messageId) {
+            const canvas = document.getElementById('chart-' + messageId);
+            if (!canvas) return;
+
+            // Create a temporary link element
+            const link = document.createElement('a');
+            link.download = `chart-${messageId}.png`;
+            link.href = canvas.toDataURL('image/png', 1.0);
+            link.click();
+        }
+
         function showTyping() {
             const messagesContainer = document.getElementById('chatMessages');
             const typingDiv = document.createElement('div');
@@ -1457,9 +1874,11 @@
                     addMessage(
                         data.response,
                         'assistant',
-                        data.sources,
+                        data.sources || [],
                         data.hallucination_check || null,
-                        data.warning || null
+                        data.warning || null,
+                        data.chartData || null,
+                        data.trendChartData || null
                     );
                     conversationHistory.push({ role: 'assistant', content: data.response });
                 } else {
