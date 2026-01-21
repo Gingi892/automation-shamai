@@ -319,14 +319,14 @@ interface DecisionMetadata {
 **So that** I can quickly understand where information comes from
 
 **Acceptance Criteria:**
-- [ ] [S#] tags are styled blue badges
-- [ ] Hover shows tooltip with:
+- [x] [S#] tags are styled blue badges
+- [x] Hover shows tooltip with:
   - Source title
   - Relevance score
   - "Click to expand" hint
-- [ ] Click highlights the source in the sources list
-- [ ] Multiple citations [S0][S1] group together
-- [ ] Animation: subtle highlight when hovering
+- [x] Click highlights the source in the sources list
+- [x] Multiple citations [S0][S1] group together
+- [x] Animation: subtle highlight when hovering
 
 ---
 

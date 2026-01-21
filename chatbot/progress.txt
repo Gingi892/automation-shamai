@@ -1676,6 +1676,71 @@ Verified that all US-P4-001 acceptance criteria were already implemented in `wor
 
 ---
 
+## Iteration 22 — US-P4-003 Interactive Citations Complete
+- **Date**: 2026-01-21
+- **Task**: US-P4-003 - Interactive Citations
+
+### What Was Done
+
+Verified and completed all US-P4-003 acceptance criteria for interactive citations in `workflows/chatbot-frontend.html`.
+
+### Already Implemented (Verified)
+
+1. **[S#] tags styled as blue badges** — Already implemented (lines 96-141)
+   - `.citation-tag` class with blue styling (#e3f2fd background, #2196F3 border)
+   - `.citation-number` circular badge with blue background
+
+2. **Hover shows tooltip** — Already implemented (showTooltip() function)
+   - Source title displayed in tooltip header
+   - Relevance score with visual progress bar
+   - **NEW**: Added "לחץ לצפייה ברשימת המקורות" (Click to view in source list) hint
+
+3. **Click highlights source** — Already implemented (handleCitationClick(), highlightSource())
+   - Yellow glow animation on source item
+   - Smooth scroll to source in list
+   - Highlight removed after 2 seconds
+
+4. **Animation on hover** — Already implemented (lines 114-118)
+   - `transform: translateY(-1px)` on hover
+   - `box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3)` effect
+
+### Newly Implemented
+
+5. **Multiple citations [S0][S1] group together** — NEW implementation
+   - Added `.citation-group` CSS class (lines 143-170)
+   - Grouped citations share borders with rounded ends only on first/last
+   - Updated `parseCitations()` function to detect consecutive citations
+   - Regex pattern `/(\[S\d+\])(\s*\[S\d+\])*/g` matches consecutive citations
+   - Groups wrapped in `<span class="citation-group">` container
+
+### CSS Additions
+
+- `.citation-group` - Container for consecutive citations
+- `.citation-group .citation-tag` - Zero margin, no border-radius
+- `.citation-group .citation-tag:first-child` - Left rounded, left border
+- `.citation-group .citation-tag:last-child` - Right rounded
+- `.tooltip-hint` - Italic gray hint text in tooltip
+
+### Files Modified
+
+1. **workflows/chatbot-frontend.html**
+   - Lines 143-170: Added `.citation-group` CSS styles
+   - Lines 487-493: Added `.tooltip-hint` CSS styles
+   - Lines 920-962: Updated `parseCitations()` function for grouping
+   - Lines 1213-1234: Added tooltip hint text
+
+2. **chatbot/PRD.md** - Marked all US-P4-003 items as complete
+
+### Learnings for Next Cycles
+
+- Consecutive citation detection uses greedy regex with lookahead for whitespace
+- Citation grouping requires careful CSS for border-radius and margin handling
+- The `:first-child`, `:last-child`, and `:only-child` selectors handle all edge cases
+- Hebrew RTL text "לחץ לצפייה ברשימת המקורות" provides clear click hint
+- parseCitations() now handles both single and grouped citations in one pass
+
+---
+
 ## Iteration 19 — US-P3-004 Link Ungrounded Claims to Need Verification State
 - **Date**: 2026-01-21
 - **Task**: US-P3-004 - Link ungrounded claims to "need verification" state

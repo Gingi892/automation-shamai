@@ -140,6 +140,35 @@
             color: #2196F3;
         }
 
+        /* Grouped Citation Container - for consecutive [S0][S1] citations */
+        .citation-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 0;
+            margin: 0 2px;
+            vertical-align: middle;
+        }
+
+        .citation-group .citation-tag {
+            margin: 0;
+            border-radius: 0;
+            border-left-width: 0;
+        }
+
+        .citation-group .citation-tag:first-child {
+            border-radius: 12px 0 0 12px;
+            border-left-width: 1px;
+        }
+
+        .citation-group .citation-tag:last-child {
+            border-radius: 0 12px 12px 0;
+        }
+
+        .citation-group .citation-tag:only-child {
+            border-radius: 12px;
+            border-left-width: 1px;
+        }
+
         /* Sources Section */
         .sources {
             margin-top: 12px;
@@ -453,6 +482,14 @@
             font-size: 12px;
             font-weight: 600;
             min-width: 32px;
+        }
+
+        .tooltip-hint {
+            font-size: 11px;
+            color: #888;
+            text-align: center;
+            margin: 8px 0;
+            font-style: italic;
         }
 
         .tooltip-actions {
@@ -889,24 +926,44 @@
         }
 
         // Parse response text and convert [S0], [S1] etc. to clickable citation tags
+        // Groups consecutive citations like [S0][S1] into a single container
         function parseCitations(text, sources) {
             if (!sources || sources.length === 0) return escapeHtml(text);
 
-            // Pattern matches [S0], [S1], etc.
-            const citationPattern = /\[S(\d+)\]/g;
-
             let result = escapeHtml(text);
 
-            // Replace citations with interactive tags
-            result = result.replace(/\[S(\d+)\]/g, (match, index) => {
-                const idx = parseInt(index);
-                if (idx < sources.length) {
-                    const source = sources[idx];
+            // First, find and mark consecutive citation groups
+            // Pattern matches one or more consecutive [S#] tags (with optional whitespace between)
+            const consecutivePattern = /(\[S\d+\])(\s*\[S\d+\])*/g;
+
+            result = result.replace(consecutivePattern, (match) => {
+                // Extract all citation indices from this group
+                const citations = [];
+                const singlePattern = /\[S(\d+)\]/g;
+                let singleMatch;
+
+                while ((singleMatch = singlePattern.exec(match)) !== null) {
+                    const idx = parseInt(singleMatch[1]);
+                    if (idx < sources.length) {
+                        citations.push(idx);
+                    }
+                }
+
+                if (citations.length === 0) return match;
+
+                // Generate citation tags
+                const citationTags = citations.map(idx => {
                     return `<span class="citation-tag" data-source-index="${idx}" onclick="handleCitationClick(event, ${idx})" onmouseenter="showTooltip(event, ${idx})" onmouseleave="scheduleHideTooltip()">` +
                            `<span class="citation-number">${idx + 1}</span>` +
                            `</span>`;
+                }).join('');
+
+                // Wrap in group container if multiple citations
+                if (citations.length > 1) {
+                    return `<span class="citation-group">${citationTags}</span>`;
                 }
-                return match;
+
+                return citationTags;
             });
 
             return result;
@@ -1173,6 +1230,7 @@
                     </div>
                     <span class="tooltip-relevance-percent">${scorePercent}%</span>
                 </div>
+                <div class="tooltip-hint">לחץ לצפייה ברשימת המקורות</div>
                 <div class="tooltip-actions">
                     <a href="${source.url || '#'}" target="_blank" class="tooltip-btn primary">
                         פתח מסמך ↗
