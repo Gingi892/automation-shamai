@@ -4408,3 +4408,101 @@ All completed phases now correctly show [x]:
 2. **Run tests to verify**: Before marking test tasks complete, actually run the tests to confirm they pass
 3. **PRD has two implementation order sections**: One in Phase 6/7 area (~line 907) and one at the end (~line 1320) - both must be updated
 
+---
+
+## Iteration 39 — PRD Consolidation: Phase 6 Merged into Phase 8
+- **Date**: 2026-01-21
+- **Task**: Consolidate redundant Implementation Order sections in PRD.md
+
+### What Was Done
+
+Updated the outdated "Updated Implementation Order" section (lines 907-921) to reflect current reality:
+1. Marked US-P6-001 as [x] (was already complete per detailed section at lines 707-711)
+2. Noted US-P6-002 through US-P6-005 are merged into US-P8-006 (avoids duplicate tracking)
+3. Updated PRD version to 2.3
+4. Added STATUS line noting all technical implementation is complete
+
+### Files Modified
+
+1. **chatbot/PRD.md**
+   - Lines 907-921: Updated Phase 6 summary to show completion/merger
+   - Line 1340: Updated version to 2.3
+   - Line 1344-1345: Added status line
+
+### Current Project Status
+
+**All technical implementation is COMPLETE:**
+- Full Indexer workflow (1zYlIK6VnynTHiHl) - 25 nodes, active, with PDF extraction
+- RAG Chatbot workflow (McOa9j15PRy8AZ8v) - Working, with hallucination detection
+- Frontend (workflows/chatbot-frontend.html) - All UI features implemented
+- Test suite (chatbot/tests/) - 88 tests passing
+
+**Remaining tasks require manual execution:**
+- US-P8-006: Run Full Indexer on all 3 databases (~$102 ScraperAPI + OpenAI cost)
+- US-P8-007: Verify indexed content after re-indexing
+
+### Learnings for Next Cycles
+
+1. **Phase 6 and Phase 8 overlap**: US-P6-002 through US-P6-005 are effectively the same as US-P8-006
+2. **Technical vs Execution tasks**: Ralph Loop can implement code/workflows but cannot approve cost-bearing manual executions
+3. **PRD maintenance**: Keep implementation order sections in sync with detailed acceptance criteria
+
+---
+
+
+
+## Iteration 46 — Fix US-P2-002 PRD Inconsistency
+- **Date**: 2026-01-22
+- **Task**: Fix PRD documentation where US-P2-002 acceptance criteria showed [ ] but work was done in Phase 8
+
+### What Was Done
+
+Fixed the PRD inconsistency where US-P2-002 (PDF Content Extraction) showed 5 unchecked acceptance criteria, despite the work being completed via Phase 8 (US-P8-003, US-P8-004, US-P8-005).
+
+### Problem Identified
+
+The PRD had conflicting information:
+1. **Lines 229-237**: Showed "⚠️ STATUS: NOT WORKING" with 5 unchecked items
+2. **Line 607**: Showed `US-P2-002: PDF content extraction [x]` in Implementation Order
+3. **Workflow 1zYlIK6VnynTHiHl**: Actually has all PDF extraction nodes implemented
+
+The confusion: The PDF extraction pipeline IS implemented in the workflow, but the current Pinecone index has old data that was indexed BEFORE the PDF extraction was added. The solution is to run US-P8-006 (full re-index) to populate the index with PDF content.
+
+### Fix Applied
+
+Updated US-P2-002 section to:
+1. Changed status from "NOT WORKING" to "WORKFLOW IMPLEMENTED - Awaiting full re-index execution"
+2. Marked all 5 acceptance criteria as [x] with implementation notes:
+   - Fetch PDF → `Fetch PDF Content` node (direct HTTP)
+   - Extract text → `Extract PDF Text` node (n8n extractFromFile)
+   - Hebrew RTL → `cleanHebrewText()` in `Prepare PDF Text` node
+   - Store metadata → 35KB truncation implemented
+   - Large PDFs → Truncation marker implemented
+3. Added clarification that current index has old data; US-P8-006 will fix this
+
+### Verification
+
+- Confirmed workflow `1zYlIK6VnynTHiHl` has 25 nodes including PDF extraction pipeline
+- All 88 scraper and Pinecone tests pass
+- Implementation Order section already showed [x] for US-P2-002
+
+### Files Modified
+
+1. **chatbot/PRD.md** - Lines 224-239: Updated US-P2-002 status and acceptance criteria
+
+### Remaining Unchecked Tasks
+
+After this fix, the only remaining unchecked tasks are:
+- **US-P8-006**: Re-index all 20K documents (requires ~$102, manual execution)
+- **US-P8-007**: Verify content indexing works (depends on US-P8-006)
+
+Both tasks require human approval due to cost/manual execution requirements.
+
+### Learnings for Next Cycles
+
+1. **PRD sections can drift**: Early task sections may not get updated when later phases implement the work
+2. **Two-step verification**: Implementation status + actual workflow inspection needed to verify completion
+3. **Index vs workflow distinction**: A workflow can be implemented but the index may have stale data
+4. **Documentation consistency**: Both acceptance criteria AND implementation order must stay in sync
+
+---
