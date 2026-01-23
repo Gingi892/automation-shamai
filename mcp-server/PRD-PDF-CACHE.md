@@ -20,7 +20,7 @@ The current MCP server has critical issues:
 |-------|--------|-------------|
 | US-PDF-010 | [x] | Add Pinecone client |
 | US-PDF-011 | [x] | Generate embeddings for queries |
-| US-PDF-012 | [ ] | Update semantic_search to use Pinecone |
+| US-PDF-012 | [x] | Update semantic_search to use Pinecone |
 | US-PDF-013 | [ ] | Update read_pdf for Pinecone results |
 | US-PDF-001 | [x] | Implement getCachedPdfText |
 | US-PDF-002 | [x] | Implement savePdfText |
@@ -139,13 +139,14 @@ export async function generateQueryEmbedding(text: string): Promise<number[]> {
 
 ### US-PDF-012: Update semantic_search to use Pinecone
 **Priority**: P0
+**Status**: ✅ COMPLETED
 
 **Acceptance Criteria:**
-- [ ] Modify `handleSemanticSearch()` in `index.ts`
-- [ ] Generate embedding for query text
-- [ ] Query Pinecone instead of SQLite embeddings
-- [ ] Map Pinecone results to Decision format
-- [ ] Return results with relevance scores
+- [x] Modify `handleSemanticSearch()` in `index.ts`
+- [x] Generate embedding for query text
+- [x] Query Pinecone instead of SQLite embeddings
+- [x] Map Pinecone results to Decision format
+- [x] Return results with relevance scores
 
 **Updated flow:**
 ```

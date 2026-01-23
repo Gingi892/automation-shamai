@@ -184,3 +184,26 @@
   - The function name is `generateQueryEmbedding` (not `generateEmbedding` as in PRD)
   - This function will be used in US-PDF-012 to update handleSemanticSearch
 ---
+
+## Iteration 10 — US-PDF-012: Update semantic_search to use Pinecone (IMPLEMENTED)
+- **What was done:** Modified `handleSemanticSearch()` to use Pinecone for semantic search
+- **Files modified:**
+  - `src/index.ts` - Complete rewrite of `handleSemanticSearch()`:
+    - Added imports for `generateQueryEmbedding` and `getPineconeClient`
+    - Uses `getPineconeClient()` to get Pinecone singleton
+    - Generates query embedding using `generateQueryEmbedding()` (OpenAI text-embedding-3-small)
+    - Queries Pinecone with `pinecone.query(embedding, topK)`
+    - Filters results by database if specified
+    - Maps PineconeQueryResult to Decision format with all fields
+    - Returns `source: 'pinecone'` in response to indicate search backend
+    - Graceful fallback to keyword search if Pinecone fails or is unavailable
+- **Technical notes:**
+  - Uses Pinecone metadata fields: title, url, block, plot, committee, appraiser, case_type, decision_date, database
+  - Year extracted from decision_date (format DD-MM-YYYY, substring 6-10)
+  - relevanceScore comes from Pinecone's similarity score
+  - Falls back to EmbeddingsManager.search() if Pinecone unavailable
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - Response now includes `source` field to indicate which backend was used
+  - Next task US-PDF-013 will update read_pdf to work with Pinecone results
+---

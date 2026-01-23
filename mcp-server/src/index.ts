@@ -13,7 +13,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { getDatabase, closeDatabase, DecisionDatabase } from './database.js';
-import { getEmbeddings, EmbeddingsManager } from './embeddings.js';
+import { getEmbeddings, EmbeddingsManager, generateQueryEmbedding } from './embeddings.js';
+import { getPineconeClient, PineconeClient, PineconeQueryResult } from './pinecone-client.js';
 import { createIndexer } from './indexer.js';
 import { createPdfExtractor, PdfExtractor, PdfExtractionResult } from './pdf-extractor.js';
 import {
@@ -97,10 +98,10 @@ const TOOLS: Tool[] = [
 | "החלטות בנתניה" | { committee: "נתניה" } |
 | "גוש 6158 חלקה 25" | { block: "6158", plot: "25" } |
 | "היטל השבחה תל אביב" | { caseType: "היטל השבחה", committee: "תל אביב" } |
-| "ערעורים מ-2024" | { database: "appeals_board", fromDate: "2024-01-01" } |
+| "ערעורים מ-2024" | { database: "appeals_board", year: "2024" } |
 | "שמאי מכריע כהן" | { database: "decisive_appraiser", appraiser: "כהן" } |
 | "פיצויים על הפקעה" | { caseType: "פיצויים" } |
-| "החלטות השגה בירושלים 2023" | { database: "appeals_committee", committee: "ירושלים", fromDate: "2023-01-01", toDate: "2023-12-31" } |
+| "החלטות השגה בירושלים 2023" | { database: "appeals_committee", committee: "ירושלים", year: "2023" } |
 | "ירידת ערך רעננה" | { caseType: "ירידת ערך", committee: "רעננה" } |
 
 ## סוגי תיקים נפוצים / Common Case Types
@@ -162,9 +163,13 @@ Returns results in <100ms from pre-indexed local database.`,
           type: 'string',
           description: 'סינון לפי סוג תיק (לדוגמה: היטל השבחה, פיצויים, ירידת ערך) / Filter by case type'
         },
+        year: {
+          type: 'string',
+          description: 'סינון לפי שנה (מומלץ!) / Filter by year (RECOMMENDED, e.g., "2024"). More reliable than date range.'
+        },
         fromDate: {
           type: 'string',
-          description: 'סינון מתאריך (פורמט: YYYY-MM-DD או DD-MM-YYYY) / Filter decisions from this date'
+          description: 'סינון מתאריך (פורמט: YYYY-MM-DD) / Filter from date. Note: year filter is more reliable.'
         },
         toDate: {
           type: 'string',
@@ -272,7 +277,7 @@ Output: { "id": "...", "title": "...", "pdfUrl": "https://free-justice.openapi.g
   },
   {
     name: 'read_pdf',
-    description: `קריאת תוכן PDF של החלטה / Read and extract text content from a decision's PDF document.
+    description: `קריאת תוכן PDF של החלטה / Read and extract content from a decision's PDF document.
 
 Use this tool when you need to:
 - Get the full text of a specific decision for detailed analysis
@@ -284,17 +289,27 @@ Use this tool when you need to:
 2. Call read_pdf with the decision ID
 3. Optionally limit pages for faster extraction
 
+## Smart Extraction
+This tool uses smart extraction:
+1. **First tries text extraction** - Fast, works for digital PDFs with selectable text
+2. **Scanned document detection** - If no text found, returns PDF URL for manual viewing
+
 ## פלט / Output
-Returns:
+For text extraction (extractionType: "text"):
 - fullText: The complete extracted text (Hebrew with RTL handling)
 - pageCount: Total pages in the PDF
 - extractedPages: Number of pages actually extracted
 - cached: Whether the text was retrieved from cache
 
+For scanned documents (extractionType: "scanned"):
+- pdfUrl: Direct URL to view/download the PDF
+- Note explaining the document is scanned
+- Ask the user to view the PDF and provide relevant quotes
+
 ## Performance Notes
 - First extraction requires download via ScraperAPI (SCRAPER_API_KEY required)
-- Subsequent reads are cached locally (instant)
-- Use maxPages for faster extraction of large documents`,
+- Text extractions are cached locally (instant on subsequent reads)
+- Most gov.il decisions have extractable text`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -851,6 +866,7 @@ async function handleSearchDecisions(params: SearchParams): Promise<MCPToolResul
     caseType: params.caseType,
     fromDate: params.fromDate,
     toDate: params.toDate,
+    year: params.year,
     limit: Math.min(params.limit || 50, 500),
     offset: params.offset || 0,
     semanticSearch: params.semanticSearch
@@ -1037,23 +1053,45 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
       database: db!
     });
 
-    // Extract with caching support
-    const result = await pdfExtractor.extractWithCache(decision.id, decision.url);
+    // Smart extraction: tries text first, indicates if document is scanned
+    const extraction = await pdfExtractor.smartExtract(decision.id, decision.url);
 
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          id: decision.id,
-          title: decision.title,
-          fullText: result.fullText,
-          pageCount: result.pageCount,
-          extractedPages: result.extractedPages,
-          cached: result.cached,
-          textLength: result.fullText.length
-        }, null, 2)
-      }]
-    };
+    if (extraction.type === 'text') {
+      // Text extraction successful - return text content
+      const result = extraction.result;
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            id: decision.id,
+            title: decision.title,
+            extractionType: 'text',
+            fullText: result.fullText,
+            pageCount: result.pageCount,
+            extractedPages: result.extractedPages,
+            cached: result.cached,
+            textLength: result.fullText.length
+          }, null, 2)
+        }]
+      };
+    } else {
+      // Scanned document - return URL for manual viewing
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            id: decision.id,
+            title: decision.title,
+            extractionType: 'scanned',
+            note: 'This PDF is a scanned document with no extractable text.',
+            noteHe: 'המסמך סרוק ואינו מכיל טקסט שניתן לחילוץ.',
+            pdfUrl: extraction.pdfUrl,
+            suggestion: 'You can view the PDF directly using the URL above. Ask the user to describe what they see or provide specific quotes from the document.',
+            suggestionHe: 'ניתן לצפות ב-PDF ישירות בקישור למעלה. בקש מהמשתמש לתאר מה הוא רואה או לספק ציטוטים ספציפיים מהמסמך.'
+          }, null, 2)
+        }]
+      };
+    }
   } catch (error) {
     return {
       content: [{
@@ -1185,13 +1223,71 @@ async function handleCompareDecisions(params: { ids: string[] }): Promise<MCPToo
 }
 
 async function handleSemanticSearch(params: { query: string; limit?: number; database?: DatabaseType }): Promise<MCPToolResult> {
+  // Try Pinecone-based semantic search first
+  const pinecone = getPineconeClient();
+
+  if (pinecone) {
+    try {
+      // Step 1: Generate embedding for query text using OpenAI
+      const queryEmbedding = await generateQueryEmbedding(params.query);
+
+      // Step 2: Query Pinecone with the embedding
+      const topK = params.limit || 20;
+      const pineconeResults = await pinecone.query(queryEmbedding, topK);
+
+      // Step 3: Filter by database if specified
+      let filteredResults = pineconeResults;
+      if (params.database) {
+        filteredResults = pineconeResults.filter(r => r.metadata.database === params.database);
+      }
+
+      // Step 4: Map Pinecone results to Decision format
+      const decisions: (Decision & { relevanceScore: number })[] = filteredResults.map(result => ({
+        id: result.id,
+        database: (result.metadata.database as DatabaseType) || 'decisive_appraiser',
+        title: result.metadata.title || '',
+        url: result.metadata.url || null,
+        block: result.metadata.block || null,
+        plot: result.metadata.plot || null,
+        committee: result.metadata.committee || null,
+        appraiser: result.metadata.appraiser || null,
+        caseType: result.metadata.case_type || null,
+        decisionDate: result.metadata.decision_date || null,
+        year: result.metadata.decision_date ? result.metadata.decision_date.substring(6, 10) : null,
+        publishDate: null,
+        contentHash: '',
+        pdfText: null,
+        indexedAt: '',
+        relevanceScore: result.score
+      }));
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            query: params.query,
+            count: decisions.length,
+            source: 'pinecone',
+            results: decisions
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      // Log error and fall back to keyword search
+      console.error('[SemanticSearch] Pinecone error, falling back to keyword search:', error);
+    }
+  }
+
+  // Fallback to keyword-based search if Pinecone is not available
   if (!embeddings) {
     return {
       content: [{
         type: 'text',
         text: JSON.stringify({
           error: 'Semantic search is not available.',
-          suggestion: 'Use regular search_decisions tool instead'
+          errorHe: 'חיפוש סמנטי אינו זמין.',
+          suggestion: 'Use regular search_decisions tool instead. Pinecone requires PINECONE_API_KEY and PINECONE_INDEX_HOST environment variables.',
+          suggestionHe: 'השתמש בכלי search_decisions במקום. חיפוש סמנטי דורש משתני סביבה PINECONE_API_KEY ו-PINECONE_INDEX_HOST.'
         })
       }],
       isError: true
@@ -1210,6 +1306,7 @@ async function handleSemanticSearch(params: { query: string; limit?: number; dat
       text: JSON.stringify({
         query: params.query,
         count: results.length,
+        source: 'keyword-fallback',
         results: results.map(r => ({
           ...r.decision,
           relevanceScore: r.score
