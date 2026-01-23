@@ -21,6 +21,19 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Extended statistics type for US-004 compliance
+ */
+interface ExtendedStats extends IndexerStats {
+  totalDecisions: number;
+  recentDecisions?: number;
+  oldestDecision?: string | null;
+  newestDecision?: string | null;
+  byCommittee?: Array<{ committee: string; count: number }>;
+  byCaseType?: Array<{ caseType: string; count: number }>;
+  byYear?: Array<{ year: string; count: number }>;
+}
+
 export class DecisionDatabase {
   private db: SqlJsDatabase | null = null;
   private dbPath: string;
@@ -125,6 +138,22 @@ export class DecisionDatabase {
         updated_at TEXT DEFAULT (datetime('now'))
       )
     `);
+
+    // US-PDF-005: PDF cache tracking table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS pdf_cache (
+        decision_id TEXT PRIMARY KEY,
+        file_path TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        file_hash TEXT NOT NULL,
+        cached_at TEXT DEFAULT (datetime('now')),
+        last_accessed TEXT,
+        extraction_status TEXT DEFAULT 'pending'
+      )
+    `);
+
+    // Index on extraction_status for filtering
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_pdf_cache_status ON pdf_cache(extraction_status)`);
 
     this.save();
   }
@@ -372,14 +401,25 @@ export class DecisionDatabase {
       values.push(`%${params.caseType}%`);
     }
 
+    // Year filter (more reliable than date range due to inconsistent date formats in source data)
+    if (params.year) {
+      conditions.push('year = ?');
+      values.push(params.year);
+    }
+
+    // Date range filters - NOTE: May not work correctly due to DD-MM-YYYY format in database
+    // Prefer using year filter for reliable results
     if (params.fromDate) {
-      conditions.push('decision_date >= ?');
-      values.push(params.fromDate);
+      // Extract year from ISO date and use year comparison as fallback
+      const fromYear = params.fromDate.substring(0, 4);
+      conditions.push('(year >= ? OR decision_date >= ?)');
+      values.push(fromYear, params.fromDate);
     }
 
     if (params.toDate) {
-      conditions.push('decision_date <= ?');
-      values.push(params.toDate);
+      const toYear = params.toDate.substring(0, 4);
+      conditions.push('(year <= ? OR decision_date <= ?)');
+      values.push(toYear, params.toDate);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -456,16 +496,43 @@ export class DecisionDatabase {
   }
 
   /**
-   * Extended statistics type for US-004 compliance
+   * Get cached PDF text for a decision
+   * US-PDF-001: Returns cached text or null if not cached
    */
-  interface ExtendedStats extends IndexerStats {
-    totalDecisions: number;
-    recentDecisions?: number;
-    oldestDecision?: string | null;
-    newestDecision?: string | null;
-    byCommittee?: Array<{ committee: string; count: number }>;
-    byCaseType?: Array<{ caseType: string; count: number }>;
-    byYear?: Array<{ year: string; count: number }>;
+  getCachedPdfText(decisionId: string): string | null {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec(
+      `SELECT pdf_text FROM decisions WHERE id = ? AND pdf_text IS NOT NULL AND pdf_text != ''`,
+      [decisionId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return null;
+    }
+
+    return String(result[0].values[0][0]);
+  }
+
+  /**
+   * Save extracted PDF text to cache
+   * US-PDF-002: Stores text for faster future access
+   */
+  savePdfText(decisionId: string, text: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      this.db.run(
+        `UPDATE decisions SET pdf_text = ? WHERE id = ?`,
+        [text, decisionId]
+      );
+      this.save();
+      console.error(`[Database] Saved PDF text cache for ${decisionId} (${text.length} chars)`);
+      return true;
+    } catch (error) {
+      console.error(`[Database] Failed to save PDF text for ${decisionId}:`, error);
+      return false;
+    }
   }
 
   /**
@@ -819,6 +886,211 @@ export class DecisionDatabase {
     const avgPerMonth = totalMonths > 0 ? Math.round((totalDecisions / totalMonths) * 100) / 100 : 0;
 
     return { avgPerMonth, totalMonths, totalDecisions };
+  }
+
+  // ============================================
+  // US-PDF-005: PDF Cache Tracking Methods
+  // ============================================
+
+  /**
+   * US-PDF-005: Get PDF cache statistics
+   */
+  getPdfCacheStats(): {
+    totalCached: number;
+    totalSize: number;
+    byStatus: Array<{ status: string; count: number }>;
+    oldestEntry: string | null;
+    newestEntry: string | null;
+  } {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Total cached files
+    const totalResult = this.db.exec(`SELECT COUNT(*) FROM pdf_cache`);
+    const totalCached = totalResult.length > 0 ? Number(totalResult[0].values[0][0]) : 0;
+
+    // Total size in bytes
+    const sizeResult = this.db.exec(`SELECT COALESCE(SUM(file_size), 0) FROM pdf_cache`);
+    const totalSize = sizeResult.length > 0 ? Number(sizeResult[0].values[0][0]) : 0;
+
+    // Breakdown by extraction_status
+    const statusResult = this.db.exec(
+      `SELECT extraction_status, COUNT(*) as count FROM pdf_cache
+       GROUP BY extraction_status ORDER BY count DESC`
+    );
+    const byStatus: Array<{ status: string; count: number }> = [];
+    if (statusResult.length > 0) {
+      for (const row of statusResult[0].values) {
+        byStatus.push({
+          status: String(row[0] || 'unknown'),
+          count: Number(row[1])
+        });
+      }
+    }
+
+    // Oldest entry
+    const oldestResult = this.db.exec(
+      `SELECT MIN(cached_at) FROM pdf_cache WHERE cached_at IS NOT NULL`
+    );
+    const oldestEntry = oldestResult.length > 0 && oldestResult[0].values[0][0]
+      ? String(oldestResult[0].values[0][0])
+      : null;
+
+    // Newest entry
+    const newestResult = this.db.exec(
+      `SELECT MAX(cached_at) FROM pdf_cache WHERE cached_at IS NOT NULL`
+    );
+    const newestEntry = newestResult.length > 0 && newestResult[0].values[0][0]
+      ? String(newestResult[0].values[0][0])
+      : null;
+
+    return {
+      totalCached,
+      totalSize,
+      byStatus,
+      oldestEntry,
+      newestEntry
+    };
+  }
+
+  /**
+   * US-PDF-005: Record a cached PDF file
+   */
+  recordPdfCache(
+    decisionId: string,
+    filePath: string,
+    fileSize: number,
+    fileHash: string,
+    extractionStatus: string = 'pending'
+  ): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      this.db.run(`
+        INSERT OR REPLACE INTO pdf_cache
+        (decision_id, file_path, file_size, file_hash, cached_at, last_accessed, extraction_status)
+        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?)
+      `, [decisionId, filePath, fileSize, fileHash, extractionStatus]);
+      this.save();
+      return true;
+    } catch (error) {
+      console.error(`[Database] Failed to record PDF cache for ${decisionId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * US-PDF-005: Get cached PDF info
+   */
+  getPdfCacheEntry(decisionId: string): {
+    filePath: string;
+    fileSize: number;
+    fileHash: string;
+    cachedAt: string;
+    lastAccessed: string | null;
+    extractionStatus: string;
+  } | null {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec(
+      `SELECT file_path, file_size, file_hash, cached_at, last_accessed, extraction_status
+       FROM pdf_cache WHERE decision_id = ?`,
+      [decisionId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return null;
+    }
+
+    const row = result[0].values[0];
+    return {
+      filePath: String(row[0]),
+      fileSize: Number(row[1]),
+      fileHash: String(row[2]),
+      cachedAt: String(row[3]),
+      lastAccessed: row[4] ? String(row[4]) : null,
+      extractionStatus: String(row[5])
+    };
+  }
+
+  /**
+   * US-PDF-005: Update last_accessed timestamp for a cached PDF
+   */
+  touchPdfCache(decisionId: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      this.db.run(
+        `UPDATE pdf_cache SET last_accessed = datetime('now') WHERE decision_id = ?`,
+        [decisionId]
+      );
+      this.save();
+      return true;
+    } catch (error) {
+      console.error(`[Database] Failed to update PDF cache access time for ${decisionId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * US-PDF-005: Update extraction status for a cached PDF
+   */
+  updatePdfCacheStatus(decisionId: string, status: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      this.db.run(
+        `UPDATE pdf_cache SET extraction_status = ? WHERE decision_id = ?`,
+        [status, decisionId]
+      );
+      this.save();
+      return true;
+    } catch (error) {
+      console.error(`[Database] Failed to update PDF cache status for ${decisionId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * US-PDF-005: Delete a PDF cache entry
+   */
+  deletePdfCacheEntry(decisionId: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      this.db.run(`DELETE FROM pdf_cache WHERE decision_id = ?`, [decisionId]);
+      this.save();
+      return true;
+    } catch (error) {
+      console.error(`[Database] Failed to delete PDF cache entry for ${decisionId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * US-PDF-005: Get least recently accessed PDFs for LRU cleanup
+   */
+  getLruPdfCacheEntries(limit: number = 100): Array<{
+    decisionId: string;
+    filePath: string;
+    fileSize: number;
+    lastAccessed: string | null;
+  }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec(
+      `SELECT decision_id, file_path, file_size, last_accessed FROM pdf_cache
+       ORDER BY last_accessed ASC NULLS FIRST
+       LIMIT ?`,
+      [limit]
+    );
+
+    if (result.length === 0) return [];
+    return result[0].values.map(row => ({
+      decisionId: String(row[0]),
+      filePath: String(row[1]),
+      fileSize: Number(row[2]),
+      lastAccessed: row[3] ? String(row[3]) : null
+    }));
   }
 
   /**

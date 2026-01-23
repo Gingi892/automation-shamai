@@ -283,3 +283,38 @@
   - Next task is US-PDF-005: Add pdf_cache tracking table
   - The three-tier cache is now fully operational
 ---
+
+## Iteration 14 — US-PDF-005: Add pdf_cache Tracking Table (IMPLEMENTED)
+- **What was done:** Added pdf_cache SQLite table and methods for tracking cached PDF files
+- **Files modified:**
+  - `src/database.ts`:
+    - Added `pdf_cache` table to `createSchema()` with columns:
+      - `decision_id TEXT PRIMARY KEY` - Links to decision
+      - `file_path TEXT NOT NULL` - Path to cached PDF file
+      - `file_size INTEGER NOT NULL` - File size in bytes
+      - `file_hash TEXT NOT NULL` - SHA-256 hash for integrity
+      - `cached_at TEXT` - Timestamp when cached
+      - `last_accessed TEXT` - Timestamp of last access (for LRU)
+      - `extraction_status TEXT DEFAULT 'pending'` - Status: pending/extracted/failed
+    - Added index `idx_pdf_cache_status` on `extraction_status` for filtering
+    - Added `getPdfCacheStats()` method returning:
+      - `totalCached` - Number of cached files
+      - `totalSize` - Total bytes cached
+      - `byStatus` - Breakdown by extraction status
+      - `oldestEntry` / `newestEntry` - Cache date range
+    - Added helper methods:
+      - `recordPdfCache()` - Record a new cache entry
+      - `getPdfCacheEntry()` - Get cache info for a decision
+      - `touchPdfCache()` - Update last_accessed timestamp
+      - `updatePdfCacheStatus()` - Update extraction status
+      - `deletePdfCacheEntry()` - Remove cache entry
+      - `getLruPdfCacheEntries()` - Get LRU entries for cleanup
+- **Technical notes:**
+  - Table uses decision_id as PRIMARY KEY for 1:1 relationship with decisions
+  - last_accessed enables LRU cache cleanup strategy
+  - extraction_status allows filtering for re-extraction needs
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - Next task is US-PDF-006: Add cache management tools
+  - The pdf_cache table is ready to be used by PdfCache module
+---
