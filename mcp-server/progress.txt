@@ -228,3 +228,27 @@
   - The PdfExtractor accepts optional database, so caching works when available
   - Next task is US-PDF-003: Create PdfCache module for local file caching
 ---
+
+## Iteration 12 — US-PDF-003: Create PdfCache Module (IMPLEMENTED)
+- **What was done:** Created local file cache module for PDFs at `~/.gov-il-mcp/pdfs/`
+- **Files created:**
+  - `src/pdf-cache.ts` - Complete PdfCache class with:
+    - Constructor creates cache directories for all 3 databases
+    - `isCached(decisionId, database): boolean` - Check if PDF is cached
+    - `loadPdf(decisionId, database): Promise<Buffer | null>` - Load cached PDF
+    - `savePdf(decisionId, database, buffer): Promise<CachedPdfInfo>` - Save PDF with hash
+    - `getStats(): Promise<CacheStats>` - Get cache statistics by database
+    - `deletePdf(decisionId, database): Promise<boolean>` - Delete cached PDF
+    - `cleanup(maxSizeBytes): Promise<number>` - LRU cache cleanup (default 5GB)
+    - `formatStats(stats): string` - Human-readable stats output
+    - `getPdfCache()` singleton accessor
+- **Technical notes:**
+  - PDFs stored in `~/.gov-il-mcp/pdfs/{database}/{id}.pdf`
+  - Uses SHA-256 hash for file integrity verification
+  - LRU cleanup strategy based on file modification time
+  - Directories created automatically on initialization
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - Next task is US-PDF-004: Integrate file cache into pdf-extractor
+  - The PdfCache module is independent and ready to be integrated
+---

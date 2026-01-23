@@ -24,7 +24,7 @@ The current MCP server has critical issues:
 | US-PDF-013 | [x] | Update read_pdf for Pinecone results |
 | US-PDF-001 | [x] | Implement getCachedPdfText |
 | US-PDF-002 | [x] | Implement savePdfText |
-| US-PDF-003 | [ ] | Create PdfCache module |
+| US-PDF-003 | [x] | Create PdfCache module |
 | US-PDF-004 | [ ] | Integrate file cache |
 | US-PDF-005 | [ ] | Add pdf_cache tracking table |
 | US-PDF-006 | [ ] | Add cache management tools |
@@ -258,16 +258,17 @@ savePdfText(decisionId: string, text: string): boolean {
 
 ### US-PDF-003: Create PdfCache module
 **Priority**: P1
+**Status**: ✅ COMPLETED
 
 **Acceptance Criteria:**
-- [ ] Create new file `src/pdf-cache.ts`
-- [ ] Implement `PdfCache` class with methods:
+- [x] Create new file `src/pdf-cache.ts`
+- [x] Implement `PdfCache` class with methods:
   - `isCached(decisionId, database): boolean`
   - `loadPdf(decisionId, database): Buffer | null`
   - `savePdf(decisionId, database, buffer): Promise<CachedPdfInfo>`
   - `getStats(): CacheStats`
-- [ ] Store PDFs in `~/.gov-il-mcp/pdfs/{database}/{id}.pdf`
-- [ ] Create directory structure on initialization
+- [x] Store PDFs in `~/.gov-il-mcp/pdfs/{database}/{id}.pdf`
+- [x] Create directory structure on initialization
 
 ---
 
