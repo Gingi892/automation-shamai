@@ -995,10 +995,6 @@ async function handleGetDecisionPdf(params: { id: string }): Promise<MCPToolResu
 }
 
 async function handleReadPdf(params: { id: string; maxPages?: number }): Promise<MCPToolResult> {
-  // Check database availability
-  const dbError = checkDatabaseAvailable();
-  if (dbError) return dbError;
-
   // Check for SCRAPER_API_KEY first
   if (!SCRAPER_API_KEY) {
     return {
@@ -1013,8 +1009,45 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
     };
   }
 
-  const decision = db!.getDecision(params.id);
+  // Try to get decision from SQLite first, then fall back to Pinecone
+  let decision: { id: string; title: string; url: string; database?: string } | null = null;
+  let source: 'sqlite' | 'pinecone' = 'sqlite';
 
+  // First try SQLite (for backwards compatibility and cached data)
+  if (db) {
+    const sqliteDecision = db.getDecision(params.id);
+    if (sqliteDecision && sqliteDecision.url) {
+      decision = {
+        id: sqliteDecision.id,
+        title: sqliteDecision.title,
+        url: sqliteDecision.url,
+        database: sqliteDecision.database
+      };
+    }
+  }
+
+  // If not found in SQLite, try Pinecone
+  if (!decision) {
+    const pinecone = getPineconeClient();
+    if (pinecone) {
+      try {
+        const pineconeResult = await pinecone.fetchById(params.id);
+        if (pineconeResult && pineconeResult.metadata.url) {
+          decision = {
+            id: pineconeResult.id,
+            title: pineconeResult.metadata.title || 'Unknown Title',
+            url: pineconeResult.metadata.url,
+            database: pineconeResult.metadata.database
+          };
+          source = 'pinecone';
+        }
+      } catch (error) {
+        console.error('[handleReadPdf] Pinecone lookup failed:', error);
+      }
+    }
+  }
+
+  // If still not found, return error
   if (!decision) {
     return {
       content: [{
@@ -1022,24 +1055,8 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
         text: JSON.stringify({
           error: 'Decision not found',
           id: params.id,
-          suggestion: 'Use search_decisions tool first to find valid decision IDs. Try searching by committee, block/plot, or case type.',
-          suggestionHe: 'השתמש בכלי search_decisions כדי למצוא מזהי החלטות תקינים. נסה לחפש לפי ועדה, גוש/חלקה, או סוג תיק.'
-        })
-      }],
-      isError: true
-    };
-  }
-
-  if (!decision.url) {
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          error: 'No PDF URL available for this decision',
-          id: params.id,
-          title: decision.title,
-          suggestion: 'This decision was indexed without a PDF link. Try get_decision to see available metadata, or search for similar decisions that may have PDFs.',
-          suggestionHe: 'החלטה זו נוספה למאגר ללא קישור ל-PDF. נסה get_decision לראות מידע זמין, או חפש החלטות דומות שיש להן PDF.'
+          suggestion: 'Use semantic_search or search_decisions tool first to find valid decision IDs. Try searching by committee, block/plot, or case type.',
+          suggestionHe: 'השתמש בכלי semantic_search או search_decisions כדי למצוא מזהי החלטות תקינים. נסה לחפש לפי ועדה, גוש/חלקה, או סוג תיק.'
         })
       }],
       isError: true
@@ -1047,10 +1064,10 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
   }
 
   try {
-    // Create PDF extractor with database for caching
+    // Create PDF extractor with database for caching (if available)
     const pdfExtractor = createPdfExtractor(SCRAPER_API_KEY, {
       maxPages: params.maxPages || 0,
-      database: db!
+      database: db || undefined
     });
 
     // Smart extraction: tries text first, indicates if document is scanned
@@ -1065,6 +1082,8 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
           text: JSON.stringify({
             id: decision.id,
             title: decision.title,
+            database: decision.database,
+            source, // 'sqlite' or 'pinecone' - indicates where decision was found
             extractionType: 'text',
             fullText: result.fullText,
             pageCount: result.pageCount,
@@ -1082,6 +1101,8 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
           text: JSON.stringify({
             id: decision.id,
             title: decision.title,
+            database: decision.database,
+            source, // 'sqlite' or 'pinecone' - indicates where decision was found
             extractionType: 'scanned',
             note: 'This PDF is a scanned document with no extractable text.',
             noteHe: 'המסמך סרוק ואינו מכיל טקסט שניתן לחילוץ.',

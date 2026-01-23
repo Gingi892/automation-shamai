@@ -21,7 +21,7 @@ The current MCP server has critical issues:
 | US-PDF-010 | [x] | Add Pinecone client |
 | US-PDF-011 | [x] | Generate embeddings for queries |
 | US-PDF-012 | [x] | Update semantic_search to use Pinecone |
-| US-PDF-013 | [ ] | Update read_pdf for Pinecone results |
+| US-PDF-013 | [x] | Update read_pdf for Pinecone results |
 | US-PDF-001 | [x] | Implement getCachedPdfText |
 | US-PDF-002 | [x] | Implement savePdfText |
 | US-PDF-003 | [ ] | Create PdfCache module |
@@ -161,12 +161,13 @@ semantic_search(query)
 
 ### US-PDF-013: Update read_pdf to work with Pinecone results
 **Priority**: P0
+**Status**: ✅ COMPLETED
 
 **Acceptance Criteria:**
-- [ ] Accept decision ID in format from Pinecone metadata
-- [ ] Extract PDF URL from Pinecone metadata (not SQLite)
-- [ ] Cache results locally after first read
-- [ ] Handle case where decision exists in Pinecone but not SQLite
+- [x] Accept decision ID in format from Pinecone metadata
+- [x] Extract PDF URL from Pinecone metadata (not SQLite)
+- [x] Cache results locally after first read
+- [x] Handle case where decision exists in Pinecone but not SQLite
 
 ---
 

@@ -207,3 +207,24 @@
   - Response now includes `source` field to indicate which backend was used
   - Next task US-PDF-013 will update read_pdf to work with Pinecone results
 ---
+
+## Iteration 11 — US-PDF-013: Update read_pdf for Pinecone Results (IMPLEMENTED)
+- **What was done:** Updated `handleReadPdf()` to work with decisions from Pinecone when not found in SQLite
+- **Files modified:**
+  - `src/index.ts` - Rewrote `handleReadPdf()`:
+    - First tries to find decision in SQLite database (for backwards compatibility)
+    - Falls back to Pinecone `fetchById()` if not found in SQLite
+    - Uses URL from Pinecone metadata when decision comes from Pinecone
+    - Added `source` field to response ('sqlite' or 'pinecone')
+    - Added `database` field to response
+    - Handles case where database is null (db optional for Pinecone-only lookups)
+    - Caching still works via pdfExtractor (if db is available)
+- **Technical notes:**
+  - Decision lookup order: SQLite first, then Pinecone
+  - Pinecone uses `fetchById()` method from pinecone-client.ts
+  - Response includes `source` field to indicate data origin
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - The PdfExtractor accepts optional database, so caching works when available
+  - Next task is US-PDF-003: Create PdfCache module for local file caching
+---
