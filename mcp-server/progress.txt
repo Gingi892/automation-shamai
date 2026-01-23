@@ -166,3 +166,21 @@
   - Pinecone SDK v3+ uses `index(host)` pattern with the full index host URL
   - Metadata types need to be cast from RecordMetadata to specific interface
 ---
+
+## Iteration 9 — US-PDF-011: Generate Query Embeddings (IMPLEMENTED)
+- **What was done:** Added OpenAI embedding generation function to embeddings.ts
+- **Files modified:**
+  - `src/embeddings.ts` - Added `generateQueryEmbedding(text: string): Promise<number[]>` function:
+    - Uses OpenAI API `text-embedding-3-small` model
+    - Generates 1024-dimension embeddings to match Python indexer
+    - Requires `OPENAI_API_KEY` environment variable
+    - Includes error handling for API failures and missing API key
+- **Technical notes:**
+  - Uses native fetch API (Node 18+)
+  - Returns typed response with proper error messages
+  - Function is exported for use by semantic_search handler
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - The function name is `generateQueryEmbedding` (not `generateEmbedding` as in PRD)
+  - This function will be used in US-PDF-012 to update handleSemanticSearch
+---

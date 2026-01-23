@@ -1,14 +1,55 @@
 /**
  * Embeddings Manager for Semantic Search
- * Uses Anthropic API for generating embeddings (no native dependencies)
+ * Uses OpenAI API for generating query embeddings to match Python indexer
  *
- * Note: This is a simplified implementation that stores embeddings in SQLite.
- * For production with large datasets, consider using a dedicated vector database.
+ * Note: The Python indexer uses text-embedding-3-small with 1024 dimensions,
+ * so queries must use the same model and dimensions for semantic search to work.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { Decision, DatabaseType } from './types.js';
 import { getDatabase, DecisionDatabase } from './database.js';
+
+/**
+ * Generate embedding for a search query using OpenAI's API
+ * Uses text-embedding-3-small with 1024 dimensions to match Python indexer
+ *
+ * @param text - The query text to embed
+ * @returns Array of 1024 floating point numbers
+ * @throws Error if OPENAI_API_KEY is not set or API call fails
+ */
+export async function generateQueryEmbedding(text: string): Promise<number[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY environment variable is required for embedding generation');
+  }
+
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'text-embedding-3-small',
+      input: text,
+      dimensions: 1024
+    })
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`OpenAI embedding API error (${response.status}): ${errorBody}`);
+  }
+
+  const data = await response.json() as { data: Array<{ embedding: number[] }> };
+
+  if (!data.data || !data.data[0] || !data.data[0].embedding) {
+    throw new Error('Invalid response from OpenAI embedding API');
+  }
+
+  return data.data[0].embedding;
+}
 
 export interface SemanticSearchResult {
   decision: Decision;

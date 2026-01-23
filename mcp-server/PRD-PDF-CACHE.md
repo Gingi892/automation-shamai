@@ -19,7 +19,7 @@ The current MCP server has critical issues:
 | Story | Status | Description |
 |-------|--------|-------------|
 | US-PDF-010 | [x] | Add Pinecone client |
-| US-PDF-011 | [ ] | Generate embeddings for queries |
+| US-PDF-011 | [x] | Generate embeddings for queries |
 | US-PDF-012 | [ ] | Update semantic_search to use Pinecone |
 | US-PDF-013 | [ ] | Update read_pdf for Pinecone results |
 | US-PDF-001 | [x] | Implement getCachedPdfText |
@@ -106,12 +106,13 @@ export class PineconeClient {
 
 ### US-PDF-011: Generate embeddings for search queries
 **Priority**: P0
+**Status**: ✅ COMPLETED
 
 **Acceptance Criteria:**
-- [ ] Add OpenAI embedding generation in `embeddings.ts`
-- [ ] Use `text-embedding-3-small` model with 1024 dimensions (matches Python indexer)
-- [ ] Add `OPENAI_API_KEY` environment variable
-- [ ] Create `generateEmbedding(text: string): Promise<number[]>` function
+- [x] Add OpenAI embedding generation in `embeddings.ts`
+- [x] Use `text-embedding-3-small` model with 1024 dimensions (matches Python indexer)
+- [x] Add `OPENAI_API_KEY` environment variable
+- [x] Create `generateEmbedding(text: string): Promise<number[]>` function
 
 **Implementation:**
 ```typescript
