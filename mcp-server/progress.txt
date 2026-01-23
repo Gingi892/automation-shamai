@@ -347,3 +347,29 @@
   - Next task is US-PDF-007: Add PDF to image conversion
   - Cache management tools can now be used to monitor and maintain cache health
 ---
+
+## Iteration 16 — US-PDF-007: Add PDF to Image Conversion (IMPLEMENTED)
+- **What was done:** Created PDF to image conversion module for handling scanned PDFs
+- **Files created:**
+  - `src/pdf-to-image.ts` - Complete PDF to image conversion module with:
+    - `convertToImages(pdfBuffer, options)` - Converts PDF pages to JPEG images
+    - `getPdfInfo(pdfBuffer)` - Gets PDF metadata without converting
+    - `toMcpImageContent(images)` - Formats images for MCP response
+    - Adaptive quality reduction to stay under MCP 1MB limit
+    - Automatic image scaling if quality reduction is insufficient
+- **Package changes:**
+  - Added `unpdf` ^0.12.1 (PDF rendering library)
+  - Added `@napi-rs/canvas` ^0.1.67 (canvas for serverless environments)
+  - Added `@pinecone-database/pinecone` ^6.1.4 (was missing from package.json)
+- **Technical notes:**
+  - Uses unpdf's `renderPageAsImage` for PDF page rendering
+  - Uses @napi-rs/canvas for PNG to JPEG conversion
+  - Default settings: maxPages=5, scale=1.5, quality=80
+  - Adaptive quality: starts at 80%, reduces in 10% steps until < 900KB
+  - If still too large, scales down image dimensions
+  - Returns base64-encoded JPEG with dimensions and size info
+  - No TypeScript errors in the new module
+- **Learnings for next cycles:**
+  - Next task is US-PDF-008: Return images when text extraction fails
+  - The convertToImages function integrates with pdf-extractor's smartExtract
+---

@@ -28,7 +28,7 @@ The current MCP server has critical issues:
 | US-PDF-004 | [x] | Integrate file cache |
 | US-PDF-005 | [x] | Add pdf_cache tracking table |
 | US-PDF-006 | [x] | Add cache management tools |
-| US-PDF-007 | [ ] | Add PDF to image conversion |
+| US-PDF-007 | [x] | Add PDF to image conversion |
 | US-PDF-008 | [ ] | Return images for scanned PDFs |
 | US-PDF-009 | [ ] | Create prefetch script |
 
@@ -333,12 +333,13 @@ CREATE TABLE IF NOT EXISTS pdf_cache (
 
 ### US-PDF-007: Add PDF to image conversion
 **Priority**: P2
+**Status**: ✅ COMPLETED
 
 **Acceptance Criteria:**
-- [ ] Install `unpdf` and `@napi-rs/canvas` packages
-- [ ] Add `convertToImages(pdfBuffer, maxPages): Promise<ImageResult[]>` method
-- [ ] Optimize images for MCP 1MB limit (JPEG 70-85% quality)
-- [ ] Return base64-encoded images
+- [x] Install `unpdf` and `@napi-rs/canvas` packages
+- [x] Add `convertToImages(pdfBuffer, maxPages): Promise<ImageResult[]>` method
+- [x] Optimize images for MCP 1MB limit (JPEG 70-85% quality)
+- [x] Return base64-encoded images
 
 ---
 
