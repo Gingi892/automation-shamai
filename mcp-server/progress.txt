@@ -145,3 +145,24 @@
   - The indexer's updateRecent method stops early if no new documents found (line 220)
   - Updates `last_update` metadata after completion
 ---
+
+## Iteration 8 — US-PDF-010: Add Pinecone Client (IMPLEMENTED)
+- **What was done:** Implemented Pinecone client to connect MCP server to the 20K indexed documents
+- **Files created:**
+  - `src/pinecone-client.ts` - Complete PineconeClient class with:
+    - Constructor with PINECONE_API_KEY and PINECONE_INDEX_HOST env vars
+    - `query(embedding, topK, namespace)` method for semantic search
+    - `fetchById(id, namespace)` method for direct document lookup
+    - `getStats(namespace)` method for namespace statistics
+    - Singleton pattern via `getPineconeClient()`
+- **Package changes:**
+  - Installed `@pinecone-database/pinecone` package
+- **Technical notes:**
+  - Uses PINECONE_INDEX_HOST (not INDEX_NAME) as the PRD was updated during implementation
+  - Default namespace: 'gov-il-decisions'
+  - Returns PineconeQueryResult with id, score, and metadata fields
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - Pinecone SDK v3+ uses `index(host)` pattern with the full index host URL
+  - Metadata types need to be cast from RecordMetadata to specific interface
+---
