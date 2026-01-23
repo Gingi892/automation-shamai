@@ -848,6 +848,109 @@ Returns structured JSON with:
       },
       required: ['query_type']
     }
+  },
+  {
+    name: 'get_pdf_cache_stats',
+    description: `קבלת סטטיסטיקות על מטמון ה-PDF / Get statistics about the local PDF file cache.
+
+## מתי להשתמש / When to Use
+- To check how much disk space is used by cached PDFs
+- To see cache distribution across databases
+- To monitor cache health and usage
+- When troubleshooting slow PDF reads
+
+## מידע מוחזר / Returned Information
+| Field | Hebrew | Description |
+|-------|--------|-------------|
+| fileCache | קבצים | File cache statistics (on-disk PDFs) |
+| textCache | טקסט | Text extraction cache statistics (SQLite) |
+| totalFiles | סה"כ קבצים | Number of cached PDF files |
+| totalSize | גודל כולל | Total disk space used |
+| byDatabase | לפי מאגר | Breakdown by database |
+| cacheDir | תיקייה | Cache directory path |
+
+## דוגמת פלט / Example Output
+{
+  "fileCache": {
+    "totalFiles": 1500,
+    "totalSizeBytes": 750000000,
+    "totalSizeFormatted": "715.3 MB",
+    "byDatabase": {
+      "decisive_appraiser": { "count": 1000, "sizeBytes": 500000000 },
+      "appeals_committee": { "count": 300, "sizeBytes": 150000000 },
+      "appeals_board": { "count": 200, "sizeBytes": 100000000 }
+    },
+    "cacheDir": "C:/Users/.../.gov-il-mcp/pdfs"
+  },
+  "textCache": {
+    "totalCached": 1200,
+    "totalSize": 50000000,
+    "byStatus": [{ "status": "extracted", "count": 1100 }, { "status": "failed", "count": 100 }]
+  }
+}`,
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'cleanup_pdf_cache',
+    description: `ניקוי מטמון ה-PDF באסטרטגיית LRU / Clean up PDF cache using LRU (Least Recently Used) strategy.
+
+## מתי להשתמש / When to Use
+- When disk space is running low
+- For periodic maintenance of the cache
+- To free up space for new PDFs
+- When cache exceeds size limit
+
+## אסטרטגיית ניקוי / Cleanup Strategy
+Uses LRU (Least Recently Used) strategy:
+1. Checks if cache exceeds maxSizeBytes
+2. If over limit, sorts files by access time
+3. Deletes oldest files until cache is at 80% of max
+4. Returns count of deleted files
+
+## פרמטרים / Parameters
+| Parameter | Hebrew | Default | Description |
+|-----------|--------|---------|-------------|
+| maxSizeBytes | גודל מקסימלי | 5GB | Maximum cache size in bytes |
+| dryRun | הרצה יבשה | false | Preview cleanup without deleting |
+
+## דוגמת פלט / Example Output
+{
+  "action": "cleanup_completed",
+  "deletedFiles": 150,
+  "freedBytes": 75000000,
+  "freedFormatted": "71.5 MB",
+  "beforeSize": 5500000000,
+  "afterSize": 5200000000,
+  "maxSize": 5368709120
+}
+
+## הרצה יבשה / Dry Run
+With dryRun: true, shows what would be deleted:
+{
+  "action": "dry_run",
+  "wouldDelete": 150,
+  "wouldFree": 75000000,
+  "currentSize": 5500000000,
+  "maxSize": 5368709120
+}`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        maxSizeBytes: {
+          type: 'number',
+          description: 'גודל מקסימלי למטמון בבייטים (ברירת מחדל: 5GB) / Maximum cache size in bytes (default: 5GB = 5368709120)',
+          default: 5368709120
+        },
+        dryRun: {
+          type: 'boolean',
+          description: 'הרצה יבשה - הצג מה יימחק בלי למחוק / Preview what would be deleted without actually deleting',
+          default: false
+        }
+      }
+    }
   }
 ];
 
@@ -1474,6 +1577,196 @@ async function handleGetAnalytics(params: { query_type: AnalyticsQueryType; limi
       }, null, 2)
     }]
   };
+}
+
+/**
+ * US-PDF-006: Get PDF cache statistics
+ */
+async function handleGetPdfCacheStats(): Promise<MCPToolResult> {
+  const pdfCache = getPdfCache();
+
+  // Helper function to format bytes
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
+  try {
+    // Get file cache stats (on-disk PDFs)
+    const fileStats = await pdfCache.getStats();
+
+    // Get text cache stats from database (if available)
+    let textCacheStats: {
+      totalCached: number;
+      totalSize: number;
+      byStatus: Array<{ status: string; count: number }>;
+      oldestEntry: string | null;
+      newestEntry: string | null;
+    } | null = null;
+
+    if (db) {
+      try {
+        textCacheStats = db.getPdfCacheStats();
+      } catch (error) {
+        console.error('[handleGetPdfCacheStats] Error getting text cache stats:', error);
+      }
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          fileCache: {
+            totalFiles: fileStats.totalFiles,
+            totalSizeBytes: fileStats.totalSizeBytes,
+            totalSizeFormatted: formatBytes(fileStats.totalSizeBytes),
+            byDatabase: fileStats.byDatabase,
+            cacheDir: fileStats.cacheDir
+          },
+          textCache: textCacheStats ? {
+            totalCached: textCacheStats.totalCached,
+            totalSize: textCacheStats.totalSize,
+            totalSizeFormatted: formatBytes(textCacheStats.totalSize),
+            byStatus: textCacheStats.byStatus,
+            dateRange: {
+              oldest: textCacheStats.oldestEntry,
+              newest: textCacheStats.newestEntry
+            }
+          } : null,
+          summary: {
+            totalFilesOnDisk: fileStats.totalFiles,
+            totalDiskSpace: formatBytes(fileStats.totalSizeBytes),
+            textExtractionsCached: textCacheStats?.totalCached || 0,
+            cacheLocation: fileStats.cacheDir
+          }
+        }, null, 2)
+      }]
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          error: 'Failed to get PDF cache statistics',
+          errorHe: 'נכשל בקבלת סטטיסטיקות מטמון PDF',
+          message: error instanceof Error ? error.message : String(error)
+        })
+      }],
+      isError: true
+    };
+  }
+}
+
+/**
+ * US-PDF-006: Cleanup PDF cache with LRU strategy
+ */
+async function handleCleanupPdfCache(params: { maxSizeBytes?: number; dryRun?: boolean }): Promise<MCPToolResult> {
+  const pdfCache = getPdfCache();
+  const maxSizeBytes = params.maxSizeBytes || 5 * 1024 * 1024 * 1024; // Default 5GB
+  const dryRun = params.dryRun || false;
+
+  // Helper function to format bytes
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
+  try {
+    // Get current stats before cleanup
+    const beforeStats = await pdfCache.getStats();
+
+    if (beforeStats.totalSizeBytes <= maxSizeBytes) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            action: 'no_cleanup_needed',
+            actionHe: 'לא נדרש ניקוי',
+            currentSize: beforeStats.totalSizeBytes,
+            currentSizeFormatted: formatBytes(beforeStats.totalSizeBytes),
+            maxSize: maxSizeBytes,
+            maxSizeFormatted: formatBytes(maxSizeBytes),
+            percentUsed: Math.round((beforeStats.totalSizeBytes / maxSizeBytes) * 100),
+            message: 'Cache size is within limit. No cleanup needed.',
+            messageHe: 'גודל המטמון בתוך הגבול. לא נדרש ניקוי.'
+          }, null, 2)
+        }]
+      };
+    }
+
+    if (dryRun) {
+      // Calculate what would be deleted without actually deleting
+      const targetSize = maxSizeBytes * 0.8;
+      const bytesToFree = beforeStats.totalSizeBytes - targetSize;
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            action: 'dry_run',
+            actionHe: 'הרצה יבשה',
+            currentSize: beforeStats.totalSizeBytes,
+            currentSizeFormatted: formatBytes(beforeStats.totalSizeBytes),
+            maxSize: maxSizeBytes,
+            maxSizeFormatted: formatBytes(maxSizeBytes),
+            targetSize,
+            targetSizeFormatted: formatBytes(targetSize),
+            wouldFreeBytes: bytesToFree,
+            wouldFreeFormatted: formatBytes(bytesToFree),
+            message: 'Dry run complete. Use dryRun: false to actually clean up.',
+            messageHe: 'הרצה יבשה הושלמה. השתמש ב-dryRun: false לניקוי בפועל.'
+          }, null, 2)
+        }]
+      };
+    }
+
+    // Perform actual cleanup
+    const deletedCount = await pdfCache.cleanup(maxSizeBytes);
+
+    // Get stats after cleanup
+    const afterStats = await pdfCache.getStats();
+    const freedBytes = beforeStats.totalSizeBytes - afterStats.totalSizeBytes;
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          action: 'cleanup_completed',
+          actionHe: 'ניקוי הושלם',
+          deletedFiles: deletedCount,
+          freedBytes,
+          freedFormatted: formatBytes(freedBytes),
+          beforeSize: beforeStats.totalSizeBytes,
+          beforeSizeFormatted: formatBytes(beforeStats.totalSizeBytes),
+          afterSize: afterStats.totalSizeBytes,
+          afterSizeFormatted: formatBytes(afterStats.totalSizeBytes),
+          maxSize: maxSizeBytes,
+          maxSizeFormatted: formatBytes(maxSizeBytes),
+          percentUsed: Math.round((afterStats.totalSizeBytes / maxSizeBytes) * 100),
+          message: `Cleanup completed. Deleted ${deletedCount} files and freed ${formatBytes(freedBytes)}.`,
+          messageHe: `הניקוי הושלם. נמחקו ${deletedCount} קבצים ושוחררו ${formatBytes(freedBytes)}.`
+        }, null, 2)
+      }]
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          error: 'Failed to cleanup PDF cache',
+          errorHe: 'נכשל בניקוי מטמון PDF',
+          message: error instanceof Error ? error.message : String(error),
+          suggestion: 'Check that the cache directory exists and is writable.',
+          suggestionHe: 'בדוק שתיקיית המטמון קיימת וניתנת לכתיבה.'
+        })
+      }],
+      isError: true
+    };
+  }
 }
 
 async function handleHealthCheck(params: { verbose?: boolean }): Promise<MCPToolResult> {
@@ -2311,14 +2604,20 @@ async function main() {
         case 'get_analytics':
           return await handleGetAnalytics(args as { query_type: AnalyticsQueryType; limit?: number; database?: DatabaseType });
 
+        case 'get_pdf_cache_stats':
+          return await handleGetPdfCacheStats();
+
+        case 'cleanup_pdf_cache':
+          return await handleCleanupPdfCache(args as { maxSizeBytes?: number; dryRun?: boolean });
+
         default:
           return {
             content: [{
               type: 'text',
               text: JSON.stringify({
                 error: `Unknown tool: ${name}`,
-                suggestion: 'Available tools: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check, get_analytics',
-                suggestionHe: 'כלים זמינים: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check, get_analytics'
+                suggestion: 'Available tools: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check, get_analytics, get_pdf_cache_stats, cleanup_pdf_cache',
+                suggestionHe: 'כלים זמינים: search_decisions, get_decision, get_decision_pdf, read_pdf, get_statistics, list_committees, list_appraisers, compare_decisions, semantic_search, trigger_update, clarify_query, construct_answer, health_check, get_analytics, get_pdf_cache_stats, cleanup_pdf_cache'
               })
             }],
             isError: true

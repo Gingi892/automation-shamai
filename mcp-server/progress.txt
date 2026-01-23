@@ -318,3 +318,32 @@
   - Next task is US-PDF-006: Add cache management tools
   - The pdf_cache table is ready to be used by PdfCache module
 ---
+
+## Iteration 15 — US-PDF-006: Add Cache Management Tools (IMPLEMENTED)
+- **What was done:** Added two MCP tools for PDF cache management
+- **Files modified:**
+  - `src/index.ts`:
+    - Added `get_pdf_cache_stats` tool definition with full documentation
+    - Added `cleanup_pdf_cache` tool definition with LRU strategy and dry run support
+    - Added `handleGetPdfCacheStats()` handler:
+      - Returns file cache stats (on-disk PDFs) via PdfCache.getStats()
+      - Returns text cache stats (SQLite) via db.getPdfCacheStats()
+      - Formats byte sizes human-readably
+      - Includes summary with totals
+    - Added `handleCleanupPdfCache()` handler:
+      - Supports `maxSizeBytes` parameter (default 5GB)
+      - Supports `dryRun` mode to preview cleanup
+      - Returns before/after stats and freed space
+      - Uses LRU strategy (oldest files first)
+    - Added switch cases for both new tools
+    - Updated error message to include new tool names
+- **Technical notes:**
+  - Both tools use the existing `getPdfCache()` singleton
+  - File stats come from filesystem, text stats from SQLite pdf_cache table
+  - Cleanup cleans to 80% of max size (same as PdfCache.cleanup())
+  - Dry run mode calculates bytes to free without deleting
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - Next task is US-PDF-007: Add PDF to image conversion
+  - Cache management tools can now be used to monitor and maintain cache health
+---

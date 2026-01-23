@@ -27,7 +27,7 @@ The current MCP server has critical issues:
 | US-PDF-003 | [x] | Create PdfCache module |
 | US-PDF-004 | [x] | Integrate file cache |
 | US-PDF-005 | [x] | Add pdf_cache tracking table |
-| US-PDF-006 | [ ] | Add cache management tools |
+| US-PDF-006 | [x] | Add cache management tools |
 | US-PDF-007 | [ ] | Add PDF to image conversion |
 | US-PDF-008 | [ ] | Return images for scanned PDFs |
 | US-PDF-009 | [ ] | Create prefetch script |
