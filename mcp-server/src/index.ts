@@ -17,6 +17,7 @@ import { getEmbeddings, EmbeddingsManager, generateQueryEmbedding } from './embe
 import { getPineconeClient, PineconeClient, PineconeQueryResult } from './pinecone-client.js';
 import { createIndexer } from './indexer.js';
 import { createPdfExtractor, PdfExtractor, PdfExtractionResult } from './pdf-extractor.js';
+import { getPdfCache } from './pdf-cache.js';
 import {
   DatabaseType,
   SearchParams,
@@ -1064,14 +1065,19 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
   }
 
   try {
-    // Create PDF extractor with database for caching (if available)
+    // Create PDF extractor with database for text caching and file cache for PDFs
     const pdfExtractor = createPdfExtractor(SCRAPER_API_KEY, {
       maxPages: params.maxPages || 0,
-      database: db || undefined
+      database: db || undefined,
+      pdfCache: getPdfCache()  // Add file cache for offline access
     });
 
+    // Determine database type for file cache organization
+    const databaseType = (decision.database as DatabaseType) || 'decisive_appraiser';
+
     // Smart extraction: tries text first, indicates if document is scanned
-    const extraction = await pdfExtractor.smartExtract(decision.id, decision.url);
+    // Uses three-tier cache: text cache → file cache → network download
+    const extraction = await pdfExtractor.smartExtract(decision.id, decision.url, 100, databaseType);
 
     if (extraction.type === 'text') {
       // Text extraction successful - return text content

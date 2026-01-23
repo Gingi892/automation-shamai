@@ -252,3 +252,34 @@
   - Next task is US-PDF-004: Integrate file cache into pdf-extractor
   - The PdfCache module is independent and ready to be integrated
 ---
+
+## Iteration 13 — US-PDF-004: Integrate File Cache into pdf-extractor (IMPLEMENTED)
+- **What was done:** Integrated PdfCache into pdf-extractor for three-tier caching
+- **Files modified:**
+  - `src/pdf-extractor.ts`:
+    - Added imports for `PdfCache` and `DatabaseType`
+    - Updated `PdfExtractorOptions` interface to accept optional `pdfCache` parameter
+    - Added `pdfCache` private property to `PdfExtractor` class
+    - Added `setPdfCache(pdfCache: PdfCache)` setter method
+    - Rewrote `extractWithCache()` with three-tier cache strategy:
+      1. Text cache (SQLite) - instant return of extracted text
+      2. File cache (local files) - extract from cached PDF file
+      3. Network download (ScraperAPI) - download, cache, and extract
+    - Updated `smartExtract()` to accept optional `databaseType` parameter
+  - `src/index.ts`:
+    - Added import for `getPdfCache` from pdf-cache module
+    - Updated `handleReadPdf()` to:
+      - Pass `pdfCache: getPdfCache()` to `createPdfExtractor`
+      - Determine `databaseType` from decision metadata
+      - Pass `databaseType` to `smartExtract()` for file cache organization
+- **Technical notes:**
+  - Three-tier cache flow: text cache → file cache → network download
+  - File cache stores PDFs in `~/.gov-il-mcp/pdfs/{database}/{id}.pdf`
+  - When loading from file cache, text is also saved to text cache for faster future access
+  - When downloading from network, PDF is saved to file cache first, then text extracted and cached
+  - Default databaseType is 'decisive_appraiser' if not specified
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - Next task is US-PDF-005: Add pdf_cache tracking table
+  - The three-tier cache is now fully operational
+---

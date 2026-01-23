@@ -8,6 +8,8 @@
 
 import pdf from 'pdf-parse';
 import type { DecisionDatabase } from './database.js';
+import type { PdfCache } from './pdf-cache.js';
+import type { DatabaseType } from './types.js';
 
 /**
  * Hebrew RTL Text Processing Utilities
@@ -182,25 +184,35 @@ export interface PdfExtractionResult {
 export interface PdfExtractorOptions {
   apiKey: string;
   maxPages?: number;  // Limit extraction to first N pages for large PDFs
-  database?: DecisionDatabase;  // Optional database for caching
+  database?: DecisionDatabase;  // Optional database for text caching
+  pdfCache?: PdfCache;  // Optional file cache for PDF files
 }
 
 export class PdfExtractor {
   private apiKey: string;
   private maxPages: number;
   private database: DecisionDatabase | null;
+  private pdfCache: PdfCache | null;
 
   constructor(options: PdfExtractorOptions) {
     this.apiKey = options.apiKey;
     this.maxPages = options.maxPages ?? 0;  // 0 = extract all pages
     this.database = options.database ?? null;
+    this.pdfCache = options.pdfCache ?? null;
   }
 
   /**
-   * Set the database for caching
+   * Set the database for text caching
    */
   setDatabase(database: DecisionDatabase): void {
     this.database = database;
+  }
+
+  /**
+   * Set the PDF file cache
+   */
+  setPdfCache(pdfCache: PdfCache): void {
+    this.pdfCache = pdfCache;
   }
 
   /**
@@ -319,19 +331,22 @@ export class PdfExtractor {
 
   /**
    * Extract PDF text with caching support
-   * Checks database cache first, downloads only if not cached
-   * Saves extracted text to cache after successful extraction
+   * Uses a three-tier cache strategy:
+   * 1. Text cache (SQLite) - instant return of extracted text
+   * 2. File cache (local files) - extract from cached PDF file
+   * 3. Network download (ScraperAPI) - download, cache, and extract
    *
    * @param decisionId - The decision ID for cache lookup/storage
    * @param pdfUrl - The URL to download PDF from (if not cached)
+   * @param databaseType - The database type for file cache organization (optional)
    * @returns PdfExtractionResult with cached=true if from cache
    */
-  async extractWithCache(decisionId: string, pdfUrl: string): Promise<PdfExtractionResult> {
-    // Check cache first
+  async extractWithCache(decisionId: string, pdfUrl: string, databaseType?: DatabaseType): Promise<PdfExtractionResult> {
+    // TIER 1: Check text cache first (fastest - returns extracted text directly)
     if (this.database) {
       const cachedText = this.database.getCachedPdfText(decisionId);
       if (cachedText !== null) {
-        console.error(`[PdfExtractor] Cache HIT for decision ${decisionId}`);
+        console.error(`[PdfExtractor] Text cache HIT for decision ${decisionId}`);
         // Return cached result - we don't know original page count, estimate from text
         // Average Hebrew legal doc: ~3000 chars per page
         const estimatedPages = Math.max(1, Math.ceil(cachedText.length / 3000));
@@ -342,19 +357,58 @@ export class PdfExtractor {
           cached: true
         };
       }
-      console.error(`[PdfExtractor] Cache MISS for decision ${decisionId}`);
+      console.error(`[PdfExtractor] Text cache MISS for decision ${decisionId}`);
     }
 
-    // Download and extract
-    const result = await this.downloadAndExtract(pdfUrl);
+    // TIER 2: Check file cache (fast - reads local PDF file)
+    const dbType = databaseType ?? 'decisive_appraiser'; // Default database type
+    if (this.pdfCache) {
+      const cachedPdfBuffer = await this.pdfCache.loadPdf(decisionId, dbType);
+      if (cachedPdfBuffer !== null) {
+        console.error(`[PdfExtractor] File cache HIT for decision ${decisionId}`);
+        // Extract text from cached PDF file
+        const result = await this.extractText(cachedPdfBuffer);
 
-    // Save to cache
+        // Save extracted text to text cache for even faster access next time
+        if (this.database && result.fullText) {
+          const saved = this.database.savePdfText(decisionId, result.fullText);
+          if (saved) {
+            console.error(`[PdfExtractor] Saved ${result.fullText.length} chars to text cache from file cache`);
+          }
+        }
+
+        return {
+          ...result,
+          cached: true
+        };
+      }
+      console.error(`[PdfExtractor] File cache MISS for decision ${decisionId}`);
+    }
+
+    // TIER 3: Download from network (slowest - uses ScraperAPI)
+    console.error(`[PdfExtractor] Downloading from network for decision ${decisionId}`);
+    const pdfBuffer = await this.downloadPdf(pdfUrl);
+
+    // Save PDF to file cache for offline access
+    if (this.pdfCache) {
+      try {
+        await this.pdfCache.savePdf(decisionId, dbType, pdfBuffer);
+        console.error(`[PdfExtractor] Saved PDF to file cache for decision ${decisionId}`);
+      } catch (error) {
+        console.error(`[PdfExtractor] WARNING: Failed to save PDF to file cache:`, error);
+      }
+    }
+
+    // Extract text from downloaded PDF
+    const result = await this.extractText(pdfBuffer);
+
+    // Save extracted text to text cache
     if (this.database && result.fullText) {
       const saved = this.database.savePdfText(decisionId, result.fullText);
       if (saved) {
-        console.error(`[PdfExtractor] Saved ${result.fullText.length} chars to cache for decision ${decisionId}`);
+        console.error(`[PdfExtractor] Saved ${result.fullText.length} chars to text cache for decision ${decisionId}`);
       } else {
-        console.error(`[PdfExtractor] WARNING: Failed to save to cache for decision ${decisionId}`);
+        console.error(`[PdfExtractor] WARNING: Failed to save to text cache for decision ${decisionId}`);
       }
     }
 
@@ -373,6 +427,46 @@ export class PdfExtractor {
    */
   getMaxPages(): number {
     return this.maxPages;
+  }
+
+  /**
+   * Smart extraction with fallback handling
+   * Returns text if available, or indicates the document is scanned
+   *
+   * @param decisionId - The decision ID for cache lookup
+   * @param pdfUrl - The URL to download PDF from
+   * @param minTextLength - Minimum text length to consider extraction successful (default: 100)
+   * @param databaseType - The database type for file cache organization (optional)
+   */
+  async smartExtract(
+    decisionId: string,
+    pdfUrl: string,
+    minTextLength: number = 100,
+    databaseType?: DatabaseType
+  ): Promise<{ type: 'text'; result: PdfExtractionResult } | { type: 'scanned'; pdfUrl: string; message: string }> {
+    console.error(`[PdfExtractor] Smart extraction for decision ${decisionId}`);
+
+    // Try text extraction (uses cache if available)
+    try {
+      const textResult = await this.extractWithCache(decisionId, pdfUrl, databaseType);
+
+      // Check if we got meaningful text
+      if (textResult.fullText && textResult.fullText.trim().length >= minTextLength) {
+        console.error(`[PdfExtractor] Text extraction successful: ${textResult.fullText.length} chars`);
+        return { type: 'text', result: textResult };
+      }
+
+      console.error(`[PdfExtractor] Text too short (${textResult.fullText.length} chars), document appears to be scanned`);
+    } catch (error) {
+      console.error(`[PdfExtractor] Text extraction failed:`, error);
+    }
+
+    // Return scanned document indicator with URL for manual viewing
+    return {
+      type: 'scanned',
+      pdfUrl: pdfUrl,
+      message: 'This PDF appears to be a scanned document with no extractable text. Use the PDF URL to view the document directly.'
+    };
   }
 }
 
