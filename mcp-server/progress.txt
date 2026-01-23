@@ -399,3 +399,29 @@
   - Next task is US-PDF-009: Create prefetch script
   - The scanned document flow now leverages Claude's vision capabilities
 ---
+
+## Iteration 18 — US-PDF-009: Create Prefetch Script (IMPLEMENTED)
+- **What was done:** Created bulk PDF prefetch script for offline access
+- **Files created:**
+  - `scripts/prefetch-pdfs.ts` - Complete prefetch script with:
+    - Downloads all PDFs with URLs in database to local cache
+    - `--limit=N` option to limit number of PDFs to download
+    - `--delay=N` option for delay between requests (default 2000ms)
+    - `--database=TYPE` option to filter by database type
+    - `--skip-cached` skips already cached PDFs (default: true)
+    - `--dry-run` mode to preview without downloading
+    - Progress tracking with downloaded/failed counts
+    - Human-readable stats (bytes, duration, speed)
+    - JSON log output for automation
+- **Package changes:**
+  - Added npm script: `"prefetch-pdfs": "tsx scripts/prefetch-pdfs.ts"`
+- **Technical notes:**
+  - Uses existing PdfExtractor.downloadPdf() for ScraperAPI downloads
+  - Uses PdfCache.savePdf() for local file storage
+  - Records cache entries in SQLite via db.recordPdfCache()
+  - 2-second delay between requests to avoid rate limiting
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - ALL tasks in PRD-PDF-CACHE.md are now complete
+  - The MCP server now has full Pinecone integration and PDF caching
+---

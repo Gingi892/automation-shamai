@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "index-all": "tsx scripts/index-all.ts",
-    "daily-update": "tsx scripts/daily-update.ts"
+    "daily-update": "tsx scripts/daily-update.ts",
+    "prefetch-pdfs": "tsx scripts/prefetch-pdfs.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

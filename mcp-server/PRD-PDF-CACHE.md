@@ -30,7 +30,7 @@ The current MCP server has critical issues:
 | US-PDF-006 | [x] | Add cache management tools |
 | US-PDF-007 | [x] | Add PDF to image conversion |
 | US-PDF-008 | [x] | Return images for scanned PDFs |
-| US-PDF-009 | [ ] | Create prefetch script |
+| US-PDF-009 | [x] | Create prefetch script |
 
 ---
 
