@@ -373,3 +373,29 @@
   - Next task is US-PDF-008: Return images when text extraction fails
   - The convertToImages function integrates with pdf-extractor's smartExtract
 ---
+
+## Iteration 17 — US-PDF-008: Return Images for Scanned PDFs (IMPLEMENTED)
+- **What was done:** Modified `handleReadPdf` to return images when text extraction fails
+- **Files modified:**
+  - `src/pdf-extractor.ts`:
+    - Updated `smartExtract()` return type to include `pdfBuffer` for scanned documents
+    - Method now downloads/loads PDF first, then attempts text extraction
+    - Returns `pdfBuffer` along with `pdfUrl` for scanned documents
+  - `src/index.ts`:
+    - Added imports for `convertToImages`, `toMcpImageContent`, `ImageResult` from pdf-to-image
+    - Rewrote scanned document handling in `handleReadPdf()`:
+      - Converts first 5 pages to JPEG images using `convertToImages`
+      - Returns images in MCP format with `{ type: 'image', data: base64, mimeType: 'image/jpeg' }`
+      - Includes metadata with extractionType: 'scanned_images'
+      - Adds Hebrew instruction for Claude to read text visually
+      - Falls back to URL if image conversion fails
+- **Technical notes:**
+  - Uses minTextLength threshold of 100 chars to detect scanned docs
+  - Converts first 5 pages at 1.5x scale with 80% JPEG quality
+  - MCP response includes text metadata first, then image content blocks
+  - Images sized to stay under 900KB each (MCP 1MB limit)
+  - TypeScript compiles cleanly
+- **Learnings for next cycles:**
+  - Next task is US-PDF-009: Create prefetch script
+  - The scanned document flow now leverages Claude's vision capabilities
+---

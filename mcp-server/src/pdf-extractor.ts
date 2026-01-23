@@ -431,7 +431,7 @@ export class PdfExtractor {
 
   /**
    * Smart extraction with fallback handling
-   * Returns text if available, or indicates the document is scanned
+   * Returns text if available, or indicates the document is scanned with PDF buffer for image conversion
    *
    * @param decisionId - The decision ID for cache lookup
    * @param pdfUrl - The URL to download PDF from
@@ -443,16 +443,68 @@ export class PdfExtractor {
     pdfUrl: string,
     minTextLength: number = 100,
     databaseType?: DatabaseType
-  ): Promise<{ type: 'text'; result: PdfExtractionResult } | { type: 'scanned'; pdfUrl: string; message: string }> {
+  ): Promise<{ type: 'text'; result: PdfExtractionResult } | { type: 'scanned'; pdfUrl: string; pdfBuffer: Buffer; message: string }> {
     console.error(`[PdfExtractor] Smart extraction for decision ${decisionId}`);
 
-    // Try text extraction (uses cache if available)
+    // Get PDF buffer - either from cache or download
+    let pdfBuffer: Buffer | null = null;
+    const dbType = databaseType ?? 'decisive_appraiser';
+
+    // Try to load from file cache first
+    if (this.pdfCache) {
+      pdfBuffer = await this.pdfCache.loadPdf(decisionId, dbType);
+      if (pdfBuffer) {
+        console.error(`[PdfExtractor] Loaded PDF from file cache for ${decisionId}`);
+      }
+    }
+
+    // Download if not in cache
+    if (!pdfBuffer) {
+      try {
+        pdfBuffer = await this.downloadPdf(pdfUrl);
+        // Save to file cache for future use
+        if (this.pdfCache) {
+          await this.pdfCache.savePdf(decisionId, dbType, pdfBuffer);
+          console.error(`[PdfExtractor] Saved PDF to file cache for ${decisionId}`);
+        }
+      } catch (downloadError) {
+        console.error(`[PdfExtractor] Failed to download PDF:`, downloadError);
+        throw downloadError;
+      }
+    }
+
+    // Check text cache first (fastest path)
+    if (this.database) {
+      const cachedText = this.database.getCachedPdfText(decisionId);
+      if (cachedText !== null && cachedText.trim().length >= minTextLength) {
+        console.error(`[PdfExtractor] Text cache HIT for decision ${decisionId}`);
+        const estimatedPages = Math.max(1, Math.ceil(cachedText.length / 3000));
+        return {
+          type: 'text',
+          result: {
+            fullText: cachedText,
+            pageCount: estimatedPages,
+            extractedPages: estimatedPages,
+            cached: true
+          }
+        };
+      }
+    }
+
+    // Try text extraction from the PDF buffer
     try {
-      const textResult = await this.extractWithCache(decisionId, pdfUrl, databaseType);
+      const textResult = await this.extractText(pdfBuffer);
 
       // Check if we got meaningful text
       if (textResult.fullText && textResult.fullText.trim().length >= minTextLength) {
         console.error(`[PdfExtractor] Text extraction successful: ${textResult.fullText.length} chars`);
+
+        // Save to text cache
+        if (this.database && textResult.fullText) {
+          this.database.savePdfText(decisionId, textResult.fullText);
+          console.error(`[PdfExtractor] Saved ${textResult.fullText.length} chars to text cache`);
+        }
+
         return { type: 'text', result: textResult };
       }
 
@@ -461,11 +513,12 @@ export class PdfExtractor {
       console.error(`[PdfExtractor] Text extraction failed:`, error);
     }
 
-    // Return scanned document indicator with URL for manual viewing
+    // Return scanned document indicator with PDF buffer for image conversion
     return {
       type: 'scanned',
       pdfUrl: pdfUrl,
-      message: 'This PDF appears to be a scanned document with no extractable text. Use the PDF URL to view the document directly.'
+      pdfBuffer: pdfBuffer,
+      message: 'This PDF appears to be a scanned document with no extractable text. Converting to images for visual reading.'
     };
   }
 }

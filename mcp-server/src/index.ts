@@ -18,6 +18,7 @@ import { getPineconeClient, PineconeClient, PineconeQueryResult } from './pineco
 import { createIndexer } from './indexer.js';
 import { createPdfExtractor, PdfExtractor, PdfExtractionResult } from './pdf-extractor.js';
 import { getPdfCache } from './pdf-cache.js';
+import { convertToImages, toMcpImageContent, ImageResult } from './pdf-to-image.js';
 import {
   DatabaseType,
   SearchParams,
@@ -1203,7 +1204,56 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
         }]
       };
     } else {
-      // Scanned document - return URL for manual viewing
+      // Scanned document - convert to images for Claude's vision capabilities
+      console.error(`[handleReadPdf] Converting scanned PDF to images for decision ${decision.id}`);
+
+      try {
+        // Convert PDF pages to images (first 3-5 pages)
+        const images = await convertToImages(extraction.pdfBuffer, {
+          maxPages: 5,
+          scale: 1.5,
+          jpegQuality: 80
+        });
+
+        if (images.length > 0) {
+          // Return images in MCP format for Claude's vision
+          const mcpImages = toMcpImageContent(images);
+
+          // Create content array with metadata first, then images
+          const content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: 'image/jpeg' }> = [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: decision.id,
+                title: decision.title,
+                database: decision.database,
+                source, // 'sqlite' or 'pinecone' - indicates where decision was found
+                extractionType: 'scanned_images',
+                note: 'This PDF is a scanned document. The following images contain the document pages.',
+                noteHe: 'המסמך סרוק. התמונות הבאות מכילות את דפי המסמך.',
+                pagesConverted: images.length,
+                imageSizes: images.map(img => ({
+                  page: img.pageNumber,
+                  width: img.width,
+                  height: img.height,
+                  sizeKB: Math.round(img.sizeBytes / 1024)
+                })),
+                instruction: 'Please read the Hebrew text from these images and extract the relevant information. The document is a land appraisal decision.',
+                instructionHe: 'אנא קרא את הטקסט העברי מהתמונות וחלץ את המידע הרלוונטי. המסמך הוא החלטת שמאות מקרקעין.'
+              }, null, 2)
+            },
+            ...mcpImages
+          ];
+
+          console.error(`[handleReadPdf] Returning ${images.length} images for scanned document`);
+
+          return { content };
+        }
+      } catch (imageError) {
+        console.error(`[handleReadPdf] Failed to convert PDF to images:`, imageError);
+      }
+
+      // Fallback if image conversion fails - return URL for manual viewing
       return {
         content: [{
           type: 'text',
@@ -1213,8 +1263,8 @@ async function handleReadPdf(params: { id: string; maxPages?: number }): Promise
             database: decision.database,
             source, // 'sqlite' or 'pinecone' - indicates where decision was found
             extractionType: 'scanned',
-            note: 'This PDF is a scanned document with no extractable text.',
-            noteHe: 'המסמך סרוק ואינו מכיל טקסט שניתן לחילוץ.',
+            note: 'This PDF is a scanned document with no extractable text. Image conversion failed.',
+            noteHe: 'המסמך סרוק ואינו מכיל טקסט שניתן לחילוץ. ההמרה לתמונות נכשלה.',
             pdfUrl: extraction.pdfUrl,
             suggestion: 'You can view the PDF directly using the URL above. Ask the user to describe what they see or provide specific quotes from the document.',
             suggestionHe: 'ניתן לצפות ב-PDF ישירות בקישור למעלה. בקש מהמשתמש לתאר מה הוא רואה או לספק ציטוטים ספציפיים מהמסמך.'

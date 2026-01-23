@@ -29,7 +29,7 @@ The current MCP server has critical issues:
 | US-PDF-005 | [x] | Add pdf_cache tracking table |
 | US-PDF-006 | [x] | Add cache management tools |
 | US-PDF-007 | [x] | Add PDF to image conversion |
-| US-PDF-008 | [ ] | Return images for scanned PDFs |
+| US-PDF-008 | [x] | Return images for scanned PDFs |
 | US-PDF-009 | [ ] | Create prefetch script |
 
 ---
@@ -345,12 +345,13 @@ CREATE TABLE IF NOT EXISTS pdf_cache (
 
 ### US-PDF-008: Return images when text extraction fails
 **Priority**: P2
+**Status**: ✅ COMPLETED
 
 **Acceptance Criteria:**
-- [ ] If extracted text < 100 chars, consider PDF "scanned"
-- [ ] Convert first 3-5 pages to images
-- [ ] Return images in MCP format: `{ type: 'image', data: base64, mimeType: 'image/jpeg' }`
-- [ ] Include prompt asking Claude to extract Hebrew text visually
+- [x] If extracted text < 100 chars, consider PDF "scanned"
+- [x] Convert first 3-5 pages to images
+- [x] Return images in MCP format: `{ type: 'image', data: base64, mimeType: 'image/jpeg' }`
+- [x] Include prompt asking Claude to extract Hebrew text visually
 
 ---
 
