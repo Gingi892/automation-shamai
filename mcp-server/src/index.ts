@@ -3331,17 +3331,7 @@ async function handleQueryAndAggregate(params: {
     return {
       content: [{
         type: 'text',
-        text: `לא נמצאו תוצאות עבור "${params.content_search}"${params.committee ? ` ב${params.committee}` : ''}${params.year ? ` לשנת ${params.year}` : ''}.
-
-סיבות אפשריות:
-1. מונח החיפוש לא נמצא במסמכים
-2. הסינונים מצמצמים מדי
-
-נסה:
-- מונחי חיפוש קצרים יותר (מילה אחת או שתיים)
-- הסר סינון שנה/ועדה
-
-⚠️ אין צורך לנסות ניסוחים שונים — המערכת כבר מפרקת שאלות ארוכות למונחי מפתח.`
+        text: `לא נמצאו תוצאות.`
       }]
     };
   }
@@ -4986,14 +4976,7 @@ async function handleSearchByParameters(params: {
     return {
       content: [{
         type: 'text',
-        text: `לא נמצאו תוצאות עבור ${params.param_type}${params.param_subtype ? ` (${params.param_subtype})` : ''}.
-
-סטטיסטיקות זמינות עבור ${params.param_type}:
-- סה"כ ערכים: ${stats.count}
-- תתי-סוגים: ${stats.subtypes.map(s => `${s.subtype} (${s.count})`).join(', ') || 'אין'}
-${stats.avgValue !== null ? `- ממוצע: ${stats.avgValue.toFixed(2)}, טווח: ${stats.minValue}-${stats.maxValue}` : ''}
-
-נסה להרחיב את הסינונים או לבדוק שפרמטרים חולצו (extract_parameters).`
+        text: `לא נמצאו תוצאות.`
       }]
     };
   }
