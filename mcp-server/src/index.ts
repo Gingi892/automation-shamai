@@ -397,12 +397,14 @@ function extractKeyValuesFromText(pdfText: string): Record<string, string | numb
 function safeOutput(data: any, options?: {
   maxChars?: number;
   allowTruncation?: boolean;
+  suffix?: string;
 }): MCPToolResult {
   const maxChars = options?.maxChars || MAX_OUTPUT_CHARS;
+  const suffix = options?.suffix || '';
   const json = JSON.stringify(data, null, 2);
 
   if (json.length <= maxChars) {
-    return { content: [{ type: 'text', text: json }] };
+    return { content: [{ type: 'text', text: json + suffix }] };
   }
 
   // Response too large - need to truncate intelligently
@@ -420,7 +422,7 @@ function safeOutput(data: any, options?: {
       _suggestionHe: 'השתמש ב-query_and_aggregate לשאלות אנליטיות, או הוסף פילטרים לצמצום התוצאות',
       decisions: data.decisions.slice(0, 10)
     };
-    return { content: [{ type: 'text', text: JSON.stringify(reducedData, null, 2) }] };
+    return { content: [{ type: 'text', text: JSON.stringify(reducedData, null, 2) + suffix }] };
   }
 
   // If data has results array, reduce it
@@ -434,7 +436,7 @@ function safeOutput(data: any, options?: {
       _suggestion: 'Use more specific filters to narrow results',
       results: data.results.slice(0, 10)
     };
-    return { content: [{ type: 'text', text: JSON.stringify(reducedData, null, 2) }] };
+    return { content: [{ type: 'text', text: JSON.stringify(reducedData, null, 2) + suffix }] };
   }
 
   // If data has pdfText or fullText, truncate it
@@ -450,7 +452,7 @@ function safeOutput(data: any, options?: {
       _suggestion: 'Use read_pdf with mode="excerpt" or mode="full" for more text',
       _suggestionHe: 'השתמש ב-read_pdf עם mode="excerpt" או mode="full" לטקסט נוסף'
     };
-    return { content: [{ type: 'text', text: JSON.stringify(reducedData, null, 2) }] };
+    return { content: [{ type: 'text', text: JSON.stringify(reducedData, null, 2) + suffix }] };
   }
 
   // Fallback: simple truncation with warning
@@ -539,6 +541,17 @@ function getExtractionIcon(status: string | undefined): string {
 }
 
 /**
+ * Standard data-collector instructions appended to all search tool responses.
+ * Ensures Claude presents raw facts with sources, never summaries or analysis.
+ */
+const DATA_COLLECTOR_INSTRUCTIONS = `\n\n_instructions:
+- הצג כל תוצאה כשורה בטבלה עם: שמאי, גוש/חלקה, שנה, מה נמצא (ציטוט קצר), וקישור ישיר ל-PDF.
+- אל תוסיף ממוצעים, סיכומים, פרשנות, או "עקרונות שעולים מההכרעות". כל ערך חייב להיות בר-מעקב למסמך ספציפי.
+- אל תנרטב את תהליך החיפוש ("עכשיו אחפש...", "בוא אקרא...") — הצג ישר את הטבלה.
+- אם לא נמצאו תוצאות — אמור "לא נמצאו תוצאות" בלבד. אל תציע חלופות.
+- הטבלה חייבת להיות RTL. עמודת "מסמך" חייבת להופיע תמיד עם קישור לחיץ ל-PDF.`;
+
+/**
  * Format results as CSV (29% fewer tokens than JSON)
  */
 /** Hebrew labels for CSV column headers */
@@ -581,7 +594,6 @@ function formatResultsAsCSV(
 1. הצג טבלה בעברית מימין לשמאל (RTL) — העמודה הראשונה מימין
 2. כל שורה היא עובדה קונקרטית ממסמך ספציפי — הצג כמות שהיא
 3. עמודת "מסמך" חייבת להופיע תמיד עם קישור לחיץ ל-PDF
-4. ציין מקור: "מאגר שמאות מקרקעין — מדינת ישראל"
 
 `;
 
@@ -1983,7 +1995,7 @@ async function handleSearchDecisions(params: SearchParams): Promise<MCPToolResul
         _extraction_note: getExtractionNote(r.decision.extractionStatus),
         _alternative: getAlternativeAccess(r.decision.extractionStatus, r.decision)
       }))
-    });
+    }, { suffix: DATA_COLLECTOR_INSTRUCTIONS });
   }
 
   // Regular search
@@ -2016,7 +2028,7 @@ async function handleSearchDecisions(params: SearchParams): Promise<MCPToolResul
     note: `PDF text truncated to ${MAX_PDFTEXT_IN_SEARCH} chars. Use read_pdf tool for full text.`,
     tip: 'For aggregate analysis across many documents, use query_and_aggregate tool instead.',
     decisions: decisionsWithTruncatedText
-  });
+  }, { suffix: DATA_COLLECTOR_INSTRUCTIONS });
 }
 
 async function handleGetDecision(params: { id: string }): Promise<MCPToolResult> {
@@ -2561,7 +2573,7 @@ async function handleSemanticSearch(params: { query: string; limit?: number; dat
             pdfExcerpt: pdfText ? pdfText.substring(0, 1000) + (pdfText.length > 1000 ? '...' : '') : null
           };
         })
-      }, null, 2)
+      }, null, 2) + DATA_COLLECTOR_INSTRUCTIONS
     }]
   };
 }
@@ -2749,7 +2761,7 @@ async function handleSearchDecisionsIndex(params: SearchParams): Promise<MCPTool
         next_step: 'Call get_decision_summaries with interesting IDs for more details',
         next_step_he: 'קרא ל-get_decision_summaries עם מזהים מעניינים לפרטים נוספים',
         results: indexResults
-      }, null, 2)
+      }, null, 2) + DATA_COLLECTOR_INSTRUCTIONS
     }]
   };
 }
@@ -2854,7 +2866,7 @@ async function handleGetDecisionSummaries(params: { ids: string[] }): Promise<MC
         next_step: 'Call get_decision_detail for full PDF text of specific decision',
         next_step_he: 'קרא ל-get_decision_detail לטקסט PDF מלא של החלטה ספציפית',
         summaries: summaries
-      }, null, 2)
+      }, null, 2) + DATA_COLLECTOR_INSTRUCTIONS
     }]
   };
 }
@@ -3377,17 +3389,10 @@ async function handleQueryAndAggregate(params: {
   const csvOutput = formatResultsAsCSV(limitedRows, columns, summary);
 
   // Response behavior instructions
-  const searchHint = `\n\n_instructions:
-- הצג כל תוצאה כשורה בטבלה עם: שמאי, גוש/חלקה, שנה, מה נמצא, וקישור ישיר למסמך.
-- אל תוסיף ממוצעים, סיכומים, או פרשנות. כל ערך חייב להיות בר-מעקב למסמך ספציפי.
-- עמודת "מסמך" חייבת להופיע תמיד — היא מכילה קישור ישיר ל-PDF. הצג כ-markdown link לחיץ.
-- הטבלה חייבת להיות RTL (עברית מימין לשמאל).
-- ציין מקור: "מאגר שמאות מקרקעין — מדינת ישראל"`;
-
   return {
     content: [{
       type: 'text',
-      text: csvOutput + searchHint
+      text: csvOutput + DATA_COLLECTOR_INSTRUCTIONS
     }]
   };
 }
@@ -3516,7 +3521,7 @@ async function handleExportResults(params: {
 </head>
 <body dir="rtl">
 <h2 style="font-family:Arial; direction:rtl;">תוצאות חיפוש: ${escHtml(params.content_search)}${params.committee ? ' — ' + escHtml(params.committee) : ''}${params.year ? ' — ' + params.year : ''}</h2>
-<p style="font-family:Arial; direction:rtl;">מקור: מאגר שמאות מקרקעין — מדינת ישראל | סה"כ: ${processedRows.length} תוצאות</p>
+<p style="font-family:Arial; direction:rtl;">סה"כ: ${processedRows.length} תוצאות</p>
 <table>
 <tr>${columns.map(col => `<th>${escHtml(HEBREW_COLUMN_LABELS[col] || col)}</th>`).join('')}</tr>\n`;
 
@@ -5010,16 +5015,10 @@ ${stats.avgValue !== null ? `- ממוצע: ${stats.avgValue.toFixed(2)}, טוו�
   // Stats
   let statsLine = `\n---\nסה"כ: ${totalCount} תוצאות | מוצג: ${rows.length}`;
 
-  const searchHint = `\n\n_instructions:
-- הצג כל תוצאה כשורה בטבלה עם: שמאי, גוש/חלקה, שנה, מה נמצא, וקישור ישיר למסמך.
-- אל תוסיף ממוצעים, סיכומים, או פרשנות. כל ערך חייב להיות בר-מעקב למסמך ספציפי.
-- הטבלה חייבת להיות RTL.
-- ציין מקור: "מאגר שמאות מקרקעין — מדינת ישראל"`;
-
   return {
     content: [{
       type: 'text',
-      text: csv + statsLine + searchHint
+      text: csv + statsLine + DATA_COLLECTOR_INSTRUCTIONS
     }]
   };
 }
