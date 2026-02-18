@@ -545,12 +545,13 @@ function getExtractionIcon(status: string | undefined): string {
  * Ensures Claude presents raw facts with sources, never summaries or analysis.
  */
 const DATA_COLLECTOR_INSTRUCTIONS = `\n\n_instructions:
+⛔ עצור. הצג את הנתונים האלה כטבלה עכשיו. אל תקרא לשום כלי נוסף. אל תקרא read_pdf. אל תחפש שוב עם ניסוח אחר. הנתונים שקיבלת הם התשובה.
+
+כללים:
 - הצג כל תוצאה כשורה בטבלה עם: שמאי, גוש/חלקה, שנה, מה נמצא (ציטוט קצר), וקישור ישיר ל-PDF.
-- אל תוסיף ממוצעים, סיכומים, פרשנות, או "עקרונות שעולים מההכרעות". כל ערך חייב להיות בר-מעקב למסמך ספציפי.
-- אל תנרטב את תהליך החיפוש ("עכשיו אחפש...", "בוא אקרא...") — הצג ישר את הטבלה.
-- אם לא נמצאו תוצאות — אמור "לא נמצאו תוצאות" בלבד. אל תציע חלופות.
-- הטבלה חייבת להיות RTL. עמודת "מסמך" חייבת להופיע תמיד עם קישור לחיץ ל-PDF.
-- **אסור לקרוא מסמכי PDF נוספים.** הצג מה שיש בתוצאות החיפוש. המשתמש יבקש לקרוא מסמך ספציפי אם הוא רוצה.`;
+- אל תוסיף ממוצעים, סיכומים, פרשנות, או "עקרונות שעולים מההכרעות".
+- אל תנרטב את תהליך החיפוש. אל תאמר "הנתונים לא מספיק ספציפיים" ואל תנסה לצמצם — המשתמש יחליט בעצמו.
+- הטבלה חייבת להיות RTL. עמודת "מסמך" חייבת להופיע תמיד עם קישור לחיץ ל-PDF.`;
 
 /**
  * Format results as CSV (29% fewer tokens than JSON)
@@ -2130,6 +2131,8 @@ async function handleReadPdf(params: {
   const offset = params.offset || 0;
 
   // Helper to format response based on mode
+  const READ_PDF_STOP = `\n\n_instructions: ⛔ קראת PDF. עצור כאן. הצג את מה שמצאת בטבלה. אסור לקרוא read_pdf שוב או לחפש שוב. המשתמש יבקש מסמך נוסף אם הוא רוצה.`;
+
   function formatPdfResponse(
     pdfText: string,
     metadata: { id: string; title: string; database?: string; source: string; cached?: boolean }
@@ -2151,7 +2154,7 @@ async function handleReadPdf(params: {
         next_step: totalChars > MAX_EXCERPT_CHARS
           ? 'Use mode="excerpt" for more text or mode="full" for complete document'
           : 'Full text shown above (document is short)'
-      });
+      }, { suffix: READ_PDF_STOP });
     }
 
     if (mode === 'excerpt') {
@@ -2169,7 +2172,7 @@ async function handleReadPdf(params: {
         has_more: offset + excerptChars < totalChars,
         next_offset: offset + excerptChars < totalChars ? offset + excerptChars : null,
         progress: `${Math.min(offset + text.length, totalChars)}/${totalChars} chars`
-      });
+      }, { suffix: READ_PDF_STOP });
     }
 
     // mode === 'full' - Paginated full text
@@ -2184,7 +2187,7 @@ async function handleReadPdf(params: {
       has_more: offset + chunkSize < totalChars,
       next_offset: offset + chunkSize < totalChars ? offset + chunkSize : null,
       progress: `${Math.min(offset + chunkSize, totalChars)}/${totalChars} chars`
-    });
+    }, { suffix: READ_PDF_STOP });
   }
 
   // Try to get decision from SQLite first - check for CACHED text before requiring network
