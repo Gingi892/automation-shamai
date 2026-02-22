@@ -43,18 +43,18 @@ export const QUERY_PATTERNS_CONTENT = `# דפוסי שאילתות שמאיות 
 ### חיפוש מקדמים (Coefficients)
 | דפוס שאלה | כלי | פרמטרים |
 |-----------|-----|----------|
-| "מה המקדם ב[עיר]?" | query_and_aggregate | content_search="מקדם", committee="[עיר]" |
-| "מקדם דחייה ב[עיר]" | query_and_aggregate | content_search="מקדם דחייה", committee="[עיר]" |
-| "מקדם גודל ממוצע ב[עיר]" | query_and_aggregate | content_search="מקדם גודל", committee="[עיר]" |
-| "שיעור היוון ב[עיר]" | query_and_aggregate | content_search="שיעור היוון", committee="[עיר]" |
+| "מה המקדם ב[עיר]?" | semantic_search | query="מקדם [סוג]", database="decisive_appraiser" |
+| "מקדם דחייה ב[עיר]" | semantic_search | query="מקדם דחייה [עיר]" |
+| "מקדם גובה פנים דירה" | semantic_search | query="מקדם גובה פנים דירה" |
+| "שיעור היוון ב[עיר]" | semantic_search | query="שיעור היוון [עיר]" |
 | "מקדמי דחייה מעל 0.9" | search_by_parameters | param_type="coefficient", param_subtype="דחייה", value_min=0.9 |
 | "מקדמי גודל בתל אביב" | search_by_parameters | param_type="coefficient", param_subtype="גודל", committee="תל אביב" |
 
 ### מחירים ושווי (Prices & Values)
 | דפוס שאלה | כלי | פרמטרים |
 |-----------|-----|----------|
-| "מחיר למ"ר ב[עיר]" | query_and_aggregate | content_search="מחיר למ\\"ר", committee="[עיר]" |
-| "שווי קרקע ב[עיר]" | query_and_aggregate | content_search="שווי קרקע", committee="[עיר]" |
+| "מחיר למ"ר ב[עיר]" | semantic_search | query="מחיר למטר [עיר]" |
+| "שווי קרקע ב[עיר]" | semantic_search | query="שווי קרקע [עיר]" |
 | "מחיר למ"ר נטו מעל 5000" | search_by_parameters | param_type="price_per_meter", param_subtype="נטו", value_min=5000 |
 | "דמי סחירות ב[עיר]" | search_by_parameters | param_type="tradability_fee", committee="[עיר]" |
 | "שווי זכויות בנייה" | search_by_parameters | param_type="building_rights_value" |

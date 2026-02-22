@@ -2557,7 +2557,7 @@ async function handleSemanticSearch(params: { query: string; limit?: number; dat
   const stats = embeddings.getStats();
   const results = await embeddings.search(
     params.query,
-    params.limit || 20,
+    params.limit || 30,
     params.database ? { database: params.database } : undefined
   );
 
@@ -5232,17 +5232,16 @@ async function main() {
 - "ש"מ" = שמאי מכריע, "ו"מ" = ועדה מקומית, "ה"ה" = היטל השבחה, "רמ"י" = רשות מקרקעי ישראל.
 
 ## בחירת כלי (בחר אחד בלבד!)
-- **"מקדם X ב-Y"** → query_and_aggregate
-- **שאלה מושגית** → semantic_search
-- **גוש/חלקה/שמאי/ועדה** → search_decisions
-- **מקדם מעל/מתחת ערך** → search_by_parameters
+- **כלי ברירת מחדל לרוב השאלות** → semantic_search (מבין משמעות, מחזיר 30 מסמכים רלוונטיים עם קישורים — **השתמש בזה אלא אם יש סיבה ספציפית לכלי אחר**)
+- **גוש/חלקה/שמאי/ועדה ספציפיים** → search_decisions
+- **מקדם מעל/מתחת ערך מדויק** → search_by_parameters
 - **"קרא את ההחלטה"** → read_pdf (רק כשהמשתמש מבקש!)
 
-⚠️ **content_search חייב להיות קצר — 2-3 מילים מפתח בלבד.** אל תעתיק את כל השאלה של המשתמש.
 דוגמאות:
-- "מקדם פגיעה/השבחה בתוספת גובה פנים דירה" → content_search="גובה פנים" (לא את כל המשפט!)
-- "שיעור היוון בתל אביב 2024" → content_search="שיעור היוון"
-- "מקדם דחייה בהרצליה" → content_search="מקדם דחייה"
+- "מקדם גובה פנים דירה בתל אביב" → semantic_search עם query="מקדם גובה פנים דירה", database="decisive_appraiser"
+- "שיעור היוון בהרצליה" → semantic_search עם query="שיעור היוון"
+- "גוש 6214 חלקה 353" → search_decisions עם block="6214", plot="353"
+- "מקדם דחייה מעל 0.9" → search_by_parameters עם param_type="coefficient", value_min=0.9
 
 ## מאגרים
 - decisive_appraiser (24,478) — שמאי מכריע
