@@ -713,6 +713,202 @@ export function getPrimaryValue(section: ExtractedSection | null): ExtractedValu
 }
 
 /**
+ * Generate spelling variants for Hebrew search terms.
+ * Handles common variations like דחייה/דחיה/דחי.
+ */
+function generateTermVariants(term: string): string[] {
+  const variants = [term];
+
+  // Handle ייה/יה variations (common in Hebrew: דחייה/דחיה)
+  if (term.includes('ייה')) {
+    variants.push(term.replace(/ייה/g, 'יה'));
+  }
+  if (term.includes('יה') && !term.includes('ייה')) {
+    variants.push(term.replace(/יה/g, 'ייה'));
+  }
+
+  // Try truncating final ה from words ending in ייה/יה
+  // This catches "דחי" matching both "דחייה" and "דחיה"
+  const words = term.split(/\s+/);
+  if (words.length >= 2) {
+    const lastWord = words[words.length - 1];
+    if (/יי?ה$/.test(lastWord)) {
+      const truncated = lastWord.replace(/יי?ה$/, 'י');
+      variants.push([...words.slice(0, -1), truncated].join(' '));
+    }
+
+    // Add variant with definite article ה before second word
+    // "מקדם דחייה" → "מקדם הדחייה"
+    const withH = [...words.slice(0, -1), 'ה' + lastWord].join(' ');
+    variants.push(withH);
+    // Also handle ייה/יה for the ה-prefixed variant
+    if (lastWord.includes('ייה')) {
+      variants.push([...words.slice(0, -1), 'ה' + lastWord.replace('ייה', 'יה')].join(' '));
+    }
+  }
+
+  return [...new Set(variants)];
+}
+
+/**
+ * Get the most relevant value from a section for a given search term.
+ * Searches for the term within the section text and picks the nearest numeric value.
+ * Falls back to getPrimaryValue() when no term-specific match is found.
+ */
+export function getSearchTermValue(
+  section: ExtractedSection | null,
+  searchTerm: string | undefined
+): ExtractedValue | null {
+  if (!section) return null;
+  if (!searchTerm || searchTerm.trim().length === 0) return getPrimaryValue(section);
+
+  const text = section.text;
+  if (!text || text.length === 0) return getPrimaryValue(section);
+
+  const variants = generateTermVariants(searchTerm.trim());
+  const range = getValueRange(searchTerm);
+
+  let bestCandidate: ExtractedValue | null = null;
+  let bestDistance = Infinity;
+
+  for (const variant of variants) {
+    let searchIdx = 0;
+    while (true) {
+      const found = text.indexOf(variant, searchIdx);
+      if (found === -1) break;
+
+      // Look for numeric values within 150 chars after the term
+      const windowStart = found + variant.length;
+      const windowEnd = Math.min(text.length, windowStart + 150);
+      const window = text.substring(windowStart, windowEnd);
+
+      const numberPattern = /(\d+(?:[.,]\d+)*)/g;
+      let match;
+      while ((match = numberPattern.exec(window)) !== null) {
+        const raw = match[1];
+
+        // Skip dates
+        if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(raw)) continue;
+        const afterNum = window.substring(match.index + raw.length);
+        if (/^\.\d{4}/.test(afterNum)) continue;
+
+        const parsed = parseHebrewNumber(raw);
+        if (parsed === null || isNaN(parsed) || parsed <= 0) continue;
+
+        // Apply range filter
+        if (range && (parsed < range.min || parsed > range.max)) continue;
+
+        // Skip paragraph/section numbers (preceded by many Hebrew words)
+        if (hasHebrewWordsBeforeNumber(window, match.index)) continue;
+
+        // Build context
+        const ctxStart = Math.max(0, found - 20);
+        const ctxEnd = Math.min(text.length, windowStart + match.index + raw.length + 30);
+        const context = text.substring(ctxStart, ctxEnd).replace(/\s+/g, ' ').trim();
+
+        if (match.index < bestDistance) {
+          bestDistance = match.index;
+          // When searching for a coefficient (מקדם), force unit to 'מקדם'
+          // so values display as plain decimals, not "0.75%"
+          const unit = range ? 'מקדם' : detectUnit(context);
+          bestCandidate = {
+            raw,
+            numeric: parsed,
+            unit,
+            context: context.substring(0, 120),
+            charIndex: section.charIndex + found,
+          };
+        }
+
+        break; // Only take first valid number after each term occurrence
+      }
+
+      searchIdx = found + 1;
+    }
+  }
+
+  if (bestCandidate) return bestCandidate;
+
+  // When searching for a specific parameter type (מקדם, שיעור, etc.) that has
+  // a value range, don't fall back to generic values — a blank cell is better
+  // than showing an unrelated ₪ amount or percentage.
+  if (range) return null;
+
+  return getPrimaryValue(section);
+}
+
+/**
+ * Extract a value from full document text by searching near the search term.
+ * Used as a last-resort fallback when section-specific extraction finds nothing.
+ * Places the result in the "ruling" column since we can't determine which party.
+ */
+export function extractValueFromFullText(
+  pdfText: string,
+  searchTerm: string
+): ExtractedValue | null {
+  if (!pdfText || !searchTerm) return null;
+
+  const text = normalizeText(pdfText);
+  const variants = generateTermVariants(searchTerm.trim());
+  const range = getValueRange(searchTerm);
+
+  // Collect all values near the term, pick the most common (mode)
+  const allValues: { value: ExtractedValue; distance: number }[] = [];
+
+  for (const variant of variants) {
+    let idx = 0;
+    let occurrences = 0;
+    while (occurrences < 20) {
+      const found = text.indexOf(variant, idx);
+      if (found === -1) break;
+      occurrences++;
+
+      const windowStart = found + variant.length;
+      const windowEnd = Math.min(text.length, windowStart + 150);
+      const window = text.substring(windowStart, windowEnd);
+
+      const numberPattern = /(\d+(?:[.,]\d+)*)/g;
+      let match;
+      while ((match = numberPattern.exec(window)) !== null) {
+        const raw = match[1];
+        if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(raw)) continue;
+        const afterNum = window.substring(match.index + raw.length);
+        if (/^\.\d{4}/.test(afterNum)) continue;
+
+        const parsed = parseHebrewNumber(raw);
+        if (parsed === null || isNaN(parsed) || parsed <= 0) continue;
+        if (range && (parsed < range.min || parsed > range.max)) continue;
+        if (hasHebrewWordsBeforeNumber(window, match.index)) continue;
+
+        const ctxStart = Math.max(0, found - 20);
+        const ctxEnd = Math.min(text.length, windowStart + match.index + raw.length + 30);
+        const context = text.substring(ctxStart, ctxEnd).replace(/\s+/g, ' ').trim();
+
+        allValues.push({
+          value: {
+            raw,
+            numeric: parsed,
+            unit: range ? 'מקדם' : detectUnit(context),
+            context: context.substring(0, 120),
+            charIndex: found,
+          },
+          distance: match.index,
+        });
+        break;
+      }
+
+      idx = found + 1;
+    }
+  }
+
+  if (allValues.length === 0) return null;
+
+  // Return the value closest to any term occurrence
+  allValues.sort((a, b) => a.distance - b.distance);
+  return allValues[0].value;
+}
+
+/**
  * Format a value for display with its unit.
  */
 export function formatExtractedValue(value: ExtractedValue): string {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getElasticClient, DECISIONS_INDEX } from '@/lib/elasticsearch';
 import { generateQueryEmbedding } from '@/lib/embeddings';
 import { preprocessQuery } from '@/lib/query-preprocessor';
-import { extractSections, getPrimaryValue, formatExtractedValue } from '@/lib/section-extractor';
+import { extractSections, getSearchTermValue, extractValueFromFullText, formatExtractedValue } from '@/lib/section-extractor';
 import type { DatabaseType } from '@/types/api';
 
 interface CompareRequest {
@@ -169,13 +169,22 @@ export async function POST(request: NextRequest) {
       const pdfText = pdfTexts.get(id);
       if (!pdfText) continue;
 
-      const extraction = extractSections(id, pdfText, body.query);
+      const extraction = extractSections(id, pdfText, textQuery || body.query);
 
-      const partyAVal = getPrimaryValue(extraction.partyA);
-      const partyBVal = getPrimaryValue(extraction.partyB);
-      const rulingVal = getPrimaryValue(extraction.ruling);
+      let partyAVal = getSearchTermValue(extraction.partyA, textQuery);
+      let partyBVal = getSearchTermValue(extraction.partyB, textQuery);
+      let rulingVal = getSearchTermValue(extraction.ruling, textQuery);
 
-      // Keep rows with at least a ruling value
+      // When section-specific extraction yields nothing, try extracting
+      // values directly from the full text near the search term
+      if (!partyAVal && !partyBVal && !rulingVal && textQuery) {
+        const fullTextVal = extractValueFromFullText(pdfText, textQuery);
+        if (fullTextVal) {
+          rulingVal = fullTextVal;
+        }
+      }
+
+      // Keep rows with at least one value
       if (!partyAVal && !partyBVal && !rulingVal) continue;
 
       rows.push({
