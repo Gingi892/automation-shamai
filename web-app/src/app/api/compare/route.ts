@@ -60,8 +60,8 @@ interface CompareResponse {
 // ──────────────────────────────────────────────────────────────────
 
 const MAX_COMPARE = 50;
-/** Max docs to send to AI extraction (cost/speed control) */
-const MAX_AI_DOCS = 20;
+/** Max docs to send to AI extraction — AI extracts data from ~30-50% of docs */
+const MAX_AI_DOCS = 40;
 const PDF_TEXT_CAP = 35000;
 
 // ──────────────────────────────────────────────────────────────────
@@ -114,8 +114,8 @@ function mapQueryToParamType(query: string): QueryMapping | null {
   if (query.includes('למ"ר') || query.includes('למטר')) {
     return { paramType: 'price_per_meter', subtypePrefix: null, valueLabel: 'מחיר למ"ר' };
   }
-  if (query.includes('לדונם')) {
-    return { paramType: 'land_value', subtypePrefix: null, valueLabel: 'שווי לדונם' };
+  if (query.includes('לדונם') || query.includes('שווי קרקע') || query.includes('מחיר קרקע')) {
+    return { paramType: 'land_value', subtypePrefix: null, valueLabel: 'שווי קרקע' };
   }
   if (query.includes('זכויות בנייה') || query.includes('זכויות בניה')) {
     return { paramType: 'building_rights_value', subtypePrefix: null, valueLabel: 'שווי זכויות בנייה' };
@@ -124,6 +124,21 @@ function mapQueryToParamType(query: string): QueryMapping | null {
     return { paramType: 'comparison_transaction', subtypePrefix: null, valueLabel: 'עסקאות השוואה' };
   }
   return null;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Year detection
+// ──────────────────────────────────────────────────────────────────
+
+/** Extract a 4-digit year from the query if present */
+function detectYear(query: string): string | null {
+  const match = query.match(/\b(20[0-2]\d)\b/);
+  return match ? match[1] : null;
+}
+
+/** Remove year from text query so it doesn't pollute text search */
+function stripYear(query: string, year: string): string {
+  return query.replace(year, '').replace(/\s+/g, ' ').trim();
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -169,11 +184,12 @@ export async function POST(request: NextRequest) {
     const preprocessed = preprocessQuery(body.query);
     const { detectedCities } = preprocessed;
     const committee = body.committee || (detectedCities.length > 0 ? detectedCities[0] : null);
+    const year = detectYear(body.query);
 
     // Try parameters index first for structured queries (coefficients, prices)
     const mapping = mapQueryToParamType(body.query);
     if (mapping) {
-      const result = await queryParametersIndex(es, mapping, committee, limit);
+      const result = await queryParametersIndex(es, mapping, committee, year, limit);
       if (result.rows.length >= 3) {
         const stats = calculateStats(result.rows.map(r => r.ruling.numeric));
         return NextResponse.json({
@@ -189,7 +205,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fall back to AI extraction — search for relevant documents, then extract with LLM
-    const result = await aiExtractionPath(es, body.query, preprocessed, committee, limit);
+    const result = await aiExtractionPath(es, body.query, preprocessed, committee, year, limit);
     const rulingValues = result.rows.map(r => r.ruling.numeric);
     const stats = calculateStats(rulingValues);
 
@@ -218,16 +234,21 @@ async function queryParametersIndex(
   es: any,
   mapping: QueryMapping,
   committee: string | null,
+  year: string | null,
   limit: number,
 ): Promise<{ rows: CompareRow[] }> {
   try {
+    // If committee or year filter, get matching decision IDs first
     let decisionIds: string[] | null = null;
-    if (committee) {
+    if (committee || year) {
+      const decFilter: object[] = [];
+      if (committee) decFilter.push({ match: { committee: { query: committee, operator: 'and' as const } } });
+      if (year) decFilter.push({ term: { year } });
       const decSearch = await es.search({
         index: DECISIONS_INDEX,
-        size: 500,
+        size: 1000,
         _source: false,
-        query: { bool: { filter: [{ match: { committee: { query: committee, operator: 'and' as const } } }] } },
+        query: { bool: { filter: decFilter } },
       });
       decisionIds = (decSearch.hits.hits as any[]).map((h: any) => h._id);
       if (decisionIds.length === 0) return { rows: [] };
@@ -348,6 +369,7 @@ async function aiExtractionPath(
   originalQuery: string,
   preprocessed: ReturnType<typeof preprocessQuery>,
   committee: string | null,
+  year: string | null,
   limit: number,
 ): Promise<{ rows: CompareRow[] }> {
   const { cleanedQuery, expandedTerms, detectedPhrases, detectedCities } = preprocessed;
@@ -362,9 +384,13 @@ async function aiExtractionPath(
     });
   }
 
+  // Strip city and year from text query to avoid polluting text search
   let textQuery = cleanedQuery;
   if (committee) {
     textQuery = textQuery.replace(committee, '').replace(/\s+/g, ' ').trim();
+  }
+  if (year) {
+    textQuery = stripYear(textQuery, year);
   }
 
   if (textQuery.length > 0) {
@@ -388,6 +414,9 @@ async function aiExtractionPath(
   const filterClauses: object[] = [];
   if (committee) {
     filterClauses.push({ match: { committee: { query: committee, operator: 'and' as const } } });
+  }
+  if (year) {
+    filterClauses.push({ term: { year } });
   }
 
   // Fetch top documents (metadata only first)
