@@ -162,9 +162,16 @@ export async function POST(request: NextRequest) {
 
     // Extract sections server-side and build rows
     const rows: CompareRow[] = [];
+    const seenIds = new Set<string>();
+    const seenTitles = new Set<string>();
 
     for (const hit of hits) {
       const id = hit._id as string;
+      if (seenIds.has(id)) continue; // Deduplicate (RRF can return same doc from both retrievers)
+      seenIds.add(id);
+      const title = ((hit._source as Record<string, unknown>).title as string) || '';
+      if (seenTitles.has(title)) continue; // Deduplicate same decision indexed twice
+      seenTitles.add(title);
       const src = hit._source as Record<string, unknown>;
       const pdfText = pdfTexts.get(id);
       if (!pdfText) continue;

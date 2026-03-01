@@ -209,6 +209,8 @@ const SECTION_PATTERNS: Record<SectionType, string[]> = {
   partiesClaims: [
     'עיקרי טיעוני הצדדים',
     'תמצית שומות הצדדים',
+    'סיכום ממצאי שומות הצדדים',
+    'ממצאי שומות הצדדים',
     'שומות הצדדים',
     'טענות הצדדים',
     'עמדות הצדדים',
@@ -351,8 +353,9 @@ function findSection(
 
   let bestMatch: { title: string; index: number } | null = null;
 
-  // Numbering prefix: "3." | "3.1" | "3.1.2" | "א." | "א'" | "(2)" | "(א)" | bullet
-  const numberingPrefix = '(?:\\d+(?:\\.\\d+)*\\.?|[א-ת][\'׳"]?\\.?|\\(\\d+\\)|\\([א-ת]\\))';
+  // Numbering prefix: "3." | "3.1" | "3.1.2" | "11 ." | "א." | "א'" | "(2)" | "(א)" | bullet
+  // Allow optional space before dot to handle OCR artifacts like "11 ."
+  const numberingPrefix = '(?:\\d+(?:\\s?\\.\\d+)*\\s?\\.?|[א-ת][\'׳"]?\\s?\\.?|\\(\\d+\\)|\\([א-ת]\\))';
   // Allow 0-3 extra Hebrew words between numbering and pattern (e.g., "ממצאי", "עיקרי", "תמצית")
   const extraWords = '(?:[\\u0590-\\u05FF"]+\\s+){0,3}';
 
@@ -386,7 +389,7 @@ function findSection(
 
   return {
     title: bestMatch.title,
-    text: text.substring(0, 5000), // Cap at 5000 chars per section
+    text: text.substring(0, 8000), // Cap at 8000 chars per section
     charIndex: bestMatch.index,
   };
 }
@@ -397,7 +400,7 @@ function findSection(
  */
 function findNextSectionStart(pdfText: string, fromIndex: number): number {
   const allHeaders = Object.values(SECTION_PATTERNS).flat();
-  const numberingPrefix = '(?:\\d+(?:\\.\\d+)*\\.?|[א-ת][\'׳"]?\\.?|\\(\\d+\\)|\\([א-ת]\\))';
+  const numberingPrefix = '(?:\\d+(?:\\s?\\.\\d+)*\\s?\\.?|[א-ת][\'׳"]?\\s?\\.?|\\(\\d+\\)|\\([א-ת]\\))';
   const extraWords = '(?:[\\u0590-\\u05FF"]+\\s+){0,3}';
 
   let nearestEnd = pdfText.length;
@@ -517,7 +520,7 @@ function findKeywordFallback(
 
     return {
       keyword,
-      text: text.substring(0, 5000),
+      text: text.substring(0, 8000),
       charIndex: idx,
     };
   }
@@ -792,6 +795,11 @@ export function getSearchTermValue(
         const afterNum = window.substring(match.index + raw.length);
         if (/^\.\d{4}/.test(afterNum)) continue;
 
+        // Skip numbers followed by "שנים"/"שנה" (year counts, not values)
+        if (/^\s*שני[םה]?\b/.test(afterNum)) continue;
+        // Skip numbers immediately followed by "%" (interest rates like "6%")
+        if (/^\s*%/.test(afterNum)) continue;
+
         const parsed = parseHebrewNumber(raw);
         if (parsed === null || isNaN(parsed) || parsed <= 0) continue;
 
@@ -874,6 +882,9 @@ export function extractValueFromFullText(
         if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(raw)) continue;
         const afterNum = window.substring(match.index + raw.length);
         if (/^\.\d{4}/.test(afterNum)) continue;
+        // Skip year counts ("3 שנים") and interest rates ("6%")
+        if (/^\s*שני[םה]?\b/.test(afterNum)) continue;
+        if (/^\s*%/.test(afterNum)) continue;
 
         const parsed = parseHebrewNumber(raw);
         if (parsed === null || isNaN(parsed) || parsed <= 0) continue;
