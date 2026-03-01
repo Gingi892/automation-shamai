@@ -78,6 +78,8 @@ interface CompareResponse {
 interface ComparisonTableProps {
   query: string;
   committee?: string;
+  /** IDs from the main search results — compare endpoint uses these directly */
+  resultIds?: string[];
 }
 
 type SortField = 'year' | 'ruling' | 'committee' | 'appraiser';
@@ -86,7 +88,7 @@ type SortField = 'year' | 'ruling' | 'committee' | 'appraiser';
 // Main component
 // ──────────────────────────────────────────────────────────────────
 
-export function ComparisonTable({ query, committee }: ComparisonTableProps) {
+export function ComparisonTable({ query, committee, resultIds }: ComparisonTableProps) {
   const [expanded, setExpanded] = useState(false);
   const [data, setData] = useState<CompareResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -114,7 +116,7 @@ export function ComparisonTable({ query, committee }: ComparisonTableProps) {
       const res = await fetch('/api/compare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, committee, limit: 50 }),
+        body: JSON.stringify({ query, committee, limit: 50, resultIds }),
       });
       if (!res.ok) { setData(null); return; }
       setData(await res.json());

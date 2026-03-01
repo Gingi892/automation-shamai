@@ -12,6 +12,8 @@ interface CompareRequest {
   query: string;
   committee?: string;
   limit?: number;
+  /** Pre-fetched result IDs from main search — skips re-searching */
+  resultIds?: string[];
 }
 
 interface ClaimValue {
@@ -186,10 +188,10 @@ export async function POST(request: NextRequest) {
     const committee = body.committee || (detectedCities.length > 0 ? detectedCities[0] : null);
     const year = detectYear(body.query);
 
-    // Try parameters index first for structured queries (coefficients, prices)
+    // Try parameters index for coefficients (structured, no need for party A/B)
     const mapping = mapQueryToParamType(body.query);
-    if (mapping) {
-      const result = await queryParametersIndex(es, mapping, committee, year, limit);
+    if (mapping && mapping.paramType === 'coefficient') {
+      const result = await queryParametersIndex(es, mapping, committee, year, limit, body.resultIds);
       if (result.rows.length >= 3) {
         const stats = calculateStats(result.rows.map(r => r.ruling.numeric));
         return NextResponse.json({
@@ -205,7 +207,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fall back to AI extraction — search for relevant documents, then extract with LLM
-    const result = await aiExtractionPath(es, body.query, preprocessed, committee, year, limit);
+    const result = await aiExtractionPath(es, body.query, preprocessed, committee, year, limit, body.resultIds);
     const rulingValues = result.rows.map(r => r.ruling.numeric);
     const stats = calculateStats(rulingValues);
 
@@ -236,11 +238,12 @@ async function queryParametersIndex(
   committee: string | null,
   year: string | null,
   limit: number,
+  resultIds?: string[],
 ): Promise<{ rows: CompareRow[] }> {
   try {
-    // If committee or year filter, get matching decision IDs first
-    let decisionIds: string[] | null = null;
-    if (committee || year) {
+    // Use pre-fetched IDs if available, else filter by committee/year
+    let decisionIds: string[] | null = resultIds?.length ? resultIds : null;
+    if (!decisionIds && (committee || year)) {
       const decFilter: object[] = [];
       if (committee) decFilter.push({ match: { committee: { query: committee, operator: 'and' as const } } });
       if (year) decFilter.push({ term: { year } });
@@ -371,20 +374,11 @@ async function aiExtractionPath(
   committee: string | null,
   year: string | null,
   limit: number,
+  resultIds?: string[],
 ): Promise<{ rows: CompareRow[] }> {
   const { cleanedQuery, expandedTerms, detectedPhrases, detectedCities } = preprocessed;
 
-  const textFields = ['pdf_text^3', 'title^2', 'committee', 'appraiser', 'case_type'];
-  const shouldClauses: object[] = [];
-
-  for (const phrase of detectedPhrases) {
-    if (committee && detectedCities.includes(phrase)) continue;
-    shouldClauses.push({
-      multi_match: { query: phrase, fields: textFields, type: 'phrase', boost: 5 },
-    });
-  }
-
-  // Strip city and year from text query to avoid polluting text search
+  // Build search term for AI (strip city + year)
   let textQuery = cleanedQuery;
   if (committee) {
     textQuery = textQuery.replace(committee, '').replace(/\s+/g, ' ').trim();
@@ -393,70 +387,93 @@ async function aiExtractionPath(
     textQuery = stripYear(textQuery, year);
   }
 
-  if (textQuery.length > 0) {
-    shouldClauses.push({
-      multi_match: { query: textQuery, fields: textFields, type: 'best_fields', operator: 'and', boost: 3 },
+  let docIds: string[];
+  let metadataMap: Map<string, Record<string, unknown>>;
+
+  if (resultIds && resultIds.length > 0) {
+    // ── Use pre-fetched IDs from main search (no re-searching) ──
+    docIds = resultIds.slice(0, limit);
+
+    // Fetch metadata for all IDs
+    const metaRes = await es.mget({
+      index: DECISIONS_INDEX,
+      ids: docIds,
+      _source_includes: ['title', 'database', 'committee', 'year', 'appraiser', 'url'],
     });
-  }
+    metadataMap = new Map();
+    for (const doc of metaRes.docs as any[]) {
+      if (doc.found) metadataMap.set(doc._id!, doc._source as Record<string, unknown>);
+    }
+  } else {
+    // ── Fallback: search for docs ourselves ──
+    const textFields = ['pdf_text^3', 'title^2', 'committee', 'appraiser', 'case_type'];
+    const shouldClauses: object[] = [];
 
-  for (const term of expandedTerms) {
-    shouldClauses.push({
-      multi_match: { query: term, fields: textFields, type: 'phrase', boost: 0.5 },
-    });
-  }
+    for (const phrase of detectedPhrases) {
+      if (committee && detectedCities.includes(phrase)) continue;
+      shouldClauses.push({
+        multi_match: { query: phrase, fields: textFields, type: 'phrase', boost: 5 },
+      });
+    }
+    if (textQuery.length > 0) {
+      shouldClauses.push({
+        multi_match: { query: textQuery, fields: textFields, type: 'best_fields', operator: 'and', boost: 3 },
+      });
+    }
+    for (const term of expandedTerms) {
+      shouldClauses.push({
+        multi_match: { query: term, fields: textFields, type: 'phrase', boost: 0.5 },
+      });
+    }
+    if (shouldClauses.length === 0) {
+      shouldClauses.push({
+        multi_match: { query: originalQuery, fields: textFields, type: 'best_fields', boost: 1 },
+      });
+    }
 
-  if (shouldClauses.length === 0) {
-    shouldClauses.push({
-      multi_match: { query: originalQuery, fields: textFields, type: 'best_fields', boost: 1 },
-    });
-  }
+    const filterClauses: object[] = [];
+    if (committee) filterClauses.push({ match: { committee: { query: committee, operator: 'and' as const } } });
+    if (year) filterClauses.push({ term: { year } });
 
-  const filterClauses: object[] = [];
-  if (committee) {
-    filterClauses.push({ match: { committee: { query: committee, operator: 'and' as const } } });
-  }
-  if (year) {
-    filterClauses.push({ term: { year } });
-  }
-
-  // Fetch top documents (metadata only first)
-  const fetchSize = Math.min(limit, MAX_AI_DOCS);
-  const searchRes = await es.search({
-    index: DECISIONS_INDEX,
-    size: fetchSize,
-    _source: { excludes: ['pdf_text_embedding', 'pdf_text'] },
-    query: {
-      bool: {
-        must: [{ bool: { should: shouldClauses, minimum_should_match: 1 } }],
-        filter: filterClauses.length > 0 ? filterClauses : undefined,
+    const fetchSize = Math.min(limit, MAX_AI_DOCS);
+    const searchRes = await es.search({
+      index: DECISIONS_INDEX,
+      size: fetchSize,
+      _source: ['title', 'database', 'committee', 'year', 'appraiser', 'url'],
+      query: {
+        bool: {
+          must: [{ bool: { should: shouldClauses, minimum_should_match: 1 } }],
+          filter: filterClauses.length > 0 ? filterClauses : undefined,
+        },
       },
-    },
-  });
+    });
 
-  const hits = searchRes.hits.hits as any[];
-  if (hits.length === 0) return { rows: [] };
+    const hits = searchRes.hits.hits as any[];
+    if (hits.length === 0) return { rows: [] };
 
-  // Fetch pdf_text for all hits
-  const docIds = hits.map((h: any) => h._id as string);
+    docIds = hits.map((h: any) => h._id as string);
+    metadataMap = new Map();
+    for (const h of hits) {
+      metadataMap.set(h._id as string, h._source as Record<string, unknown>);
+    }
+  }
+
+  if (docIds.length === 0) return { rows: [] };
+
+  // Fetch pdf_text for all docs
   const mgetRes = await es.mget({
     index: DECISIONS_INDEX,
     ids: docIds,
     _source_includes: ['pdf_text'],
   });
 
-  const pdfTexts = new Map<string, string>();
+  const docsForAI: { id: string; pdfText: string }[] = [];
   for (const doc of mgetRes.docs as any[]) {
     if (doc.found && doc._source?.pdf_text) {
-      pdfTexts.set(doc._id!, (doc._source.pdf_text as string).substring(0, PDF_TEXT_CAP));
-    }
-  }
-
-  // Build documents array for AI extraction
-  const docsForAI: { id: string; pdfText: string }[] = [];
-  for (const id of docIds) {
-    const text = pdfTexts.get(id);
-    if (text && text.length > 500) { // Skip very short docs
-      docsForAI.push({ id, pdfText: text });
+      const text = (doc._source.pdf_text as string).substring(0, PDF_TEXT_CAP);
+      if (text.length > 500) {
+        docsForAI.push({ id: doc._id!, pdfText: text });
+      }
     }
   }
 
@@ -467,34 +484,41 @@ async function aiExtractionPath(
   const extractions = await extractBatch(searchTerm, docsForAI);
 
   // Build rows — merge metadata + AI extraction
-  const rows: CompareRow[] = [];
+  // Include ALL docs: those with extracted values first, then those without
+  const emptyClaim: ClaimValue = { display: null, numeric: null, unit: null, quote: null };
+  const rowsWithData: CompareRow[] = [];
+  const rowsWithout: CompareRow[] = [];
   const seenTitles = new Set<string>();
 
-  for (const hit of hits) {
-    const id = hit._id as string;
-    const src = hit._source as Record<string, unknown>;
-    const title = (src.title as string) || '';
+  for (const id of docIds) {
+    const meta = metadataMap.get(id);
+    if (!meta) continue;
+
+    const title = (meta.title as string) || '';
     if (seenTitles.has(title)) continue;
     seenTitles.add(title);
 
     const extraction = extractions.get(id);
-    if (!extraction || !extraction.hasData) continue;
+    const hasData = extraction?.hasData ?? false;
 
-    rows.push({
+    const row: CompareRow = {
       id,
       title,
-      database: (src.database as DatabaseType) || 'decisive_appraiser',
-      committee: (src.committee as string) || null,
-      year: (src.year as string) || null,
-      appraiser: (src.appraiser as string) || null,
-      url: (src.url as string) || null,
-      partyA: claimToValue(extraction.partyA),
-      partyB: claimToValue(extraction.partyB),
-      ruling: claimToValue(extraction.ruling),
-    });
+      database: (meta.database as DatabaseType) || 'decisive_appraiser',
+      committee: (meta.committee as string) || null,
+      year: (meta.year as string) || null,
+      appraiser: (meta.appraiser as string) || null,
+      url: (meta.url as string) || null,
+      partyA: hasData ? claimToValue(extraction!.partyA) : emptyClaim,
+      partyB: hasData ? claimToValue(extraction!.partyB) : emptyClaim,
+      ruling: hasData ? claimToValue(extraction!.ruling) : emptyClaim,
+    };
+
+    if (hasData) rowsWithData.push(row);
+    else rowsWithout.push(row);
   }
 
-  return { rows };
+  return { rows: [...rowsWithData, ...rowsWithout] };
 }
 
 function claimToValue(claim: ExtractedClaim): ClaimValue {

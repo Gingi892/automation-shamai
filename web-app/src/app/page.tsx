@@ -125,6 +125,7 @@ export default function HomePage() {
                 <ComparisonTable
                   query={query}
                   committee={results?.autoFilters?.committee}
+                  resultIds={results?.results?.map(r => r.id)}
                 />
               )}
 
