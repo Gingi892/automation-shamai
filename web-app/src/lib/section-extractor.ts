@@ -53,6 +53,8 @@ const VALUE_RANGES: Record<string, { min: number; max: number }> = {
   'מקדם': { min: 0.01, max: 2.5 },
   'אחוז': { min: 0, max: 100 },
   'שיעור': { min: 0, max: 100 },
+  'היטל': { min: 1000, max: 50000000 },
+  'פיצוי': { min: 1000, max: 50000000 },
 };
 
 function getValueRange(searchTerm: string): { min: number; max: number } | null {
@@ -816,9 +818,18 @@ export function getSearchTermValue(
 
         if (match.index < bestDistance) {
           bestDistance = match.index;
-          // When searching for a coefficient (מקדם), force unit to 'מקדם'
-          // so values display as plain decimals, not "0.75%"
-          const unit = range ? 'מקדם' : detectUnit(context);
+          // Force unit based on query type:
+          // - coefficient (מקדם) → plain decimal, no unit
+          // - monetary (היטל/פיצוי) → ₪
+          // - otherwise → detect from context
+          let unit: string | null;
+          if (range && searchTerm.includes('מקדם')) {
+            unit = 'מקדם';
+          } else if (range && (searchTerm.includes('היטל') || searchTerm.includes('פיצוי'))) {
+            unit = '₪';
+          } else {
+            unit = detectUnit(context);
+          }
           bestCandidate = {
             raw,
             numeric: parsed,
@@ -895,11 +906,20 @@ export function extractValueFromFullText(
         const ctxEnd = Math.min(text.length, windowStart + match.index + raw.length + 30);
         const context = text.substring(ctxStart, ctxEnd).replace(/\s+/g, ' ').trim();
 
+        let unit: string | null;
+        if (range && searchTerm.includes('מקדם')) {
+          unit = 'מקדם';
+        } else if (range && (searchTerm.includes('היטל') || searchTerm.includes('פיצוי'))) {
+          unit = '₪';
+        } else {
+          unit = detectUnit(context);
+        }
+
         allValues.push({
           value: {
             raw,
             numeric: parsed,
-            unit: range ? 'מקדם' : detectUnit(context),
+            unit,
             context: context.substring(0, 120),
             charIndex: found,
           },

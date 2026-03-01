@@ -110,6 +110,14 @@ function detectQueryType(query: string): QueryTypeInfo {
     return { paramType: 'price_per_meter', subtypePrefix: null, columnType: 'price' };
   }
 
+  // Betterment levy / compensation (monetary amounts)
+  if (query.includes('היטל')) {
+    return { paramType: null, subtypePrefix: null, columnType: 'price' };
+  }
+  if (query.includes('פיצוי')) {
+    return { paramType: null, subtypePrefix: null, columnType: 'price' };
+  }
+
   // Transactions
   if (query.includes('עסקאות השוואה') || query.includes('נתוני השוואה')) {
     return { paramType: 'comparison_transaction', subtypePrefix: null, columnType: 'transaction' };
@@ -316,8 +324,12 @@ export async function POST(request: NextRequest) {
       const pdfLength = pdfText.length;
       const extraction = extractSections(id, pdfText, textQuery || body.query);
 
-      const partyAVal = getSearchTermValue(extraction.partyA, textQuery);
-      const partyBVal = getSearchTermValue(extraction.partyB, textQuery);
+      // For typed queries (coefficient, price), extract all columns.
+      // For general/unknown queries, only extract ruling — partyA/partyB
+      // are unreliable without a known value type and show random garbage.
+      const isTypedQuery = queryType.columnType !== 'general';
+      const partyAVal = isTypedQuery ? getSearchTermValue(extraction.partyA, textQuery) : null;
+      const partyBVal = isTypedQuery ? getSearchTermValue(extraction.partyB, textQuery) : null;
       let rulingVal = getSearchTermValue(extraction.ruling, textQuery);
 
       // When section-specific extraction yields nothing, try extracting
