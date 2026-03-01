@@ -435,10 +435,13 @@ async function tryParametersIndex(
       },
     };
 
+    // Build the original search term for context matching
+    const searchTermForContext = queryType.subtypePrefix || '';
+
     const paramsResponse = await es.search({
       index: PARAMETERS_INDEX,
       query: paramsQuery,
-      size: Math.min(limit * 3, 200), // Fetch extra to account for grouping
+      size: Math.min(limit * 5, 500), // Fetch extra — many will be filtered
       sort: [{ confidence: 'desc' }],
       _source: ['decision_id', 'param_subtype', 'value_numeric', 'value_text', 'unit', 'confidence', 'context_snippet'],
     });
@@ -446,13 +449,41 @@ async function tryParametersIndex(
     const paramHits = paramsResponse.hits.hits as any[];
     if (paramHits.length === 0) return null;
 
-    // Group by decision_id, take highest-confidence value per decision
+    // Group by decision_id. For each decision, pick the BEST value:
+    // 1. Prefer values where context_snippet mentions the search subtype
+    // 2. Filter out date fragments and implausible values
+    // 3. Fall back to highest confidence
     const byDecision = new Map<string, any>();
     for (const hit of paramHits) {
       const src = hit._source as Record<string, unknown>;
       const decId = src.decision_id as string;
-      if (!byDecision.has(decId)) {
+      const value = src.value_numeric as number | null;
+      const snippet = (src.context_snippet as string) || '';
+
+      // Skip date fragments (values that are day/month numbers extracted from dates)
+      if (value !== null && value > 0 && value <= 31 && /\/\d{1,2}\/\d{2,4}/.test(snippet)) continue;
+
+      // Skip gush/plot numbers in context
+      if (/גוש\s+\d|חלקה\s+\d/.test(snippet) && value !== null && value > 1000) continue;
+
+      // For price_per_meter without subtype, require context has ₪ or למ"ר or שווי
+      if (queryType.paramType === 'price_per_meter' && !queryType.subtypePrefix) {
+        if (value !== null && value < 50) continue; // Implausibly low price per meter
+        // Skip if context looks like a cost item, not a property value
+        if (/עלויות\s+(?:הריסה|פינוי|בניי?ה)/.test(snippet)) continue;
+      }
+
+      const existing = byDecision.get(decId);
+      if (!existing) {
         byDecision.set(decId, src);
+      } else {
+        // Replace if the new one's context mentions the search subtype and the old one doesn't
+        const existingSnippet = (existing.context_snippet as string) || '';
+        const newMentions = searchTermForContext && snippet.includes(searchTermForContext);
+        const existingMentions = searchTermForContext && existingSnippet.includes(searchTermForContext);
+        if (newMentions && !existingMentions) {
+          byDecision.set(decId, src);
+        }
       }
     }
 

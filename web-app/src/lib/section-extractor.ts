@@ -70,6 +70,33 @@ function hasHebrewWordsBeforeNumber(windowText: string, numberIndex: number): bo
   return hebrewWords !== null && hebrewWords.length >= 3;
 }
 
+/**
+ * Check if a number is actually a gush (block) or plot number, or a date fragment.
+ * These appear right after "גוש" or "חלקה" keywords, or before "/MM/YYYY".
+ */
+function isGushPlotOrDate(window: string, matchIndex: number, raw: string): boolean {
+  // Check text before the number for "גוש" or "חלקה"
+  const textBefore = window.substring(Math.max(0, matchIndex - 15), matchIndex);
+  if (/(?:גוש|חלקה|חלק)\s*$/.test(textBefore)) return true;
+
+  // Check if number is followed by /DD/YYYY (date fragment: "30/04/2019")
+  const afterNum = window.substring(matchIndex + raw.length);
+  if (/^\/\d{1,2}\/\d{2,4}/.test(afterNum)) return true;
+  // Check if number is preceded by DD/ (part of DD/MM: "04/2019" where raw=2019)
+  if (/\d{1,2}\/\d{1,2}\/$/.test(textBefore)) return true;
+
+  // Check for plan reference numbers: "תא/3616א'" or "רג/340/ג"
+  if (/[\/א-ת]$/.test(textBefore) && /^[א-ת'׳\/]/.test(afterNum)) return true;
+
+  // Check for Hebrew calendar year references: "התשע"ז 2017", "התש"פ 2020"
+  if (/(?:התש[א-ת]+"[א-ת]|התש[א-ת]+'[א-ת])\s*$/.test(textBefore)) return true;
+  // Also plain 4-digit years standing alone (2000-2030)
+  const num = parseInt(raw, 10);
+  if (num >= 2000 && num <= 2030 && /\s$/.test(textBefore) && /^\s/.test(afterNum || ' ')) return true;
+
+  return false;
+}
+
 function extractValuesNearSearchTerm(text: string, searchTerm: string, windowChars: number = 100): number[] {
   if (!text || !searchTerm) return [];
   const values: number[] = [];
@@ -801,6 +828,8 @@ export function getSearchTermValue(
         if (/^\s*שני[םה]?\b/.test(afterNum)) continue;
         // Skip numbers immediately followed by "%" (interest rates like "6%")
         if (/^\s*%/.test(afterNum)) continue;
+        // Skip gush/plot numbers and date fragments
+        if (isGushPlotOrDate(window, match.index, raw)) continue;
 
         const parsed = parseHebrewNumber(raw);
         if (parsed === null || isNaN(parsed) || parsed <= 0) continue;
@@ -896,6 +925,8 @@ export function extractValueFromFullText(
         // Skip year counts ("3 שנים") and interest rates ("6%")
         if (/^\s*שני[םה]?\b/.test(afterNum)) continue;
         if (/^\s*%/.test(afterNum)) continue;
+        // Skip gush/plot numbers and date fragments
+        if (isGushPlotOrDate(window, match.index, raw)) continue;
 
         const parsed = parseHebrewNumber(raw);
         if (parsed === null || isNaN(parsed) || parsed <= 0) continue;
