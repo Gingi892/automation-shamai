@@ -66,66 +66,18 @@ const EMPTY_VALUE: ExtractedValue = { display: null, numeric: null, unit: null, 
 // ──────────────────────────────────────────────────────────────────
 
 /**
- * Build focused text for the AI — only the parts that matter.
- * Strategy: intro (2K) + summary tables (3K) + search term context (up to 5K) + end of doc (6K)
- * Total: ~12-16K chars instead of 30K noise.
- *
- * Key insight: Israeli appraisal decisions put the ruling/summary in the LAST third
- * of the document, and summary tables ("סיכום עיקרי עמדות") contain the best data.
+ * Prepare document text for AI extraction.
+ * Short docs (≤30K): send everything — no trimming.
+ * Long docs (>30K): first 20K + last 10K (catches party claims + ruling).
  */
-const TEXT_CAP = 35000;
+const FULL_CAP = 30000;
 
-function extractRelevantText(pdfText: string, searchTerm: string): string {
-  const text = pdfText.substring(0, TEXT_CAP);
-  const parts: string[] = [];
-
-  // Part 1: First 2000 chars — title, parties, background
-  parts.push(text.substring(0, 2000));
-
-  // Part 2: Find summary table if present (highest value section — contains all parties' positions)
-  const summaryPatterns = [
-    /סיכום\s*עיקרי\s*עמדות/,
-    /טבלת?\s*(?:ה)?שוואה\s*(?:בין\s*)?(?:ה)?שומות/,
-    /השוואת\s*(?:ה)?עמדות/,
-    /סיכום\s*(?:ו)?הכרעה/,
-  ];
-  let summaryAdded = false;
-  for (const pat of summaryPatterns) {
-    const m = text.match(pat);
-    if (m && m.index !== undefined && m.index >= 2000) {
-      const sEnd = Math.min(m.index + 3000, text.length);
-      parts.push('\n[...]\n' + text.substring(m.index, sEnd));
-      summaryAdded = true;
-      break;
-    }
-  }
-
-  // Part 3: Context around the search term (up to 5 occurrences, ±500 chars each)
-  const termEscaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (termEscaped.length > 2) {
-    const termRegex = new RegExp(termEscaped, 'g');
-    let match;
-    let count = 0;
-    const lastStart = Math.max(text.length - 6000, 2000);
-    while ((match = termRegex.exec(text)) !== null && count < 5) {
-      const snippetStart = Math.max(match.index - 500, 0);
-      const snippetEnd = Math.min(match.index + searchTerm.length + 500, text.length);
-      // Skip if already covered by part 1 or part 4 (end of doc)
-      if (snippetStart < 2000 || snippetStart >= lastStart) continue;
-      parts.push('\n[...]\n' + text.substring(snippetStart, snippetEnd));
-      count++;
-    }
-  }
-
-  // Part 4: Last 6000 chars — ruling, conclusion, summary (most valuable)
-  const lastStart = Math.max(text.length - 6000, 2000);
-  if (lastStart > 2000) {
-    parts.push('\n[...]\n');
-    parts.push(text.substring(lastStart));
-  }
-
-  const result = parts.join('');
-  return result.length > 18000 ? result.substring(0, 18000) : result;
+function prepareDocText(pdfText: string): string {
+  if (pdfText.length <= FULL_CAP) return pdfText;
+  // Long doc: head (party claims, summary tables) + tail (ruling, conclusion)
+  const head = pdfText.substring(0, 20000);
+  const tail = pdfText.substring(pdfText.length - 10000);
+  return head + '\n\n[... חלק מהמסמך הושמט ...]\n\n' + tail;
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -283,8 +235,8 @@ async function extractFromDocument(
   provider: Provider,
 ): Promise<ExtractionResult> {
   try {
-    const trimmed = extractRelevantText(pdfText, searchTerm);
-    const prompt = buildPrompt(searchTerm, columns, trimmed);
+    const docText = prepareDocText(pdfText);
+    const prompt = buildPrompt(searchTerm, columns, docText);
     const text = await callLLM(prompt, provider);
     return parseResponse(text, columns);
   } catch (error) {
