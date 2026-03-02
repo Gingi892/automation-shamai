@@ -1,6 +1,12 @@
 /**
  * AI-powered value extraction from Hebrew legal PDF text.
  * Supports dynamic column definitions — the caller decides what to extract.
+ *
+ * Key design choices:
+ * - Smart text trimming: extract relevant sections (~5-8K) instead of 30K noise
+ * - gpt-4o (not mini): Hebrew legal docs need stronger comprehension
+ * - JSON mode: guaranteed valid JSON response
+ * - Section-aware: finds party A, party B, and ruling sections in the document
  */
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
@@ -35,14 +41,12 @@ function getAnthropic(): Anthropic {
 // Types
 // ──────────────────────────────────────────────────────────────────
 
-/** A column the user wants to extract */
 export interface ColumnDef {
-  key: string;       // unique id, e.g. "partyA", "valueBefore"
-  label: string;     // Hebrew header, e.g. "שומת הבעלים"
-  prompt: string;    // What to ask the AI, e.g. "מה הסכום שצד א' טוען?"
+  key: string;
+  label: string;
+  prompt: string;
 }
 
-/** Extracted value for a single column */
 export interface ExtractedValue {
   display: string | null;
   numeric: number | null;
@@ -50,7 +54,6 @@ export interface ExtractedValue {
   quote: string | null;
 }
 
-/** Result for one document — values keyed by column key */
 export interface ExtractionResult {
   values: Record<string, ExtractedValue>;
   hasData: boolean;
@@ -59,41 +62,112 @@ export interface ExtractionResult {
 const EMPTY_VALUE: ExtractedValue = { display: null, numeric: null, unit: null, quote: null };
 
 // ──────────────────────────────────────────────────────────────────
-// Prompt builder — dynamic columns
+// Smart text trimming — extract relevant sections, discard noise
 // ──────────────────────────────────────────────────────────────────
 
-const SYSTEM_MSG = `אתה מחלץ נתונים מספריים מהחלטות שמאי מקרקעין בישראל.
+/**
+ * Build focused text for the AI — only the parts that matter.
+ * Strategy: intro (2K) + summary tables (3K) + search term context (up to 5K) + end of doc (6K)
+ * Total: ~12-16K chars instead of 30K noise.
+ *
+ * Key insight: Israeli appraisal decisions put the ruling/summary in the LAST third
+ * of the document, and summary tables ("סיכום עיקרי עמדות") contain the best data.
+ */
+const TEXT_CAP = 35000;
 
-כללים:
-- אל תחלץ מספרי גוש, חלקה, תאריכים, או מספרי תיק.
-- חלץ סכומים כספיים, מחירים, שווי, מקדמים, שיעורים ואחוזים.
-- כל ערך חייב להיות מלווה בציטוט מדויק מהטקסט.
-- אם לא מצאת ערך — החזר null עבור כל השדות.
-- ליחידת מטבע כתוב "שח" (בלי גרשיים) או "אחוז" לפי העניין.
-- החזר JSON תקין בלבד. אין markdown, אין הסברים.`;
+function extractRelevantText(pdfText: string, searchTerm: string): string {
+  const text = pdfText.substring(0, TEXT_CAP);
+  const parts: string[] = [];
 
-function buildPrompt(searchTerm: string, columns: ColumnDef[], pdfText: string): string {
+  // Part 1: First 2000 chars — title, parties, background
+  parts.push(text.substring(0, 2000));
+
+  // Part 2: Find summary table if present (highest value section — contains all parties' positions)
+  const summaryPatterns = [
+    /סיכום\s*עיקרי\s*עמדות/,
+    /טבלת?\s*(?:ה)?שוואה\s*(?:בין\s*)?(?:ה)?שומות/,
+    /השוואת\s*(?:ה)?עמדות/,
+    /סיכום\s*(?:ו)?הכרעה/,
+  ];
+  let summaryAdded = false;
+  for (const pat of summaryPatterns) {
+    const m = text.match(pat);
+    if (m && m.index !== undefined && m.index >= 2000) {
+      const sEnd = Math.min(m.index + 3000, text.length);
+      parts.push('\n[...]\n' + text.substring(m.index, sEnd));
+      summaryAdded = true;
+      break;
+    }
+  }
+
+  // Part 3: Context around the search term (up to 5 occurrences, ±500 chars each)
+  const termEscaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (termEscaped.length > 2) {
+    const termRegex = new RegExp(termEscaped, 'g');
+    let match;
+    let count = 0;
+    const lastStart = Math.max(text.length - 6000, 2000);
+    while ((match = termRegex.exec(text)) !== null && count < 5) {
+      const snippetStart = Math.max(match.index - 500, 0);
+      const snippetEnd = Math.min(match.index + searchTerm.length + 500, text.length);
+      // Skip if already covered by part 1 or part 4 (end of doc)
+      if (snippetStart < 2000 || snippetStart >= lastStart) continue;
+      parts.push('\n[...]\n' + text.substring(snippetStart, snippetEnd));
+      count++;
+    }
+  }
+
+  // Part 4: Last 6000 chars — ruling, conclusion, summary (most valuable)
+  const lastStart = Math.max(text.length - 6000, 2000);
+  if (lastStart > 2000) {
+    parts.push('\n[...]\n');
+    parts.push(text.substring(lastStart));
+  }
+
+  const result = parts.join('');
+  return result.length > 18000 ? result.substring(0, 18000) : result;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Prompt
+// ──────────────────────────────────────────────────────────────────
+
+const SYSTEM_MSG = `אתה מומחה לחילוץ נתונים מהחלטות שמאי מקרקעין בישראל.
+
+מבנה מסמך טיפוסי:
+- "טענות המבקש/הבעלים" = עמדת צד א (בדרך כלל הנישום/הבעלים שטוען לערך נמוך יותר)
+- "טענות המשיבה/הוועדה" = עמדת צד ב (בדרך כלל הוועדה המקומית שטוענת לערך גבוה יותר)
+- "הכרעה/קביעה/סיכום" = ההחלטה הסופית של השמאי המכריע
+
+כללים קריטיים:
+1. ערכים מספריים: החזר מספר שלם בלי פסיקים. "81,550" → value: 81550. "1,234,567" → value: 1234567.
+2. מקדמים ואחוזים: החזר כמספר עשרוני. "0.85" → value: 0.85. "15%" → value: 15.
+3. ציטוט: העתק את המשפט המדויק מהטקסט שממנו חילצת את הערך.
+4. אם אין ערך מספרי רלוונטי — החזר null לכל השדות. לא להמציא ערכים.
+5. יחידה: "שח" למטבע, "אחוז" לאחוזים, "שח למר" למחיר למטר. ללא גרשיים.
+6. חלץ ערכים הקשורים לנושא החיפוש בלבד, לא כל מספר שמופיע במסמך.
+
+החזר JSON תקין בלבד.`;
+
+function buildPrompt(searchTerm: string, columns: ColumnDef[], trimmedText: string): string {
   const colInstructions = columns.map((col, i) =>
-    `${i + 1}. "${col.key}" — ${col.label}: ${col.prompt}`
+    `${i + 1}. "${col.key}" (${col.label}): ${col.prompt}`
   ).join('\n');
 
-  const jsonExample = '{\n' + columns.map(col =>
-    `  "${col.key}": { "value": 12345, "unit": "שח", "quote": "ציטוט מדויק מהטקסט" }`
-  ).join(',\n') + '\n}';
+  return `נושא: "${searchTerm}"
 
-  return `נושא החיפוש: "${searchTerm}"
-
-חלץ מהטקסט את הערכים הבאים:
+חלץ את הערכים הבאים הקשורים ל"${searchTerm}":
 ${colInstructions}
 
-פורמט התשובה — JSON בלבד, בלי markdown:
-${jsonExample}
+פורמט JSON:
+{
+${columns.map(col => `  "${col.key}": { "value": <מספר_שלם_או_עשרוני>, "unit": "<שח|אחוז|שח_למר>", "quote": "<ציטוט_מדויק>" }`).join(',\n')}
+}
 
-אם ערך לא נמצא, החזר null עבור כל השדות של אותו מפתח.
-ליחידת מטבע: "שח" (בלי גרשיים). לאחוזים: "אחוז".
+אם לא נמצא ערך, החזר: "${columns[0].key}": { "value": null, "unit": null, "quote": null }
 
-המסמך:
-${pdfText}`;
+טקסט המסמך:
+${trimmedText}`;
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -101,7 +175,7 @@ ${pdfText}`;
 // ──────────────────────────────────────────────────────────────────
 
 interface LLMValue {
-  value: number | null;
+  value: number | string | null;
   unit: string | null;
   quote: string | null;
 }
@@ -109,47 +183,44 @@ interface LLMValue {
 function parseValue(raw: LLMValue | null | undefined): ExtractedValue {
   if (!raw || (raw.value === null && !raw.quote)) return EMPTY_VALUE;
 
-  let display: string | null = null;
+  // Handle value — could be number, string-number, or null
+  let numericValue: number | null = null;
   if (raw.value !== null) {
-    display = raw.value.toLocaleString('he-IL');
+    if (typeof raw.value === 'number') {
+      numericValue = raw.value;
+    } else if (typeof raw.value === 'string') {
+      // Model sometimes returns "81,550" as string — parse it
+      const cleaned = raw.value.replace(/[,\s]/g, '');
+      const parsed = parseFloat(cleaned);
+      if (!isNaN(parsed)) numericValue = parsed;
+    }
+  }
+
+  let display: string | null = null;
+  if (numericValue !== null) {
+    display = numericValue.toLocaleString('he-IL');
     if (raw.unit) display += ` ${raw.unit}`;
+  } else if (raw.quote && !raw.value) {
+    // Text-only extraction (no numeric value but has a quote)
+    display = raw.quote.length > 50 ? raw.quote.substring(0, 50) + '...' : raw.quote;
   }
 
   return {
     display,
-    numeric: raw.value ?? null,
+    numeric: numericValue,
     unit: raw.unit ?? null,
     quote: raw.quote ?? null,
   };
 }
 
-/**
- * Sanitize LLM JSON response before parsing.
- * Fixes common issues like ש"ח (Hebrew shekel abbreviation containing a quote).
- */
 function sanitizeJson(text: string): string {
-  // Remove markdown code fences
   let clean = text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-
-  // Fix ש"ח → שח (the double-quote inside breaks JSON)
-  // Match ש"ח that's inside a JSON string value (preceded by non-quote content)
   clean = clean.replace(/ש"ח/g, 'שח');
-
-  // Fix מ"ר → מר
   clean = clean.replace(/מ"ר/g, 'מר');
-
-  // Fix סה"כ → סהכ
   clean = clean.replace(/סה"כ/g, 'סהכ');
-
-  // Fix ם"ר → מר (common OCR variant)
   clean = clean.replace(/ם"ר/g, 'מר');
-
-  // Fix בע"מ → בעמ
   clean = clean.replace(/בע"מ/g, 'בעמ');
-
-  // Fix תב"ע → תבע
   clean = clean.replace(/תב"ע/g, 'תבע');
-
   return clean;
 }
 
@@ -171,7 +242,7 @@ function parseResponse(text: string, columns: ColumnDef[]): ExtractionResult {
 
     return { values, hasData };
   } catch (e) {
-    console.error('[ai-extractor] JSON parse failed:', (e as Error).message, 'Raw:', text.substring(0, 200));
+    console.error('[ai-extractor] JSON parse failed:', (e as Error).message, 'Raw:', text.substring(0, 300));
     return { values: {}, hasData: false };
   }
 }
@@ -180,12 +251,10 @@ function parseResponse(text: string, columns: ColumnDef[]): ExtractionResult {
 // LLM call
 // ──────────────────────────────────────────────────────────────────
 
-const TEXT_CAP = 30000;
-
 async function callLLM(prompt: string, provider: Provider): Promise<string> {
   if (provider === 'openai') {
     const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       max_tokens: 1200,
       temperature: 0,
       response_format: { type: 'json_object' },
@@ -214,8 +283,8 @@ async function extractFromDocument(
   provider: Provider,
 ): Promise<ExtractionResult> {
   try {
-    const truncated = pdfText.substring(0, TEXT_CAP);
-    const prompt = buildPrompt(searchTerm, columns, truncated);
+    const trimmed = extractRelevantText(pdfText, searchTerm);
+    const prompt = buildPrompt(searchTerm, columns, trimmed);
     const text = await callLLM(prompt, provider);
     return parseResponse(text, columns);
   } catch (error) {
