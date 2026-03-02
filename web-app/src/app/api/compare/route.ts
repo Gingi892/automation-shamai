@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getElasticClient, DECISIONS_INDEX, PARAMETERS_INDEX } from '@/lib/elasticsearch';
 import { preprocessQuery } from '@/lib/query-preprocessor';
-import { extractBatch, type AIExtractionResult, type ExtractedClaim } from '@/lib/ai-extractor';
+import { extractBatch, type ColumnDef, type ExtractionResult, type ExtractedValue } from '@/lib/ai-extractor';
 import type { DatabaseType } from '@/types/api';
 
 // ──────────────────────────────────────────────────────────────────
@@ -14,6 +14,8 @@ interface CompareRequest {
   limit?: number;
   /** Pre-fetched result IDs from main search — skips re-searching */
   resultIds?: string[];
+  /** Custom columns — overrides auto-detected preset */
+  columns?: ColumnDef[];
 }
 
 interface ClaimValue {
@@ -23,6 +25,7 @@ interface ClaimValue {
   quote: string | null;
 }
 
+/** Row with dynamic values keyed by column key */
 interface CompareRow {
   id: string;
   title: string;
@@ -31,9 +34,8 @@ interface CompareRow {
   year: string | null;
   appraiser: string | null;
   url: string | null;
-  partyA: ClaimValue;
-  partyB: ClaimValue;
-  ruling: ClaimValue;
+  /** Dynamic values keyed by column key */
+  values: Record<string, ClaimValue>;
 }
 
 interface CompareStats {
@@ -49,6 +51,8 @@ interface CompareResponse {
   total: number;
   committee: string | null;
   stats: CompareStats;
+  /** Columns used for extraction — UI renders from this */
+  columns: ColumnDef[];
   /** What param_type was queried (null if AI extraction) */
   paramType: string | null;
   /** Human-readable label for the value column */
@@ -58,11 +62,57 @@ interface CompareResponse {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// Column presets per query type
+// ──────────────────────────────────────────────────────────────────
+
+const COLUMN_PRESETS: Record<string, ColumnDef[]> = {
+  dispute: [
+    { key: 'partyA', label: 'טענת צד א׳', prompt: 'מה הסכום או הערך שצד א (המבקש/הבעלים/המערער) טוען? חפש ב"טענות המבקש" או "שומת הבעלים".' },
+    { key: 'partyB', label: 'טענת צד ב׳', prompt: 'מה הסכום או הערך שצד ב (המשיבה/הוועדה) טוען? חפש ב"טענות המשיבה" או "שומת הוועדה".' },
+    { key: 'ruling', label: 'הכרעה', prompt: 'מה ההכרעה הסופית של השמאי/הוועדה? חפש ב"הכרעה", "קביעה", "סיכום".' },
+  ],
+  betterment: [
+    { key: 'ownerValue', label: 'שומת הבעלים', prompt: 'מה שווי הנכס לפי שומת הבעלים (המבקש)? חפש ב"טענות המבקש" או "שומת הבעלים".' },
+    { key: 'committeeValue', label: 'שומת הוועדה', prompt: 'מה שווי הנכס לפי שומת הוועדה (המשיבה)? חפש ב"טענות המשיבה" או "שומת הוועדה".' },
+    { key: 'ruling', label: 'הכרעה', prompt: 'מה ההכרעה הסופית של השמאי המכריע? חפש ב"הכרעה", "קביעה".' },
+  ],
+  landValue: [
+    { key: 'valueBefore', label: 'שווי לפני', prompt: 'מה שווי הקרקע/הנכס לפני התכנית (מצב קודם)? חפש "שווי במצב קודם" או "שווי לפני".' },
+    { key: 'valueAfter', label: 'שווי אחרי', prompt: 'מה שווי הקרקע/הנכס אחרי התכנית (מצב חדש/מאושר)? חפש "שווי במצב חדש" או "שווי אחרי".' },
+    { key: 'ruling', label: 'הכרעה', prompt: 'מה ההכרעה הסופית — שווי הקרקע שנקבע? חפש ב"הכרעה", "קביעה".' },
+  ],
+  pricePerMeter: [
+    { key: 'partyA', label: 'שווי למ"ר צד א׳', prompt: 'מה המחיר למ"ר לפי צד א (המבקש/הבעלים)?' },
+    { key: 'partyB', label: 'שווי למ"ר צד ב׳', prompt: 'מה המחיר למ"ר לפי צד ב (המשיבה/הוועדה)?' },
+    { key: 'ruling', label: 'הכרעה', prompt: 'מה המחיר למ"ר שנקבע בהכרעה?' },
+  ],
+  compensation: [
+    { key: 'claimedAmount', label: 'סכום נתבע', prompt: 'מה סכום הפיצוי שנתבע (נדרש) על ידי המבקש?' },
+    { key: 'offeredAmount', label: 'סכום מוצע', prompt: 'מה סכום הפיצוי שהוצע על ידי המשיבה/הוועדה?' },
+    { key: 'ruling', label: 'הכרעה', prompt: 'מה סכום הפיצוי שנפסק בהכרעה?' },
+  ],
+  transactions: [
+    { key: 'location', label: 'מיקום', prompt: 'מהו מיקום עסקת ההשוואה? רחוב, שכונה או עיר.' },
+    { key: 'price', label: 'מחיר', prompt: 'מהו המחיר/שווי של עסקת ההשוואה?' },
+    { key: 'date', label: 'תאריך', prompt: 'מה תאריך עסקת ההשוואה?' },
+  ],
+};
+
+/** Detect which column preset fits the query */
+function detectPreset(query: string): string {
+  if (query.includes('היטל') || query.includes('השבחה')) return 'betterment';
+  if (query.includes('פיצוי') || query.includes('ירידת ערך')) return 'compensation';
+  if (query.includes('עסקאות השוואה') || query.includes('נתוני השוואה')) return 'transactions';
+  if (query.includes('למ"ר') || query.includes('למטר') || query.includes('מחיר למ')) return 'pricePerMeter';
+  if (query.includes('שווי קרקע') || query.includes('לדונם') || query.includes('שווי') || query.includes('ערך')) return 'landValue';
+  return 'dispute';
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Constants
 // ──────────────────────────────────────────────────────────────────
 
 const MAX_COMPARE = 50;
-/** Max docs to send to AI extraction — AI extracts data from ~30-50% of docs */
 const MAX_AI_DOCS = 40;
 const PDF_TEXT_CAP = 35000;
 
@@ -132,19 +182,17 @@ function mapQueryToParamType(query: string): QueryMapping | null {
 // Year detection
 // ──────────────────────────────────────────────────────────────────
 
-/** Extract a 4-digit year from the query if present */
 function detectYear(query: string): string | null {
   const match = query.match(/\b(20[0-2]\d)\b/);
   return match ? match[1] : null;
 }
 
-/** Remove year from text query so it doesn't pollute text search */
 function stripYear(query: string, year: string): string {
   return query.replace(year, '').replace(/\s+/g, ' ').trim();
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Stats
+// Stats — calculated on the last column (usually ruling/הכרעה)
 // ──────────────────────────────────────────────────────────────────
 
 function calculateStats(values: (number | null)[]): CompareStats {
@@ -188,17 +236,25 @@ export async function POST(request: NextRequest) {
     const committee = body.committee || (detectedCities.length > 0 ? detectedCities[0] : null);
     const year = detectYear(body.query);
 
-    // Try parameters index for coefficients (structured, no need for party A/B)
+    // Determine columns — custom from UI, or auto-detect preset
+    const presetName = detectPreset(body.query);
+    const columns: ColumnDef[] = body.columns ?? COLUMN_PRESETS[presetName] ?? COLUMN_PRESETS.dispute;
+
+    // Try parameters index for coefficients (structured, no AI needed)
     const mapping = mapQueryToParamType(body.query);
     if (mapping && mapping.paramType === 'coefficient') {
       const result = await queryParametersIndex(es, mapping, committee, year, limit, body.resultIds);
       if (result.rows.length >= 3) {
-        const stats = calculateStats(result.rows.map(r => r.ruling.numeric));
+        // Parameters path — single value column mapped to "ruling" key
+        const paramColumn: ColumnDef = { key: 'value', label: mapping.valueLabel, prompt: '' };
+        const statsValues = result.rows.map(r => r.values['value']?.numeric ?? null);
+        const stats = calculateStats(statsValues);
         return NextResponse.json({
           rows: result.rows,
           total: result.rows.length,
           committee,
           stats,
+          columns: [paramColumn],
           paramType: mapping.paramType,
           valueLabel: mapping.valueLabel,
           source: 'parameters',
@@ -206,16 +262,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fall back to AI extraction — search for relevant documents, then extract with LLM
-    const result = await aiExtractionPath(es, body.query, preprocessed, committee, year, limit, body.resultIds);
-    const rulingValues = result.rows.map(r => r.ruling.numeric);
-    const stats = calculateStats(rulingValues);
+    // AI extraction path
+    const result = await aiExtractionPath(es, body.query, preprocessed, committee, year, limit, columns, body.resultIds);
+    // Stats on the last column (usually ruling/הכרעה)
+    const lastColKey = columns[columns.length - 1].key;
+    const statsValues = result.rows.map(r => r.values[lastColKey]?.numeric ?? null);
+    const stats = calculateStats(statsValues);
 
     return NextResponse.json({
       rows: result.rows,
       total: result.rows.length,
       committee,
       stats,
+      columns,
       paramType: mapping?.paramType ?? null,
       valueLabel: mapping?.valueLabel ?? body.query.split(/\s+/).slice(0, 3).join(' '),
       source: 'ai',
@@ -241,7 +300,6 @@ async function queryParametersIndex(
   resultIds?: string[],
 ): Promise<{ rows: CompareRow[] }> {
   try {
-    // Use pre-fetched IDs if available, else filter by committee/year
     let decisionIds: string[] | null = resultIds?.length ? resultIds : null;
     if (!decisionIds && (committee || year)) {
       const decFilter: object[] = [];
@@ -330,7 +388,6 @@ async function queryParametersIndex(
         display = valueText;
       }
 
-      // Parameters index doesn't have partyA/partyB — put everything in ruling
       rows.push({
         id: doc._id!,
         title,
@@ -339,9 +396,9 @@ async function queryParametersIndex(
         year: (meta.year as string) || null,
         appraiser: (meta.appraiser as string) || null,
         url: (meta.url as string) || null,
-        partyA: { display: null, numeric: null, unit: null, quote: null },
-        partyB: { display: null, numeric: null, unit: null, quote: null },
-        ruling: { display, numeric: valueNum ?? null, unit, quote: context },
+        values: {
+          value: { display, numeric: valueNum ?? null, unit, quote: context },
+        },
       });
 
       if (rows.length >= limit) break;
@@ -374,6 +431,7 @@ async function aiExtractionPath(
   committee: string | null,
   year: string | null,
   limit: number,
+  columns: ColumnDef[],
   resultIds?: string[],
 ): Promise<{ rows: CompareRow[] }> {
   const { cleanedQuery, expandedTerms, detectedPhrases, detectedCities } = preprocessed;
@@ -391,10 +449,8 @@ async function aiExtractionPath(
   let metadataMap: Map<string, Record<string, unknown>>;
 
   if (resultIds && resultIds.length > 0) {
-    // ── Use pre-fetched IDs from main search (no re-searching) ──
     docIds = resultIds.slice(0, limit);
 
-    // Fetch metadata for all IDs
     const metaRes = await es.mget({
       index: DECISIONS_INDEX,
       ids: docIds,
@@ -405,7 +461,6 @@ async function aiExtractionPath(
       if (doc.found) metadataMap.set(doc._id!, doc._source as Record<string, unknown>);
     }
   } else {
-    // ── Fallback: search for docs ourselves ──
     const textFields = ['pdf_text^3', 'title^2', 'committee', 'appraiser', 'case_type'];
     const shouldClauses: object[] = [];
 
@@ -479,13 +534,12 @@ async function aiExtractionPath(
 
   if (docsForAI.length === 0) return { rows: [] };
 
-  // Extract with AI
+  // Extract with AI — pass dynamic columns
   const searchTerm = textQuery || originalQuery;
-  const extractions = await extractBatch(searchTerm, docsForAI);
+  const extractions = await extractBatch(searchTerm, columns, docsForAI);
 
-  // Build rows — merge metadata + AI extraction
-  // Include ALL docs: those with extracted values first, then those without
-  const emptyClaim: ClaimValue = { display: null, numeric: null, unit: null, quote: null };
+  // Build rows
+  const emptyValue: ClaimValue = { display: null, numeric: null, unit: null, quote: null };
   const rowsWithData: CompareRow[] = [];
   const rowsWithout: CompareRow[] = [];
   const seenTitles = new Set<string>();
@@ -501,6 +555,21 @@ async function aiExtractionPath(
     const extraction = extractions.get(id);
     const hasData = extraction?.hasData ?? false;
 
+    const values: Record<string, ClaimValue> = {};
+    for (const col of columns) {
+      if (hasData && extraction) {
+        const ev = extraction.values[col.key];
+        values[col.key] = ev ? {
+          display: ev.display,
+          numeric: ev.numeric,
+          unit: ev.unit,
+          quote: ev.quote,
+        } : emptyValue;
+      } else {
+        values[col.key] = emptyValue;
+      }
+    }
+
     const row: CompareRow = {
       id,
       title,
@@ -509,9 +578,7 @@ async function aiExtractionPath(
       year: (meta.year as string) || null,
       appraiser: (meta.appraiser as string) || null,
       url: (meta.url as string) || null,
-      partyA: hasData ? claimToValue(extraction!.partyA) : emptyClaim,
-      partyB: hasData ? claimToValue(extraction!.partyB) : emptyClaim,
-      ruling: hasData ? claimToValue(extraction!.ruling) : emptyClaim,
+      values,
     };
 
     if (hasData) rowsWithData.push(row);
@@ -519,13 +586,4 @@ async function aiExtractionPath(
   }
 
   return { rows: [...rowsWithData, ...rowsWithout] };
-}
-
-function claimToValue(claim: ExtractedClaim): ClaimValue {
-  return {
-    display: claim.display,
-    numeric: claim.numeric,
-    unit: claim.unit,
-    quote: claim.quote,
-  };
 }

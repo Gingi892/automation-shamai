@@ -1,13 +1,12 @@
 /**
  * AI-powered value extraction from Hebrew legal PDF text.
- * Uses OpenAI gpt-4o-mini (primary) or Claude Haiku (fallback) to extract
- * party A claims, party B claims, and rulings.
+ * Supports dynamic column definitions — the caller decides what to extract.
  */
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 
 // ──────────────────────────────────────────────────────────────────
-// Provider detection — prefer OpenAI (cheaper for batch extraction)
+// Provider
 // ──────────────────────────────────────────────────────────────────
 
 type Provider = 'openai' | 'anthropic';
@@ -15,7 +14,7 @@ type Provider = 'openai' | 'anthropic';
 function getProvider(): Provider {
   if (process.env.OPENAI_API_KEY) return 'openai';
   if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
-  throw new Error('Either OPENAI_API_KEY or ANTHROPIC_API_KEY must be set for AI extraction');
+  throw new Error('Either OPENAI_API_KEY or ANTHROPIC_API_KEY must be set');
 }
 
 let openaiClient: OpenAI | null = null;
@@ -36,61 +35,76 @@ function getAnthropic(): Anthropic {
 // Types
 // ──────────────────────────────────────────────────────────────────
 
-export interface ExtractedClaim {
+/** A column the user wants to extract */
+export interface ColumnDef {
+  key: string;       // unique id, e.g. "partyA", "valueBefore"
+  label: string;     // Hebrew header, e.g. "שומת הבעלים"
+  prompt: string;    // What to ask the AI, e.g. "מה הסכום שצד א' טוען?"
+}
+
+/** Extracted value for a single column */
+export interface ExtractedValue {
   display: string | null;
   numeric: number | null;
   unit: string | null;
   quote: string | null;
 }
 
-export interface AIExtractionResult {
-  partyA: ExtractedClaim;
-  partyB: ExtractedClaim;
-  ruling: ExtractedClaim;
+/** Result for one document — values keyed by column key */
+export interface ExtractionResult {
+  values: Record<string, ExtractedValue>;
   hasData: boolean;
 }
 
-const EMPTY_CLAIM: ExtractedClaim = { display: null, numeric: null, unit: null, quote: null };
-const EMPTY_RESULT: AIExtractionResult = { partyA: EMPTY_CLAIM, partyB: EMPTY_CLAIM, ruling: EMPTY_CLAIM, hasData: false };
+const EMPTY_VALUE: ExtractedValue = { display: null, numeric: null, unit: null, quote: null };
 
 // ──────────────────────────────────────────────────────────────────
-// Prompt
+// Prompt builder — dynamic columns
 // ──────────────────────────────────────────────────────────────────
 
 const SYSTEM_MSG = `אתה מחלץ נתונים מספריים מהחלטות שמאי מקרקעין בישראל.
-תפקידך לזהות את הערכים שכל צד טוען ואת ההכרעה הסופית.
 אל תחלץ מספרי גוש, חלקה, תאריכים, או מספרי תיק.
 כל ערך חייב להיות מלווה בציטוט מדויק מהטקסט.
 אם לא מצאת ערך — החזר null.
 החזר JSON בלבד.`;
 
-function buildUserPrompt(searchTerm: string, pdfText: string): string {
+function buildPrompt(searchTerm: string, columns: ColumnDef[], pdfText: string): string {
+  const colInstructions = columns.map((col, i) =>
+    `${i + 1}. **${col.label}** — ${col.prompt}`
+  ).join('\n');
+
+  const jsonTemplate: Record<string, string> = {};
+  for (const col of columns) {
+    jsonTemplate[col.key] = '{"value":<number|null>,"unit":"<string|null>","quote":"<ציטוט|null>"}';
+  }
+  const jsonExample = '{' + columns.map(col =>
+    `"${col.key}":{"value":null,"unit":null,"quote":null}`
+  ).join(',') + '}';
+
   return `נושא החיפוש: "${searchTerm}"
 
-חלץ מהטקסט הבא:
-1. **צד א' (טענות המבקשים/העוררים)** — מה הערך/סכום שצד א' טוען לגבי ${searchTerm}?
-2. **צד ב' (טענות המשיבה/הוועדה)** — מה הערך/סכום שצד ב' טוען לגבי ${searchTerm}?
-3. **הכרעה** — מה הערך/סכום שנקבע בהכרעה לגבי ${searchTerm}?
+חלץ מהטקסט את הערכים הבאים:
+${colInstructions}
 
-החזר JSON בפורמט:
-{"partyA":{"value":<number|null>,"unit":"<string|null>","quote":"<ציטוט|null>"},"partyB":{"value":<number|null>,"unit":"<string|null>","quote":"<ציטוט|null>"},"ruling":{"value":<number|null>,"unit":"<string|null>","quote":"<ציטוט|null>"}}
+החזר JSON בפורמט (value=מספר, unit=יחידה, quote=ציטוט מדויק):
+${jsonExample}
 
 הטקסט:
 ${pdfText}`;
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Parse LLM response
+// Parse response
 // ──────────────────────────────────────────────────────────────────
 
-interface LLMClaim {
+interface LLMValue {
   value: number | null;
   unit: string | null;
   quote: string | null;
 }
 
-function parseClaim(raw: LLMClaim | null | undefined): ExtractedClaim {
-  if (!raw || (raw.value === null && !raw.quote)) return EMPTY_CLAIM;
+function parseValue(raw: LLMValue | null | undefined): ExtractedValue {
+  if (!raw || (raw.value === null && !raw.quote)) return EMPTY_VALUE;
 
   let display: string | null = null;
   if (raw.value !== null) {
@@ -106,34 +120,38 @@ function parseClaim(raw: LLMClaim | null | undefined): ExtractedClaim {
   };
 }
 
-function parseResponse(text: string): AIExtractionResult {
+function parseResponse(text: string, columns: ColumnDef[]): ExtractionResult {
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return EMPTY_RESULT;
+    if (!jsonMatch) return { values: {}, hasData: false };
 
     const parsed = JSON.parse(jsonMatch[0]);
-    const partyA = parseClaim(parsed.partyA);
-    const partyB = parseClaim(parsed.partyB);
-    const ruling = parseClaim(parsed.ruling);
-    const hasData = !!(partyA.display || partyB.display || ruling.display);
+    const values: Record<string, ExtractedValue> = {};
+    let hasData = false;
 
-    return { partyA, partyB, ruling, hasData };
+    for (const col of columns) {
+      const v = parseValue(parsed[col.key]);
+      values[col.key] = v;
+      if (v.display) hasData = true;
+    }
+
+    return { values, hasData };
   } catch {
-    return EMPTY_RESULT;
+    return { values: {}, hasData: false };
   }
 }
 
 // ──────────────────────────────────────────────────────────────────
-// LLM call — provider-agnostic
+// LLM call
 // ──────────────────────────────────────────────────────────────────
 
-const TEXT_CAP = 30000; // ~30K chars — ruling sections are often in the latter half
+const TEXT_CAP = 30000;
 
 async function callLLM(prompt: string, provider: Provider): Promise<string> {
   if (provider === 'openai') {
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
-      max_tokens: 500,
+      max_tokens: 800,
       temperature: 0,
       messages: [
         { role: 'system', content: SYSTEM_MSG },
@@ -144,7 +162,7 @@ async function callLLM(prompt: string, provider: Provider): Promise<string> {
   } else {
     const response = await getAnthropic().messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
+      max_tokens: 800,
       system: SYSTEM_MSG,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -155,37 +173,39 @@ async function callLLM(prompt: string, provider: Provider): Promise<string> {
 
 async function extractFromDocument(
   searchTerm: string,
+  columns: ColumnDef[],
   pdfText: string,
   provider: Provider,
-): Promise<AIExtractionResult> {
+): Promise<ExtractionResult> {
   try {
     const truncated = pdfText.substring(0, TEXT_CAP);
-    const prompt = buildUserPrompt(searchTerm, truncated);
+    const prompt = buildPrompt(searchTerm, columns, truncated);
     const text = await callLLM(prompt, provider);
-    return parseResponse(text);
+    return parseResponse(text, columns);
   } catch (error) {
     console.error('[ai-extractor] Extraction failed:', (error as Error).message);
-    return EMPTY_RESULT;
+    return { values: {}, hasData: false };
   }
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Batch extraction with concurrency control
+// Batch extraction
 // ──────────────────────────────────────────────────────────────────
 
 const MAX_CONCURRENT = 10;
 
 export async function extractBatch(
   searchTerm: string,
+  columns: ColumnDef[],
   documents: { id: string; pdfText: string }[],
-): Promise<Map<string, AIExtractionResult>> {
+): Promise<Map<string, ExtractionResult>> {
   const provider = getProvider();
-  const results = new Map<string, AIExtractionResult>();
+  const results = new Map<string, ExtractionResult>();
 
   for (let i = 0; i < documents.length; i += MAX_CONCURRENT) {
     const chunk = documents.slice(i, i + MAX_CONCURRENT);
     const promises = chunk.map(async (doc) => {
-      const result = await extractFromDocument(searchTerm, doc.pdfText, provider);
+      const result = await extractFromDocument(searchTerm, columns, doc.pdfText, provider);
       results.set(doc.id, result);
     });
     await Promise.all(promises);
