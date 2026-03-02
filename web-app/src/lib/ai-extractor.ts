@@ -3,10 +3,10 @@
  * Supports dynamic column definitions — the caller decides what to extract.
  *
  * Key design choices:
- * - Smart text trimming: extract relevant sections (~5-8K) instead of 30K noise
- * - gpt-4o (not mini): Hebrew legal docs need stronger comprehension
+ * - Domain-aware prompt: teaches the AI about Israeli appraisal document structure
+ * - gpt-4o: Hebrew legal docs need stronger comprehension
  * - JSON mode: guaranteed valid JSON response
- * - Section-aware: finds party A, party B, and ruling sections in the document
+ * - Full text: send as much document text as possible (40K head + 15K tail for long docs)
  */
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
@@ -62,21 +62,20 @@ export interface ExtractionResult {
 const EMPTY_VALUE: ExtractedValue = { display: null, numeric: null, unit: null, quote: null };
 
 // ──────────────────────────────────────────────────────────────────
-// Smart text trimming — extract relevant sections, discard noise
+// Text preparation — send full text, trim only very long docs
 // ──────────────────────────────────────────────────────────────────
 
 /**
  * Prepare document text for AI extraction.
- * Short docs (≤30K): send everything — no trimming.
- * Long docs (>30K): first 20K + last 10K (catches party claims + ruling).
+ * Short docs (≤60K): send everything — no trimming.
+ * Long docs (>60K): first 40K + last 15K (catches all party claims + ruling).
  */
-const FULL_CAP = 30000;
+const FULL_CAP = 60000;
 
 function prepareDocText(pdfText: string): string {
   if (pdfText.length <= FULL_CAP) return pdfText;
-  // Long doc: head (party claims, summary tables) + tail (ruling, conclusion)
-  const head = pdfText.substring(0, 20000);
-  const tail = pdfText.substring(pdfText.length - 10000);
+  const head = pdfText.substring(0, 40000);
+  const tail = pdfText.substring(pdfText.length - 15000);
   return head + '\n\n[... חלק מהמסמך הושמט ...]\n\n' + tail;
 }
 
@@ -84,22 +83,31 @@ function prepareDocText(pdfText: string): string {
 // Prompt
 // ──────────────────────────────────────────────────────────────────
 
-const SYSTEM_MSG = `אתה מומחה לחילוץ נתונים מהחלטות שמאי מקרקעין בישראל.
+const SYSTEM_MSG = `אתה מומחה בהחלטות שמאי מכריע בישראל. אתה קורא מסמך החלטה ומחלץ ממנו נתונים מספריים.
 
-מבנה מסמך טיפוסי:
-- "טענות המבקש/הבעלים" = עמדת צד א (בדרך כלל הנישום/הבעלים שטוען לערך נמוך יותר)
-- "טענות המשיבה/הוועדה" = עמדת צד ב (בדרך כלל הוועדה המקומית שטוענת לערך גבוה יותר)
-- "הכרעה/קביעה/סיכום" = ההחלטה הסופית של השמאי המכריע
+מבנה מסמך החלטת שמאי מכריע:
+1. בתחילת המסמך: פרטי הצדדים, גוש/חלקה, נושא ההחלטה
+2. באמצע: טענות המבקש (צד א) וטענות המשיבה (צד ב) — כל צד מציג שומה שלו
+3. בסוף: הכרעת השמאי המכריע — הערכה עצמאית וקביעת סכום
 
-כללים קריטיים:
-1. ערכים מספריים: החזר מספר שלם בלי פסיקים. "81,550" → value: 81550. "1,234,567" → value: 1234567.
-2. מקדמים ואחוזים: החזר כמספר עשרוני. "0.85" → value: 0.85. "15%" → value: 15.
-3. ציטוט: העתק את המשפט המדויק מהטקסט שממנו חילצת את הערך.
-4. אם אין ערך מספרי רלוונטי — החזר null לכל השדות. לא להמציא ערכים.
-5. יחידה: "שח" למטבע, "אחוז" לאחוזים, "שח למר" למחיר למטר. ללא גרשיים.
-6. חלץ ערכים הקשורים לנושא החיפוש בלבד, לא כל מספר שמופיע במסמך.
+כשמחפשים "היטל השבחה": חפש את סכום ההשבחה הכולל (לא שווי מצב קודם/חדש) שכל צד טוען לו, ואת הסכום שנקבע בהכרעה.
+כשמחפשים "שווי קרקע": חפש שווי במצב קודם, שווי במצב חדש, וסכום ההשבחה שנקבע.
+כשמחפשים "מקדם": חפש את ערך המקדם (מספר עשרוני כמו 0.85 או 0.15) שכל צד טוען לו ושנקבע בהכרעה.
 
-החזר JSON תקין בלבד.`;
+חפש בעיקר ב:
+- טבלאות סיכום: "סיכום עיקרי עמדות", "השוואת שומות"
+- שורות עם "סהכ השבחה", "היטל השבחה", "סיכום"
+- פסקה אחרונה לפני החתימה — שם בדרך כלל ההכרעה הסופית
+
+כללים:
+1. מספרים: החזר בלי פסיקים. "81,550" → 81550
+2. מקדמים: מספר עשרוני. "0.85" → 0.85
+3. ציטוט: משפט מדויק מהטקסט
+4. אם אין ערך → null לכל השדות
+5. יחידה: "שח" / "אחוז". בלי גרשיים
+6. חלץ רק ערכים הקשורים לנושא. לא מספרי גוש/חלקה/תאריכים
+
+החזר JSON בלבד.`;
 
 function buildPrompt(searchTerm: string, columns: ColumnDef[], trimmedText: string): string {
   const colInstructions = columns.map((col, i) =>

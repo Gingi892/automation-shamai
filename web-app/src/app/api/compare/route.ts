@@ -114,7 +114,7 @@ function detectPreset(query: string): string {
 
 const MAX_COMPARE = 50;
 const MAX_AI_DOCS = 40;
-const PDF_TEXT_CAP = 35000;
+const PDF_TEXT_CAP = 80000;
 
 // ──────────────────────────────────────────────────────────────────
 // Query → param_type mapping (for parameters index path)
