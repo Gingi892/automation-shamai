@@ -63,33 +63,36 @@ const EMPTY_VALUE: ExtractedValue = { display: null, numeric: null, unit: null, 
 // ──────────────────────────────────────────────────────────────────
 
 const SYSTEM_MSG = `אתה מחלץ נתונים מספריים מהחלטות שמאי מקרקעין בישראל.
-אל תחלץ מספרי גוש, חלקה, תאריכים, או מספרי תיק.
-כל ערך חייב להיות מלווה בציטוט מדויק מהטקסט.
-אם לא מצאת ערך — החזר null.
-החזר JSON בלבד.`;
+
+כללים:
+- אל תחלץ מספרי גוש, חלקה, תאריכים, או מספרי תיק.
+- חלץ סכומים כספיים, מחירים, שווי, מקדמים, שיעורים ואחוזים.
+- כל ערך חייב להיות מלווה בציטוט מדויק מהטקסט.
+- אם לא מצאת ערך — החזר null עבור כל השדות.
+- ליחידת מטבע כתוב "שח" (בלי גרשיים) או "אחוז" לפי העניין.
+- החזר JSON תקין בלבד. אין markdown, אין הסברים.`;
 
 function buildPrompt(searchTerm: string, columns: ColumnDef[], pdfText: string): string {
   const colInstructions = columns.map((col, i) =>
-    `${i + 1}. **${col.label}** — ${col.prompt}`
+    `${i + 1}. "${col.key}" — ${col.label}: ${col.prompt}`
   ).join('\n');
 
-  const jsonTemplate: Record<string, string> = {};
-  for (const col of columns) {
-    jsonTemplate[col.key] = '{"value":<number|null>,"unit":"<string|null>","quote":"<ציטוט|null>"}';
-  }
-  const jsonExample = '{' + columns.map(col =>
-    `"${col.key}":{"value":null,"unit":null,"quote":null}`
-  ).join(',') + '}';
+  const jsonExample = '{\n' + columns.map(col =>
+    `  "${col.key}": { "value": 12345, "unit": "שח", "quote": "ציטוט מדויק מהטקסט" }`
+  ).join(',\n') + '\n}';
 
   return `נושא החיפוש: "${searchTerm}"
 
 חלץ מהטקסט את הערכים הבאים:
 ${colInstructions}
 
-החזר JSON בפורמט (value=מספר, unit=יחידה, quote=ציטוט מדויק):
+פורמט התשובה — JSON בלבד, בלי markdown:
 ${jsonExample}
 
-הטקסט:
+אם ערך לא נמצא, החזר null עבור כל השדות של אותו מפתח.
+ליחידת מטבע: "שח" (בלי גרשיים). לאחוזים: "אחוז".
+
+המסמך:
 ${pdfText}`;
 }
 
@@ -120,9 +123,40 @@ function parseValue(raw: LLMValue | null | undefined): ExtractedValue {
   };
 }
 
+/**
+ * Sanitize LLM JSON response before parsing.
+ * Fixes common issues like ש"ח (Hebrew shekel abbreviation containing a quote).
+ */
+function sanitizeJson(text: string): string {
+  // Remove markdown code fences
+  let clean = text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+  // Fix ש"ח → שח (the double-quote inside breaks JSON)
+  // Match ש"ח that's inside a JSON string value (preceded by non-quote content)
+  clean = clean.replace(/ש"ח/g, 'שח');
+
+  // Fix מ"ר → מר
+  clean = clean.replace(/מ"ר/g, 'מר');
+
+  // Fix סה"כ → סהכ
+  clean = clean.replace(/סה"כ/g, 'סהכ');
+
+  // Fix ם"ר → מר (common OCR variant)
+  clean = clean.replace(/ם"ר/g, 'מר');
+
+  // Fix בע"מ → בעמ
+  clean = clean.replace(/בע"מ/g, 'בעמ');
+
+  // Fix תב"ע → תבע
+  clean = clean.replace(/תב"ע/g, 'תבע');
+
+  return clean;
+}
+
 function parseResponse(text: string, columns: ColumnDef[]): ExtractionResult {
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const sanitized = sanitizeJson(text);
+    const jsonMatch = sanitized.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { values: {}, hasData: false };
 
     const parsed = JSON.parse(jsonMatch[0]);
@@ -136,7 +170,8 @@ function parseResponse(text: string, columns: ColumnDef[]): ExtractionResult {
     }
 
     return { values, hasData };
-  } catch {
+  } catch (e) {
+    console.error('[ai-extractor] JSON parse failed:', (e as Error).message, 'Raw:', text.substring(0, 200));
     return { values: {}, hasData: false };
   }
 }
@@ -151,8 +186,9 @@ async function callLLM(prompt: string, provider: Provider): Promise<string> {
   if (provider === 'openai') {
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
-      max_tokens: 800,
+      max_tokens: 1200,
       temperature: 0,
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: SYSTEM_MSG },
         { role: 'user', content: prompt },
@@ -162,7 +198,7 @@ async function callLLM(prompt: string, provider: Provider): Promise<string> {
   } else {
     const response = await getAnthropic().messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 800,
+      max_tokens: 1200,
       system: SYSTEM_MSG,
       messages: [{ role: 'user', content: prompt }],
     });
